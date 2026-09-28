@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "android-development": {
+      "source": "dpconde/claude-android-skill",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "cd57be7ef5414c15665156dbdb458c70712799a3dbc6a069c5cb951914ba6c19"
+    }
+  }
+}

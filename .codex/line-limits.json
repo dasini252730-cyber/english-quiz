@@ -1,0 +1,11 @@
+{
+  "description": "Per-file source line ceilings. Warn at 85%; more than the limit blocks completion and requires refactoring.",
+  "limits": {
+    ".kt": 250,
+    ".java": 250,
+    ".kts": 200,
+    ".py": 300,
+    ".xml": 300
+  },
+  "warn_ratio": 0.85
+}

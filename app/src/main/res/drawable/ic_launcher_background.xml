@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launcher plate. The 108dp viewport is cropped to the launcher's mask, so it is filled edge to edge. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#5A4BE0"
+        android:pathData="M0,0h108v108h-108z" />
+    <path
+        android:fillColor="#6A5CEA"
+        android:pathData="M0,0L108,0L108,46C74,64 40,52 0,74Z" />
+</vector>

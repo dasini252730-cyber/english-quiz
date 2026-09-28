@@ -1,0 +1,17 @@
+.gradle/
+.gradle-user/
+.android-user/
+.user-home/
+.idea/
+local.properties
+/supabase/functions/.env
+/supabase/functions/.env.local
+build/
+**/build/
+*.iml
+.DS_Store
+# tool caches and local-only files
+.kotlin/
+__pycache__/
+/supabase/.temp/
+/im-not-ai-humanize-korean-v2.3.2.zip
