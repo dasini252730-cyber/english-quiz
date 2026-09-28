@@ -48,7 +48,10 @@ jobs:
           if [ -z "$AI_ENDPOINT" ]; then
             echo "::warning::AI_ENDPOINT is not set: the APK has AI features switched off."
           fi
-          ./gradlew :app:assembleDebug -PaiEndpoint="$AI_ENDPOINT" ${DEBUG_KEYSTORE:+-PdebugKeystore="$DEBUG_KEYSTORE"} --no-daemon
+          args=(:app:assembleDebug "-PaiEndpoint=$AI_ENDPOINT" --no-daemon)
+          if [ -n "${DEBUG_KEYSTORE:-}" ]; then args+=("-PdebugKeystore=$DEBUG_KEYSTORE"); fi
+          chmod +x gradlew
+          ./gradlew "${args[@]}"
 
       - name: Name the APK after the run
         run: cp app/build/outputs/apk/debug/app-debug.apk "StoryEnglish-build${{ github.run_number }}.apk"
