@@ -35,7 +35,13 @@ jobs:
           DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
         run: |
           if [ -n "$DEBUG_KEYSTORE_BASE64" ]; then
-            echo "$DEBUG_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/debug.keystore"
+            # The value is pasted from a clipboard, so stray line breaks and spaces are dropped
+            # before decoding; a value that still does not decode is reported, not built with.
+            if ! printf '%s' "$DEBUG_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > "$RUNNER_TEMP/debug.keystore" \
+               || [ ! -s "$RUNNER_TEMP/debug.keystore" ]; then
+              echo '::error::DEBUG_KEYSTORE_BASE64 is not valid base64; re-create it from ~/.android/debug.keystore (see README).'
+              exit 1
+            fi
             echo "DEBUG_KEYSTORE=$RUNNER_TEMP/debug.keystore" >> "$GITHUB_ENV"
           else
             echo "::warning::DEBUG_KEYSTORE_BASE64 is not set: this APK will not install over the one on the phone."
