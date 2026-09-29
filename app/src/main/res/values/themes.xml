@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="mongle_cream">#FFFBF3</color>
+    <style name="Theme.EnglishQuiz" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/mongle_cream</item>
+        <item name="android:statusBarColor">@color/mongle_cream</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

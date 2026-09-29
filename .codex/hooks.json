@@ -1,0 +1,56 @@
+{
+  "description": "Project policy: report branch at session start, keep backlog access on the CLI, commit backlog changes, and gate code changes.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py -3 .codex/hooks/session_start.py",
+            "commandWindows": "py -3 .codex/hooks/session_start.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|apply_patch|.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py -3 .codex/hooks/pre_tool_use.py",
+            "commandWindows": "py -3 .codex/hooks/pre_tool_use.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py -3 .codex/hooks/post_tool_use.py",
+            "commandWindows": "py -3 .codex/hooks/post_tool_use.py",
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py -3 .codex/hooks/stop_checks.py",
+            "commandWindows": "py -3 .codex/hooks/stop_checks.py",
+            "timeout": 600
+          }
+        ]
+      }
+    ]
+  }
+}

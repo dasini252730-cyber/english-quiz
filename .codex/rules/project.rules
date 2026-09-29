@@ -1,0 +1,19 @@
+# Keep backlog access routed through its CLI. These shell command prefixes
+# supplement the project PreToolUse hook; they do not replace its file-path check.
+prefix_rule(
+    pattern = ["Get-Content", "backlog.json"],
+    decision = "forbidden",
+    justification = "Use `py .\\backlog_cli.py list/show` to inspect tasks and `update/add` to change them."
+)
+
+prefix_rule(
+    pattern = ["type", "backlog.json"],
+    decision = "forbidden",
+    justification = "Use the backlog CLI to inspect or change task data."
+)
+
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "prompt",
+    justification = "Push is reserved for the backlog done workflow; review the branch and remote before manual pushes."
+)
