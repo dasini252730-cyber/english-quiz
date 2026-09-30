@@ -1,5 +1,11 @@
 const MAX_BODY_BYTES = 16_384;
 const MAX_REVIEW_EXPRESSIONS = 12;
+/**
+ * How many of the supplied review expressions one passage is asked to re-use (백로그 032). Twelve
+ * on top of five new phrases crowded the passage and the model's attention; the ones left out
+ * are still due, and the quiz asks them from the learner's own list regardless.
+ */
+const REVIEW_EXPRESSIONS_WOVEN = 5;
 const MAX_GLOSSARY_ENTRIES = 40;
 const MAX_EXPRESSION_WORDS = 7;
 // A ten-minute passage is 20-30 segments. Measured against the deployed function on
@@ -9,6 +15,10 @@ const MAX_EXPRESSION_WORDS = 7;
 // below this, lower it to stay under that. The Android read timeout sits above this value so
 // the function's error code, not a socket timeout, is what the app reports.
 const REQUEST_TIMEOUT_MS = 60_000;
+// The whole call, a retry included, must still end before the app's 75s read timeout: a second
+// attempt only starts when this much of the budget is left, and runs against what remains.
+const TOTAL_BUDGET_MS = 68_000;
+const MIN_RETRY_MS = 20_000;
 const ANTHROPIC_VERSION = "2023-06-01";
 const DEFAULT_MODEL = "claude-sonnet-5";
 const CORS_HEADERS = {
@@ -213,7 +223,7 @@ function validateRequest(value: unknown): LearningRequest {
       action: "content",
       mode: body.mode,
       difficulty: body.difficulty as Difficulty,
-      reviewExpressions: [...new Set(expressions.map((item) => item.trim()))],
+      reviewExpressions: [...new Set(expressions.map((item) => item.trim()))].slice(0, REVIEW_EXPRESSIONS_WOVEN),
     };
   }
 
@@ -245,6 +255,20 @@ function responseText(payload: unknown): string {
     }
   }
   throw new Error("invalid_provider_response");
+}
+
+/** The first segment containing [foldedPhrase], as an offset pair, or null; folding must not change lengths. */
+function locatePhrase(
+  segments: { text: string }[],
+  foldedPhrase: string,
+): { segmentIndex: number; startIndex: number } | null {
+  for (const [segmentIndex, segment] of segments.entries()) {
+    const folded = foldTypography(segment.text);
+    if (folded.length !== segment.text.length) continue;
+    const startIndex = folded.indexOf(foldedPhrase);
+    if (startIndex >= 0) return { segmentIndex, startIndex };
+  }
+  return null;
 }
 
 function validateModelOutput(value: unknown, request: LearningRequest): unknown {
@@ -321,11 +345,17 @@ function validateModelOutput(value: unknown, request: LearningRequest): unknown 
       return [];
     }
     const startIndex = foldedSegment.indexOf(foldedPhrase);
-    if (startIndex < 0) {
+    if (startIndex >= 0) {
+      return [{ text: phrase, meaning: item.meaning, segmentIndex, startIndex, endIndex: startIndex + phrase.length }];
+    }
+    // The model often points a correct phrase at the wrong line (백로그 032). The phrase itself
+    // is what the learner needs, so it is looked for in the other segments before giving up.
+    const found = locatePhrase(segments, foldedPhrase);
+    if (found === null) {
       dropped.push(phrase);
       return [];
     }
-    return [{ text: phrase, meaning: item.meaning, segmentIndex, startIndex, endIndex: startIndex + phrase.length }];
+    return [{ text: phrase, meaning: item.meaning, ...found, endIndex: found.startIndex + phrase.length }];
   });
   if (dropped.length > 0) {
     // Server log only. If the model starts inflecting most phrases the learner would just
@@ -337,8 +367,18 @@ function validateModelOutput(value: unknown, request: LearningRequest): unknown 
   }
   const reviewed = new Set(request.reviewExpressions.map(foldTypography));
   const annotated = new Set(expressions.map((expression) => foldTypography(expression.text.trim())));
-  if (request.reviewExpressions.some((expression) => !annotated.has(foldTypography(expression)))) {
+  // A review expression the model left out (or inflected) is logged, not fatal (백로그 032).
+  // The quiz asks what is due from the learner's own list, never from the passage (백로그
+  // 021), so the miss costs one re-encounter; failing the passage cost the whole day, and once
+  // the learner had a few saved phrases the model missed one in eleven of twelve passages.
+  const missingReview = request.reviewExpressions.filter((expression) => !annotated.has(foldTypography(expression)));
+  if (missingReview.length > 0 && missingReview.length === request.reviewExpressions.length) {
+    // Not one re-encounter today (요구사항 18) is the model ignoring the request, and a second
+    // attempt is cheap next to a day without any; a partial miss is not worth a whole passage.
     throw new Error("missing_review_expression");
+  }
+  if (missingReview.length > 0) {
+    console.warn(`review expressions not woven in: ${missingReview.join(", ")}`);
   }
   // This also carries the "at least one expression survived" floor: an empty list cannot
   // contain a non-review phrase.
@@ -419,9 +459,26 @@ function difficultyRubric(difficulty: Difficulty): string {
   }
 }
 
-function passageContract(difficulty: Difficulty): string {
+/** How many new phrases every passage teaches, on top of the review expressions it re-uses. */
+const NEW_EXPRESSIONS_PER_PASSAGE = 5;
+
+/**
+ * Spelled out with the numbers, because "exactly 5 plus one per review expression" read to the
+ * model as "5 in total, the review ones included" (백로그 032): with five phrases to review it
+ * annotated only those, and the passage taught nothing new.
+ */
+function expressionsClause(reviewCount: number): string {
+  const total = NEW_EXPRESSIONS_PER_PASSAGE + reviewCount;
+  const review = reviewCount === 0
+    ? ""
+    : `${reviewCount} of them are the supplied review expressions, each written into the text character for character in its supplied form and annotated; the other `;
+  return `\`expressions\`: ${total} entries in total. ${review}${NEW_EXPRESSIONS_PER_PASSAGE} are NEW phrases this passage introduces, chosen for a learner at this difficulty. `;
+}
+
+function passageContract(difficulty: Difficulty, reviewCount: number): string {
   return "Your reply is learning material and must satisfy this contract exactly. " +
-  "`expressions`: exactly 5 entries, plus one more for every supplied review expression (each of those used naturally in the text); each entry has `text` copied character for character from one segment, that segment's `segmentIndex`, and a concise Korean meaning for this context. Prefer useful everyday phrases of one to five words over long clauses. A reply with an empty or missing `expressions` list is rejected. " +
+  expressionsClause(reviewCount) +
+  "Each entry has `text` copied character for character from one segment, that segment's `segmentIndex`, and a concise Korean meaning for this context. Prefer useful everyday phrases of one to five words over long clauses. A reply with an empty or missing `expressions` list is rejected. " +
   "`glossary`: 10 to 20 other single words that appear in the passage and that a Korean adult learner at this difficulty may not know, each with its concise Korean meaning here; it never repeats an annotated expression and never replaces the expressions. " +
   "Length: 12 to 25 segments, never more than 40. " +
   difficultyRubric(difficulty) + " " +
@@ -439,7 +496,7 @@ function prompts(request: LearningRequest): { schema: unknown; system: string } 
     return {
       schema: CONTENT_SCHEMA,
       system:
-        passageContract(request.difficulty) +
+        passageContract(request.difficulty, request.reviewExpressions.length) +
         "Now the passage: a short story in English for about ten minutes of reading. " +
         "The reader is a Korean woman in her forties with a job, a family and a sense of humor. Write for her: witty, warm, a little satirical, " +
         "about a life she recognizes rather than a fable. It must have a real plot with a turn or a punchline, characters who want something, " +
@@ -451,7 +508,7 @@ function prompts(request: LearningRequest): { schema: unknown; system: string } 
   return {
     schema: CONTENT_SCHEMA,
     system:
-      passageContract(request.difficulty) +
+      passageContract(request.difficulty, request.reviewExpressions.length) +
       "Now the passage: an adult-appropriate English conversation for about ten minutes of reading. " +
       "Write a coherent natural dialogue between two or three people, in a real situation an adult Korean woman in her forties would meet " +
       "(work, family, friends, travel, shopping, appointments), with the small humor of real talk. Use the speakers' names as segment speakers.",
@@ -467,11 +524,42 @@ function providerHttpError(status: number): RequestError {
   return new RequestError("provider_error", 502);
 }
 
+/**
+ * A payload that breaks the output contract (too many segments, nothing usable annotated) is
+ * the model's bad day, not the request's: a second attempt usually passes, and the extra tokens
+ * are paid only on failure (백로그 032). Provider refusals and timeouts are not retried.
+ */
+const CONTENT_ATTEMPTS = 2;
+
 async function callAnthropic(
   request: LearningRequest,
   apiKey: string,
   model: string,
   fetcher: Fetcher,
+): Promise<unknown> {
+  const deadline = Date.now() + TOTAL_BUDGET_MS;
+  for (let attempt = 1; ; attempt++) {
+    const remaining = deadline - Date.now();
+    try {
+      return await callAnthropicOnce(request, apiKey, model, fetcher, Math.min(REQUEST_TIMEOUT_MS, remaining));
+    } catch (error) {
+      // Only our own output checks are worth a second call: a provider refusal, a timeout or a
+      // network failure would fail the same way again, and a retry that cannot finish inside
+      // the budget would hand the app a socket timeout instead of this function's answer.
+      const contractFailure = error instanceof Error && OUTPUT_CHECKS.has(error.message.split("(")[0]);
+      const budgetLeft = deadline - Date.now() >= MIN_RETRY_MS;
+      if (!contractFailure || !budgetLeft || request.action !== "content" || attempt >= CONTENT_ATTEMPTS) throw error;
+      console.warn(`content attempt ${attempt} rejected (${error.message}); trying again`);
+    }
+  }
+}
+
+async function callAnthropicOnce(
+  request: LearningRequest,
+  apiKey: string,
+  model: string,
+  fetcher: Fetcher,
+  timeoutMillis: number,
 ): Promise<unknown> {
   const prompt = prompts(request);
   const response = await fetcher("https://api.anthropic.com/v1/messages", {
@@ -481,7 +569,7 @@ async function callAnthropic(
       "anthropic-version": ANTHROPIC_VERSION,
       "content-type": "application/json",
     },
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMillis),
     body: JSON.stringify({
       model,
       max_tokens: 8_000,
@@ -498,7 +586,13 @@ async function callAnthropic(
     throw providerHttpError(response.status);
   }
   const text = responseText(await response.json());
-  return validateModelOutput(JSON.parse(text), request);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error("invalid_model_json");
+  }
+  return validateModelOutput(parsed, request);
 }
 
 export function createHandler(

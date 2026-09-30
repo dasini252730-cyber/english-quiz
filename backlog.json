@@ -2,7 +2,7 @@
   "schema_version": 1,
   "title": "개인용 영어 학습 앱 MVP backlog",
   "source": "요구사항/요구사항.md",
-  "updated_at": "2026-09-28",
+  "updated_at": "2026-09-30",
   "statuses": {
     "todo": "할 일",
     "in_progress": "작업 중",
@@ -519,6 +519,21 @@
         "quiz",
         "ux",
         "learning"
+      ]
+    },
+    {
+      "id": "032",
+      "title": "복습 표현이 있으면 학습 내용 생성이 거의 항상 실패",
+      "description": "2026-09-30 사용자 보고: '학습 내용을 불러오지 못했어요'. 직접 측정: reviewExpressions 5개를 넘기면 12회 중 11회 502 missing_review_expression - 모델이 복습 표현을 그대로 못 넣으면 서버가 지문 전체를 버린다. 첫날(저장 표현 0)만 성공하는 구조. 수정: 누락은 경고로 강등(퀴즈는 저장 목록에서 출제하므로 021), 잘못된 segmentIndex 는 다른 세그먼트에서 찾아 복구, 계약 위반 시 1회 재시도, 프롬프트에 '글자 그대로' 명시. 서버만 배포, 앱 재설치 불필요.",
+      "details": "backlog/032.md",
+      "status": "review_needed",
+      "priority": "P0",
+      "estimate": "S",
+      "depends_on": [],
+      "labels": [
+        "server",
+        "ai",
+        "bug"
       ]
     }
   ]
