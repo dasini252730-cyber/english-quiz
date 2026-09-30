@@ -3,7 +3,6 @@ package com.englishquiz.app.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,7 +11,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -20,11 +18,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.ui.theme.MongleCard
 import com.englishquiz.app.ui.theme.MongleColor
 import com.englishquiz.app.ui.theme.MongleIcons
@@ -35,6 +33,8 @@ data class HomeSummary(
     val streakDays: Int?,
     val savedExpressionCount: Int,
     val masteredExpressionCount: Int,
+    /** Each mode's level (백로그 034); a mode absent here shows no level row. */
+    val levels: Map<ContentMode, HomeLevel> = emptyMap(),
 )
 
 @Composable
@@ -45,6 +45,8 @@ fun HomeScreen(
     onReviewClick: () -> Unit,
     modifier: Modifier = Modifier,
     onLibraryClick: () -> Unit = {},
+    onLevelChange: (ContentMode, Int) -> Unit = { _, _ -> },
+    onSuggestionAnswer: (ContentMode, accepted: Boolean) -> Unit = { _, _ -> },
 ) {
     Column(
         modifier = modifier
@@ -77,16 +79,22 @@ fun HomeScreen(
                 face = MongleColor.Purple,
                 shadow = MongleColor.PurpleDeep,
                 ink = Color.White,
+                level = summary.levels[ContentMode.CONVERSATION],
                 onClick = onConversationClick,
+                onLevelChange = { onLevelChange(ContentMode.CONVERSATION, it) },
+                onSuggestionAnswer = { onSuggestionAnswer(ContentMode.CONVERSATION, it) },
             )
             ModeCard(
                 title = "Story",
-                subtitle = "위트 있는 어른용 짧은 이야기",
+                subtitle = "웃음이 터지는 어른용 짧은 이야기",
                 icon = MongleIcons.Book,
                 face = MongleColor.Yellow,
                 shadow = MongleColor.YellowDeep,
                 ink = MongleColor.Ink,
+                level = summary.levels[ContentMode.STORY],
                 onClick = onStoryClick,
+                onLevelChange = { onLevelChange(ContentMode.STORY, it) },
+                onSuggestionAnswer = { onSuggestionAnswer(ContentMode.STORY, it) },
             )
         }
         EntryRow(icon = MongleIcons.Cards, label = "복습함", onClick = onReviewClick)
@@ -125,49 +133,6 @@ private fun SummaryTiles(summary: HomeSummary) {
             iconTint = MongleColor.GreenDeep,
             modifier = Modifier.weight(1f),
         )
-    }
-}
-
-@Composable
-private fun ModeCard(
-    title: String,
-    subtitle: String,
-    icon: ImageVector,
-    face: Color,
-    shadow: Color,
-    ink: Color,
-    onClick: () -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
-            .background(shadow)
-            .padding(bottom = 6.dp)
-            .clickable(role = Role.Button, onClick = onClick),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(24.dp))
-                .background(face)
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(MongleColor.Surface),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(icon, contentDescription = null, tint = face, modifier = Modifier.size(30.dp))
-            }
-            Column {
-                Text(title, style = MaterialTheme.typography.headlineLarge, color = ink)
-                Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = ink)
-            }
-        }
     }
 }
 

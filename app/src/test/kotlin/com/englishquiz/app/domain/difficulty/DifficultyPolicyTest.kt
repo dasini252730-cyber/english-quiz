@@ -221,7 +221,7 @@ class DifficultyPolicyTest {
         val strong = List(3) { session(correct = 10, questions = 10, newlySaved = 0) }
         val weak = List(3) { session(correct = 0, questions = 10, newlySaved = 0) }
 
-        assertEquals(3, next(current = 3, sessions = strong))
+        assertEquals(5, next(current = 5, sessions = strong))
         assertEquals(1, next(current = 1, sessions = weak))
     }
 
@@ -229,7 +229,7 @@ class DifficultyPolicyTest {
     fun `a difficulty stored outside the scale is clamped before it is used`() {
         val holding = List(3) { session(correct = 7, questions = 10, newlySaved = 4) }
 
-        assertEquals(3, next(current = 9, sessions = holding))
+        assertEquals(5, next(current = 9, sessions = holding))
         assertEquals(1, next(current = 0, sessions = holding))
     }
 }

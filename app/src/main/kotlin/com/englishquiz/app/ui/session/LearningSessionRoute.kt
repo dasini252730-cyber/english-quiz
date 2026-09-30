@@ -13,6 +13,7 @@ import com.englishquiz.app.data.ai.ContentGenerationRequest
 import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.data.ai.ContextualMeaning
 import com.englishquiz.app.data.ai.LearningContent
+import com.englishquiz.app.data.local.LIBRARY_SESSION_MODE
 import com.englishquiz.app.data.ai.MeaningRequest
 import com.englishquiz.app.data.repository.LearningRepository
 import com.englishquiz.app.domain.session.LearningSessionSummary
@@ -159,6 +160,7 @@ fun LearningSessionRoute(
         is SessionStep.Finished -> FinishedStep(
             repository = repository,
             summary = current.summary,
+            sessionMode = if (initialContent == null) mode.wireValue else LIBRARY_SESSION_MODE,
             savedCountAtStart = savedCountAtStart,
             onDone = onExit,
             nowEpochMillis = nowEpochMillis,
@@ -177,6 +179,7 @@ fun LearningSessionRoute(
 private fun FinishedStep(
     repository: LearningRepository,
     summary: LearningSessionSummary,
+    sessionMode: String,
     savedCountAtStart: Int,
     onDone: () -> Unit,
     nowEpochMillis: () -> Long,
@@ -208,6 +211,7 @@ private fun FinishedStep(
         ResultRoute(
             repository = repository,
             summary = ready,
+            sessionMode = sessionMode,
             onDone = onDone,
             nowEpochMillis = nowEpochMillis,
             zoneId = zoneId,

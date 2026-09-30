@@ -9,6 +9,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.data.local.LearningDatabase
 import com.englishquiz.app.data.repository.LearningRepository
 import com.englishquiz.app.domain.session.LearningSessionSummary
@@ -128,6 +129,7 @@ class ResultScreenTest {
                         quizCorrectCount = 3,
                         quizQuestionCount = 4,
                     ),
+                    sessionMode = ContentMode.CONVERSATION.wireValue,
                     onDone = {},
                     nowEpochMillis = { FIXED_NOW_EPOCH_MILLIS },
                     zoneId = ZoneOffset.UTC,

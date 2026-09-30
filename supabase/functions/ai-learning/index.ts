@@ -29,7 +29,7 @@ const CORS_HEADERS = {
 };
 
 type ContentMode = "conversation" | "story";
-type Difficulty = 1 | 2 | 3;
+type Difficulty = 1 | 2 | 3 | 4 | 5;
 type ContentRequest = {
   action: "content";
   mode: ContentMode;
@@ -209,7 +209,7 @@ function validateRequest(value: unknown): LearningRequest {
     if (body.mode !== "conversation" && body.mode !== "story") {
       throw new RequestError("invalid_mode", 400);
     }
-    if (![1, 2, 3].includes(body.difficulty as number)) {
+    if (![1, 2, 3, 4, 5].includes(body.difficulty as number)) {
       throw new RequestError("invalid_difficulty", 400);
     }
     const expressions = body.reviewExpressions ?? [];
@@ -451,11 +451,15 @@ function storyPremise(): string {
 function difficultyRubric(difficulty: Difficulty): string {
   switch (difficulty) {
     case 1:
-      return "Difficulty 1 (beginner): short, simple sentences of at most 12 words; high-frequency everyday vocabulary; present and simple past tenses; at most one idiom in the whole passage; humor from situations, not wordplay.";
+      return "Difficulty 1 of 5 (starter): very short, simple sentences of at most 9 words; the 1,000 most common words; present tense and simple past only; no idioms; every joke visible from the situation itself.";
     case 2:
-      return "Difficulty 2 (intermediate): natural sentence length with an occasional longer one; common idioms and phrasal verbs used the way natives use them; humor may rely on tone.";
+      return "Difficulty 2 of 5 (beginner): short, simple sentences of at most 12 words; high-frequency everyday vocabulary; present and simple past tenses; at most one idiom in the whole passage; humor from situations, not wordplay.";
     case 3:
-      return "Difficulty 3 (advanced): native pace and rhythm; idioms, nuance, understatement and wordplay welcome; less common vocabulary where it is the natural choice; longer sentences allowed.";
+      return "Difficulty 3 of 5 (intermediate): natural sentence length with an occasional longer one; common idioms and phrasal verbs used the way natives use them; humor may rely on tone.";
+    case 4:
+      return "Difficulty 4 of 5 (upper-intermediate): native pace and rhythm; a wide range of idioms and phrasal verbs, some slang; less common vocabulary where it is the natural choice; longer sentences with subordinate clauses.";
+    case 5:
+      return "Difficulty 5 of 5 (advanced): the pace, register shifts and cultural references of a native comedy script; wordplay, sarcasm spoken aloud by characters, and rare vocabulary welcome; complex sentences allowed.";
   }
 }
 

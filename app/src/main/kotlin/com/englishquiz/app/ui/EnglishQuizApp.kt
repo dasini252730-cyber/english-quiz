@@ -12,12 +12,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.englishquiz.app.assessment.AssessmentLevel
 import com.englishquiz.app.data.ai.AiLearningClient
+import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.data.preferences.AppSettings
 import com.englishquiz.app.data.preferences.AppSettingsRepository
 import com.englishquiz.app.data.repository.LearningRepository
@@ -28,9 +29,7 @@ import com.englishquiz.app.ui.theme.MongleColor
 import com.englishquiz.app.ui.theme.mongleScreenInsets
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.collect
-
-/** Difficulty used until the first assessment has stored one. */
-private const val DEFAULT_DIFFICULTY = 2
+import kotlinx.coroutines.launch
 
 private sealed interface SettingsLoadState {
     data object Loading : SettingsLoadState
@@ -52,6 +51,7 @@ fun EnglishQuizApp(
     prefetchTomorrow: () -> Unit = {},
 ) {
     var retryCount by remember { mutableIntStateOf(0) }
+    val scope = rememberCoroutineScope()
     val settingsState by produceState<SettingsLoadState>(
         initialValue = SettingsLoadState.Loading,
         key1 = settingsRepository,
@@ -77,20 +77,27 @@ fun EnglishQuizApp(
                     },
                 )
             } else if (learningRepository == null) {
-                HomePlaceholder(state.settings.currentDifficulty)
+                HomePlaceholder(state.settings)
             } else {
                 LearningHome(
                     repository = learningRepository,
                     aiClient = aiLearningClient,
-                    difficulty = state.settings.currentDifficulty ?: DEFAULT_DIFFICULTY,
-                    onSessionRecorded = { sessionCompletedAtEpochMillis ->
-                        adjustDifficulty(
-                            learningRepository,
-                            settingsRepository,
-                            sessionCompletedAtEpochMillis,
-                        )
-                        // After the adjustment, so tomorrow is written at tomorrow's level.
+                    settings = state.settings,
+                    onSessionRecorded = { mode, sessionCompletedAtEpochMillis ->
+                        if (mode != null) suggestLevel(learningRepository, settingsRepository, mode, sessionCompletedAtEpochMillis)
                         prefetchTomorrow()
+                    },
+                    // The learner's own level moves at once (백로그 034); a write that fails leaves
+                    // the level where it was, which the next tap can repeat.
+                    onLevelChange = { mode, level ->
+                        scope.launch { settingsWrite { settingsRepository.setLevel(mode, level) } }
+                    },
+                    onSuggestionAnswer = { mode, accepted ->
+                        scope.launch {
+                            settingsWrite {
+                                if (accepted) settingsRepository.acceptSuggestion(mode) else settingsRepository.dismissSuggestion(mode)
+                            }
+                        }
                     },
                 )
             }
@@ -99,27 +106,37 @@ fun EnglishQuizApp(
 }
 
 /**
- * Moves the difficulty after a finished session (요구사항 8절, 백로그 013). The recent sessions come
- * from Room and the level itself lives in DataStore, so this is the one place that holds both.
- * A failure here must not break the result screen: the level simply stays where it was and the
- * next finished session tries again.
+ * Leaves a level suggestion for [mode] after a finished session (요구사항 8절, 백로그 013/034). The
+ * recent sessions come from Room and the level itself lives in DataStore, so this is the one
+ * place that holds both. A failure here must not break the result screen: no suggestion is made
+ * and the next finished session tries again.
  */
-private suspend fun adjustDifficulty(
+private suspend fun suggestLevel(
     learningRepository: LearningRepository,
     settingsRepository: AppSettingsRepository,
+    mode: ContentMode,
     sessionCompletedAtEpochMillis: Long,
 ) {
     try {
-        val recent = learningRepository.listRecentSessionSummaries(
-            DifficultyPolicy.SESSIONS_CONSIDERED,
-        )
-        settingsRepository.applyFinishedSession(sessionCompletedAtEpochMillis) { current, sessionsSinceChange ->
+        val recent = learningRepository.listRecentSessionSummaries(mode, DifficultyPolicy.SESSIONS_CONSIDERED)
+        settingsRepository.applyFinishedSession(mode, sessionCompletedAtEpochMillis) { current, sessionsSinceChange ->
             DifficultyPolicy.nextDifficulty(current, recent, sessionsSinceChange)
         }
     } catch (error: CancellationException) {
         throw error
     } catch (_: Exception) {
         // Difficulty is a nicety; the session is already recorded and that is what must survive.
+    }
+}
+
+/** A settings write that fails leaves the stored value where it was; home shows what is stored. */
+private suspend fun settingsWrite(write: suspend () -> Unit) {
+    try {
+        write()
+    } catch (error: CancellationException) {
+        throw error
+    } catch (_: Exception) {
+        // Deliberate: see above.
     }
 }
 
@@ -139,11 +156,9 @@ internal fun LoadingScreen() {
 }
 
 @Composable
-private fun HomePlaceholder(difficulty: Int?) {
-    val levelLabel = AssessmentLevel.entries
-        .firstOrNull { it.storedValue == difficulty }
-        ?.label ?: "미설정"
-    CenteredMessage(title = "오늘의 영어 학습", body = "진단 완료 · 초기 난이도: $levelLabel")
+private fun HomePlaceholder(settings: AppSettings) {
+    val level = settings.level(ContentMode.CONVERSATION)?.let { "$it / ${DifficultyPolicy.MAX_DIFFICULTY}" } ?: "미설정"
+    CenteredMessage(title = "오늘의 영어 학습", body = "진단 완료 · 시작 레벨: $level")
 }
 
 @Composable

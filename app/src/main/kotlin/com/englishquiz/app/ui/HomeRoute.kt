@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import com.englishquiz.app.data.ai.AiLearningClient
 import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.data.ai.LearningContent
+import com.englishquiz.app.data.preferences.AppSettings
 import com.englishquiz.app.data.repository.LearningRepository
 import com.englishquiz.app.domain.streak.StreakPolicy
 import com.englishquiz.app.ui.library.LibraryRoute
@@ -34,6 +35,9 @@ import kotlinx.coroutines.CancellationException
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+
+/** Level used for a mode that has none stored yet (before the diagnosis has written one). */
+private const val DEFAULT_DIFFICULTY = 3
 
 internal enum class HomeDestination(val title: String) {
     HOME("Home"),
@@ -53,8 +57,11 @@ internal enum class HomeDestination(val title: String) {
 internal fun LearningHome(
     repository: LearningRepository,
     aiClient: AiLearningClient?,
-    difficulty: Int,
-    onSessionRecorded: suspend (sessionCompletedAtEpochMillis: Long) -> Unit = {},
+    settings: AppSettings,
+    /** [mode] is null for a library re-read (백로그 026): recorded, but no level suggestion is drawn from it. */
+    onSessionRecorded: suspend (mode: ContentMode?, sessionCompletedAtEpochMillis: Long) -> Unit = { _, _ -> },
+    onLevelChange: (ContentMode, Int) -> Unit = { _, _ -> },
+    onSuggestionAnswer: (ContentMode, accepted: Boolean) -> Unit = { _, _ -> },
 ) {
     var destinationName by rememberSaveable { mutableStateOf(HomeDestination.HOME.name) }
     val destination = HomeDestination.valueOf(destinationName)
@@ -63,7 +70,12 @@ internal fun LearningHome(
     var libraryPick by rememberSaveable { mutableStateOf<String?>(null) }
 
     when (destination) {
-        HomeDestination.HOME -> LearningHomeSummary(repository) { destinationName = it.name }
+        HomeDestination.HOME -> LearningHomeSummary(
+            repository = repository,
+            levels = settings.levels.mapValues { HomeLevel(it.value.level, it.value.suggestedLevel) },
+            onLevelChange = onLevelChange,
+            onSuggestionAnswer = onSuggestionAnswer,
+        ) { destinationName = it.name }
         HomeDestination.REVIEW -> ReviewRoute(repository, goHome)
         HomeDestination.LIBRARY -> LibraryRoute(
             repository = repository,
@@ -83,25 +95,24 @@ internal fun LearningHome(
                 title = HomeDestination.LIBRARY_SESSION.title,
                 repository = repository,
                 aiClient = aiClient,
-                difficulty = difficulty,
+                difficulty = settings.level(content.mode) ?: DEFAULT_DIFFICULTY,
                 onExit = goHome,
-                onSessionRecorded = onSessionRecorded,
+                onSessionRecorded = { onSessionRecorded(null, it) },
                 initialContent = content,
             )
         }
-        HomeDestination.CONVERSATION, HomeDestination.STORY -> LearningSession(
-            mode = if (destination == HomeDestination.CONVERSATION) {
-                ContentMode.CONVERSATION
-            } else {
-                ContentMode.STORY
-            },
-            title = destination.title,
-            repository = repository,
-            aiClient = aiClient,
-            difficulty = difficulty,
-            onExit = goHome,
-            onSessionRecorded = onSessionRecorded,
-        )
+        HomeDestination.CONVERSATION, HomeDestination.STORY -> {
+            val mode = if (destination == HomeDestination.CONVERSATION) ContentMode.CONVERSATION else ContentMode.STORY
+            LearningSession(
+                mode = mode,
+                title = destination.title,
+                repository = repository,
+                aiClient = aiClient,
+                difficulty = settings.level(mode) ?: DEFAULT_DIFFICULTY,
+                onExit = goHome,
+                onSessionRecorded = { onSessionRecorded(mode, it) },
+            )
+        }
     }
 }
 
@@ -141,6 +152,9 @@ private fun LearningSession(
 @Composable
 private fun LearningHomeSummary(
     repository: LearningRepository,
+    levels: Map<ContentMode, HomeLevel>,
+    onLevelChange: (ContentMode, Int) -> Unit,
+    onSuggestionAnswer: (ContentMode, accepted: Boolean) -> Unit,
     onNavigate: (HomeDestination) -> Unit,
 ) {
     var retry by remember { mutableIntStateOf(0) }
@@ -182,11 +196,13 @@ private fun LearningHomeSummary(
             MongleButton("다시 시도", { retry++ })
         }
         else -> HomeScreen(
-            summary = summary,
+            summary = summary.copy(levels = levels),
             onConversationClick = { onNavigate(HomeDestination.CONVERSATION) },
             onStoryClick = { onNavigate(HomeDestination.STORY) },
             onReviewClick = { onNavigate(HomeDestination.REVIEW) },
             onLibraryClick = { onNavigate(HomeDestination.LIBRARY) },
+            onLevelChange = onLevelChange,
+            onSuggestionAnswer = onSuggestionAnswer,
         )
     }
 }

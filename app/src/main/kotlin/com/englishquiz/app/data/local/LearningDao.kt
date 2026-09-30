@@ -44,9 +44,10 @@ interface LearningDao {
     suspend fun listLearningDates(): List<String>
 
     @Query(
-        "SELECT * FROM learning_sessions ORDER BY completedAtEpochMillis DESC, id DESC LIMIT :limit",
+        "SELECT * FROM learning_sessions WHERE mode = :mode " +
+            "ORDER BY completedAtEpochMillis DESC, id DESC LIMIT :limit",
     )
-    suspend fun listRecentSessions(limit: Int): List<LearningSessionEntity>
+    suspend fun listRecentSessions(mode: String, limit: Int): List<LearningSessionEntity>
 
     @Query(
         "SELECT COUNT(*) FROM learning_sessions WHERE learningDate = :learningDate " +

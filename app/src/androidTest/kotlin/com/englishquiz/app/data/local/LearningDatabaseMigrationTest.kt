@@ -153,18 +153,20 @@ class LearningDatabaseMigrationTest {
 
         val migrated = migrationHelper.runMigrationsAndValidate(
             CHAINED_MIGRATION_DATABASE_NAME,
-            4,
+            5,
             true,
             MIGRATION_1_2,
             MIGRATION_2_3,
             MIGRATION_3_4,
+            MIGRATION_4_5,
         )
         val expressions = migrated.query(
             "SELECT displayExpression, firstSavedAtEpochMillis, consecutiveCorrectCount, " +
                 "contextSentence FROM saved_expressions",
         )
+        // A session from before 백로그 034 keeps its numbers and carries no mode.
         val sessions = migrated.query(
-            "SELECT learningDate, completedAtEpochMillis, quizQuestionCount FROM learning_sessions",
+            "SELECT learningDate, completedAtEpochMillis, quizQuestionCount, mode FROM learning_sessions",
         )
         try {
             assertTrue(expressions.moveToFirst())
@@ -176,6 +178,7 @@ class LearningDatabaseMigrationTest {
             assertEquals("2026-09-17", sessions.getString(0))
             assertEquals(300L, sessions.getLong(1))
             assertEquals(10, sessions.getInt(2))
+            assertEquals("", sessions.getString(3))
         } finally {
             expressions.close()
             sessions.close()

@@ -42,6 +42,8 @@ sealed interface StreakUiState {
 fun ResultRoute(
     repository: LearningRepository,
     summary: LearningSessionSummary,
+    /** What the session row records as its mode; see [com.englishquiz.app.data.local.LearningSessionEntity.mode]. */
+    sessionMode: String,
     onDone: () -> Unit,
     nowEpochMillis: () -> Long = System::currentTimeMillis,
     zoneId: ZoneId = ZoneId.systemDefault(),
@@ -71,6 +73,7 @@ fun ResultRoute(
                             newlySavedExpressionCount = summary.newlySavedExpressionCount,
                             quizCorrectCount = summary.quizCorrectCount,
                             quizQuestionCount = summary.quizQuestionCount,
+                            mode = sessionMode,
                         ),
                     )
                     onSessionRecorded(completedAtEpochMillis)

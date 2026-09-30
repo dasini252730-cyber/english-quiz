@@ -11,6 +11,7 @@ import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.englishquiz.app.data.local.LearningDatabase
+import com.englishquiz.app.data.preferences.AppSettings
 import com.englishquiz.app.data.repository.LearningRepository
 import com.englishquiz.app.ui.theme.EnglishQuizTheme
 import kotlinx.coroutines.runBlocking
@@ -52,7 +53,7 @@ class LearningHomeTest {
 
     private fun home(repository: LearningRepository): @Composable () -> Unit = {
         EnglishQuizTheme {
-            LearningHome(repository = repository, aiClient = null, difficulty = 2)
+            LearningHome(repository = repository, aiClient = null, settings = AppSettings(isAssessmentComplete = true))
         }
     }
 

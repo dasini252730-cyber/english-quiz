@@ -61,7 +61,7 @@ class ContentPrefetcher(
         // Whatever comes due at any point tomorrow belongs in tomorrow's passage, whenever the
         // learner opens it, so "due" is measured against the last moment of that day.
         val dueBy = tomorrowStart.plusDays(1).toInstant().toEpochMilli() - 1
-        val difficulty = settings.settings.first().currentDifficulty ?: DEFAULT_DIFFICULTY
+        val levels = settings.settings.first()
         val made = mutableListOf<ContentMode>()
         for (mode in ContentMode.entries) {
             try {
@@ -70,7 +70,7 @@ class ContentPrefetcher(
                 val content = generate(
                     ContentGenerationRequest(
                         mode = mode,
-                        difficulty = difficulty,
+                        difficulty = levels.level(mode) ?: DEFAULT_DIFFICULTY,
                         reviewExpressions = due.take(MAX_REVIEW_EXPRESSIONS).map { it.displayExpression },
                     ),
                 )
@@ -88,7 +88,7 @@ class ContentPrefetcher(
     private companion object {
         const val TAG = "ContentPrefetcher"
         /** Same default as the app root uses before the first assessment. */
-        const val DEFAULT_DIFFICULTY = 2
+        const val DEFAULT_DIFFICULTY = 3
         /** Mirrors the Edge Function's MAX_REVIEW_EXPRESSIONS and the session route's cap. */
         const val MAX_REVIEW_EXPRESSIONS = 12
     }

@@ -62,7 +62,7 @@ class AssessmentFlowTest {
             composeRule.onAllNodesWithText("8 / 8").fetchSemanticsNodes().isEmpty()
         }
         composeRule.onNodeWithText("오늘의 영어 학습").assertIsDisplayed()
-        composeRule.onNodeWithText("진단 완료 · 초기 난이도: 고급").assertIsDisplayed()
+        composeRule.onNodeWithText("진단 완료 · 시작 레벨: 4 / 5").assertIsDisplayed()
     }
 
     @Test
@@ -87,7 +87,7 @@ class AssessmentFlowTest {
     @Test
     fun completedAssessmentIsSkippedAfterStoreReopens() = runBlocking {
         val firstHandle = newStoreHandle()
-        AppSettingsRepository(firstHandle.dataStore).saveAssessmentResult(difficulty = 2)
+        AppSettingsRepository(firstHandle.dataStore).saveAssessmentResult(assessmentLevel = 2)
         firstHandle.job.cancelAndJoin()
         val reopenedHandle = newStoreHandle(firstHandle.file)
 

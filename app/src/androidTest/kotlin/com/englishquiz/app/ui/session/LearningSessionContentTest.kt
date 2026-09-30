@@ -168,9 +168,9 @@ class LearningSessionContentTest {
         // no newly saved expression: the learner tapped nothing.
         compose.awaitText("오늘 학습 완료")
         compose.waitUntil(SessionRouteFixtures.TIMEOUT_MILLIS) {
-            runBlocking { repository.listRecentSessionSummaries(1) }.isNotEmpty()
+            runBlocking { repository.listRecentSessionSummaries(ContentMode.CONVERSATION, 1) }.isNotEmpty()
         }
-        val recorded = runBlocking { repository.listRecentSessionSummaries(1) }.single()
+        val recorded = runBlocking { repository.listRecentSessionSummaries(ContentMode.CONVERSATION, 1) }.single()
         assertEquals(1, recorded.quizQuestionCount)
         assertEquals(0, recorded.newlySavedExpressionCount)
         assertEquals(2, runBlocking { repository.listSavedExpressions() }.size)

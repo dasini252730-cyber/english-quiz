@@ -84,12 +84,12 @@ class LearningRepository(
         learningDao.findLearningSessions(learningDate)
 
     /**
-     * The most recently finished sessions, newest first, as the summaries the domain policies
-     * read. Difficulty adjustment (백로그 013) is the caller; it has no reason to know the Room
-     * row shape.
+     * The most recently finished sessions of [mode], newest first, as the summaries the domain
+     * policies read. Level suggestion (백로그 013/034) is the caller; it has no reason to know the
+     * Room row shape. Sessions from before 백로그 034 carry no mode and are not part of any window.
      */
-    suspend fun listRecentSessionSummaries(limit: Int): List<LearningSessionSummary> =
-        learningDao.listRecentSessions(limit).map { session ->
+    suspend fun listRecentSessionSummaries(mode: ContentMode, limit: Int): List<LearningSessionSummary> =
+        learningDao.listRecentSessions(mode.wireValue, limit).map { session ->
             LearningSessionSummary(
                 learnedExpressionCount = session.learnedExpressionCount,
                 newlySavedExpressionCount = session.newlySavedExpressionCount,

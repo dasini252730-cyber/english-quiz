@@ -551,11 +551,15 @@ test("each difficulty puts its own rubric in front of the model, not a bare numb
     systems[JSON.parse(body.messages[0].content).difficulty] = body.system;
     return providerResponse(validContent);
   });
-  for (const difficulty of [1, 2, 3]) {
+  for (const difficulty of [1, 2, 3, 4, 5]) {
     await handler(post({ action: "content", mode: "conversation", difficulty }));
   }
-  assert.match(systems[1], /Difficulty 1 \(beginner\).*at most 12 words/);
-  assert.match(systems[2], /Difficulty 2 \(intermediate\)/);
-  assert.match(systems[3], /Difficulty 3 \(advanced\).*wordplay/);
+  assert.match(systems[1], /Difficulty 1 of 5 \(starter\).*at most 9 words/);
+  assert.match(systems[2], /Difficulty 2 of 5 \(beginner\).*at most 12 words/);
+  assert.match(systems[3], /Difficulty 3 of 5 \(intermediate\)/);
+  assert.match(systems[4], /Difficulty 4 of 5 \(upper-intermediate\)/);
+  assert.match(systems[5], /Difficulty 5 of 5 \(advanced\).*wordplay/);
   assert.doesNotMatch(systems[1], /advanced/);
+  // Six is outside the scale (백로그 034: five levels per mode).
+  assert.equal((await handler(post({ action: "content", mode: "conversation", difficulty: 6 }))).status, 400);
 });
