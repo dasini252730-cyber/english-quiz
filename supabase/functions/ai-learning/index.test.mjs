@@ -509,9 +509,12 @@ test("the story prompt is written for its reader and carries a premise; the conv
   await handler(post({ action: "content", mode: "story", difficulty: 2 }));
   await handler(post({ action: "content", mode: "conversation", difficulty: 2 }));
   const [story, conversation] = systems;
-  // 요구사항 9.1: adult, witty, lightly satirical, no fable — and 백로그 028: for the learner she is.
+  // 요구사항 9.1: adult, witty, no fable — 백로그 028: for the learner she is — and 백로그 033: a
+  // sitcom that is funny on the surface, since the satirical version read as "no idea what this is".
   assert.match(story, /woman in her forties/);
-  assert.match(story, /witty/);
+  assert.match(story, /sitcom episode/);
+  assert.match(story, /laugh out loud/);
+  assert.match(story, /dry irony, understatement .* are not/);
   assert.match(story, /No moral lesson/);
   assert.match(story, /Today's premise: .+\.$/);
   assert.match(story, /Narrator/);

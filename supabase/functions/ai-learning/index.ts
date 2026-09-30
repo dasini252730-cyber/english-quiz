@@ -403,36 +403,36 @@ function validateModelOutput(value: unknown, request: LearningRequest): unknown 
  * the learner this app has — a Korean woman in her forties — so the situations are hers.
  */
 const STORY_PREMISES = [
-  "a family group chat that spirals over what to bring to Chuseok",
-  "a woman who joins a 6 a.m. running club purely to avoid her sister-in-law",
-  "an office where the new intern is better at everything, including the coffee machine",
-  "a book club that has not read the book in three years",
-  "a first solo trip abroad, booked on impulse after a group chat argument",
-  "a mother decoding her teenager's one-word text messages like a detective",
-  "a wellness trend that everyone at work swears by and nobody understands",
-  "a reunion with a high-school friend who has become suspiciously successful",
-  "a cat who quietly runs the household and knows it",
-  "a couple assembling furniture on their anniversary",
-  "a woman who accidentally becomes the building's most feared neighbor",
-  "an ambitious plan to declutter one drawer that consumes an entire weekend",
-  "a dinner where three generations argue about whether a soup needs more salt",
-  "a manager whose 'quick sync' meetings are neither quick nor in sync",
-  "a woman who discovers her mother has a secret hobby and a fan base",
-  "a school reunion where everyone lies about how little they work",
-  "an apartment complex divided by a single parking space",
-  "a cooking class where the instructor is a former rival from middle school",
-  "a family dog whose vet appointment turns into a small drama",
-  "a hairdresser who knows more about the neighborhood than the police",
-  "an adult daughter teaching her father to video call, with mixed results",
-  "a weekend trip planned by a spreadsheet that the weather ignores",
-  "a woman who wins an argument with customer service and is haunted by it",
-  "a company retreat with trust exercises nobody trusts",
-  "a wedding where the seating chart is the real ceremony",
-  "a new hobby that starts as pottery and ends as a small business",
-  "a rainy day, a broken umbrella, and a stranger with an opinion",
-  "a mother and daughter shopping for the same dress for different reasons",
-  "a neighborhood cafe where the regulars have assigned seats and grudges",
-  "a woman who tells one small lie at a dinner party and must maintain it for a year",
+  "a woman who told her mother-in-law she can cook and now has to host Chuseok dinner for twelve",
+  "a family group chat where a message meant for a friend lands in the family chat, and the cover story grows",
+  "a woman who pretends to know wine at a fancy dinner and is asked to choose for the whole table",
+  "a couple who each secretly book a cleaner for the same morning, and both cleaners arrive",
+  "a mother who reads her teenager's text messages aloud at dinner, getting every abbreviation wrong",
+  "an office where the boss announces a 'fun' team-building day: dodgeball, mandatory, in suits",
+  "a woman who replies-all to the whole company with a photo of her cat in a sweater",
+  "a neighbor who keeps receiving someone else's food deliveries and keeps eating them",
+  "a first date where both people secretly brought a friend for backup, at the next table",
+  "a woman who copies a 5 a.m. morning routine from a video and is asleep on the bus by eight",
+  "a dog who eats the wedding cake the night before the wedding, and the family's rescue plan",
+  "a family locked out of the apartment with guests arriving in twenty minutes and the key inside the kimchi fridge",
+  "a woman who wins a karaoke contest she entered by accident while looking for the bathroom",
+  "a husband who decides to fix the toilet himself with online videos, on the day of the dinner party",
+  "a school parents' chat where autocorrect turns 'bring snacks' into 'bring snakes'",
+  "a hairdresser who cuts far too much and improvises a 'new trend from Paris' on the spot",
+  "a customer service call transferred nine times, always to the same person with a new name",
+  "a woman who adopts a cat that turns out to be two cats taking turns",
+  "a mother who joins her daughter's online game 'just to check' and becomes the guild leader",
+  "an office diet everyone joins and nobody keeps, with a secret snack drawer that keeps refilling itself",
+  "a wedding speech read from the wrong document: a complaint letter to the gas company",
+  "a woman who tells the tailor she is 'about the same size as in college'",
+  "a smart speaker that only obeys the five-year-old, who now runs the house",
+  "a woman who fakes a dentist appointment to skip a meeting and meets her boss in the waiting room",
+  "a neighbor's parcel opened by mistake that contains a very large dinosaur costume, and the neighbor is coming",
+  "a book club that decides to finally read the book, all of it, tonight, with wine",
+  "a couple who each secretly plan a surprise party for the other on the same evening",
+  "a navigation app that sends the whole family to the wrong city's restaurant with the same name",
+  "a woman who says 'sure, I'll bring dessert' and has never baked in her life",
+  "a job interview where the candidate and the interviewer realize they were on a bad blind date last month",
 ];
 
 function storyPremise(): string {
@@ -497,11 +497,14 @@ function prompts(request: LearningRequest): { schema: unknown; system: string } 
       schema: CONTENT_SCHEMA,
       system:
         passageContract(request.difficulty, request.reviewExpressions.length) +
-        "Now the passage: a short story in English for about ten minutes of reading. " +
-        "The reader is a Korean woman in her forties with a job, a family and a sense of humor. Write for her: witty, warm, a little satirical, " +
-        "about a life she recognizes rather than a fable. It must have a real plot with a turn or a punchline, characters who want something, " +
-        "and lines of dialogue in the characters' own voices: use the character's name as the speaker of a dialogue segment and 'Narrator' " +
-        "for narration. No moral lesson, no children's tone, no explaining the joke. " +
+        "Now the passage: a short comic story in English for about ten minutes of reading. " +
+        "The reader is a Korean woman in her forties with a job, a family and a sense of humor, and she wants to laugh out loud, not smile knowingly. " +
+        "Write it like a sitcom episode: one clear comic situation that escalates beat by beat (a plan goes wrong, a small lie needs bigger lies, a misunderstanding snowballs), " +
+        "characters with one exaggerated trait each who say what they think, physical and situational comedy, at least three laugh lines that work without reading between the lines, " +
+        "and a punchline ending that pays off something set up at the start. Who wants what must be clear within the first three segments. " +
+        "Witty dialogue is welcome; dry irony, understatement and a narrator explaining what characters 'really' mean are not: the comedy stays on the surface. " +
+        "Use the character's name as the speaker of a dialogue segment and 'Narrator' for narration, with dialogue in at least half of the segments. " +
+        "No moral lesson, no children's tone, no explaining the joke. " +
         `Today's premise: ${storyPremise()}.`,
     };
   }
