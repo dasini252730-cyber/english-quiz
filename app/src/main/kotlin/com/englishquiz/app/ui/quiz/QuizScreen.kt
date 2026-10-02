@@ -38,6 +38,9 @@ fun QuizScreen(
     onEmptyContinue: () -> Unit,
     onRetry: () -> Unit,
     onBack: () -> Unit,
+    /** The typed blank's submit and hint (백로그 043); unused by the other question types. */
+    onSubmitTyped: (String) -> Unit = {},
+    onHint: () -> Unit = {},
 ) {
     Column(Modifier.fillMaxSize().background(MongleColor.Cream).mongleScreenInsets()) {
         QuizHeader(state, onBack)
@@ -56,7 +59,7 @@ fun QuizScreen(
                 QuizUiState.Error -> QuizErrorContent(onRetry)
                 QuizUiState.Empty -> QuizEmptyContent(onEmptyContinue)
                 is QuizUiState.InProgress ->
-                    QuizQuestionContent(state, onSelectOption, onNext, onRetryRecord)
+                    QuizQuestionContent(state, onSelectOption, onNext, onRetryRecord, onSubmitTyped, onHint)
             }
         }
     }
@@ -126,18 +129,24 @@ private fun QuizQuestionContent(
     onSelectOption: (QuizOption) -> Unit,
     onNext: () -> Unit,
     onRetryRecord: () -> Unit,
+    onSubmitTyped: (String) -> Unit,
+    onHint: () -> Unit,
 ) {
     val answered = state.selectedOption != null
     Text(questionInstruction(state.question.type), style = MaterialTheme.typography.headlineSmall)
     QuizPrompt(state)
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        state.question.options.forEach { option ->
-            MongleOptionButton(
-                text = option.text,
-                onClick = { onSelectOption(option) },
-                enabled = !answered,
-                tone = optionTone(option, state),
-            )
+    if (state.question.type == QuizQuestionType.TYPED_BLANK) {
+        QuizTypedAnswer(state, onSubmitTyped, onHint)
+    } else {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            state.question.options.forEach { option ->
+                MongleOptionButton(
+                    text = option.text,
+                    onClick = { onSelectOption(option) },
+                    enabled = !answered,
+                    tone = optionTone(option, state),
+                )
+            }
         }
     }
     if (answered) QuizFeedback(state, onNext, onRetryRecord)
@@ -151,9 +160,10 @@ private fun QuizPrompt(state: QuizUiState.InProgress) {
             state.question.questionText,
             style = MaterialTheme.typography.displayLarge,
         )
-        QuizQuestionType.FILL_IN_BLANK -> MongleCard(contentPadding = 20.dp) {
-            Text(state.question.questionText, style = MaterialTheme.typography.titleMedium)
-        }
+        QuizQuestionType.FILL_IN_BLANK, QuizQuestionType.TYPED_BLANK, QuizQuestionType.COMPREHENSION ->
+            MongleCard(contentPadding = 20.dp) {
+                Text(state.question.questionText, style = MaterialTheme.typography.titleMedium)
+            }
     }
 }
 
@@ -169,4 +179,6 @@ private fun optionTone(option: QuizOption, state: QuizUiState.InProgress): Optio
 private fun questionInstruction(type: QuizQuestionType): String = when (type) {
     QuizQuestionType.MULTIPLE_CHOICE -> "다음 표현의 뜻으로 알맞은 것을 고르세요."
     QuizQuestionType.FILL_IN_BLANK -> "빈칸에 들어갈 표현을 고르세요."
+    QuizQuestionType.TYPED_BLANK -> "빈칸에 들어갈 표현을 직접 입력하세요."
+    QuizQuestionType.COMPREHENSION -> "오늘 읽은 내용을 떠올려 답하세요."
 }

@@ -19,6 +19,9 @@ import com.englishquiz.app.domain.game.ScorePolicy
 import com.englishquiz.app.domain.quiz.QuizBuilder
 import com.englishquiz.app.domain.quiz.QuizOption
 import com.englishquiz.app.domain.quiz.QuizQuestion
+import com.englishquiz.app.domain.quiz.QuizQuestionType
+import com.englishquiz.app.domain.quiz.typedAnswerHint
+import com.englishquiz.app.domain.quiz.typedAnswerMatches
 import com.englishquiz.app.domain.session.LearningSessionSummary
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -63,6 +66,12 @@ fun QuizRoute(
         { repo, at -> repo.findDueExpressions(at) },
     maxQuestions: Int = QuizBuilder.DEFAULT_MAX_QUESTIONS,
     pointsMultiplier: Int = 1,
+    /**
+     * True when the passage's own questions (백로그 042) must not be asked this time: they are
+     * rebuilt from the content on every entry, so a second quiz on the same passage would pay
+     * for them again. The session route answers from the day's recorded sessions.
+     */
+    skipComprehension: suspend () -> Boolean = { false },
 ) {
     val scope = rememberCoroutineScope()
     var retry by rememberSaveable { mutableIntStateOf(0) }
@@ -73,12 +82,17 @@ fun QuizRoute(
     var totalQuestions by rememberSaveable { mutableIntStateOf(UNKNOWN_TOTAL) }
     var finished by rememberSaveable { mutableStateOf(false) }
     var score by rememberSaveable(stateSaver = QuizScoreSaver) { mutableStateOf(QuizScore()) }
+    // Passage questions (백로그 042) are rebuilt from the content on recreation rather than
+    // dropping out like a recorded expression does, so the ones already answered are counted
+    // here and skipped on the rebuild; they always sit at the front of the list.
+    var comprehensionDone by rememberSaveable { mutableIntStateOf(0) }
 
     var loadState by remember { mutableStateOf<QuizLoadState>(QuizLoadState.Loading) }
     var index by remember { mutableIntStateOf(0) }
     var selectedOption by remember { mutableStateOf<QuizOption?>(null) }
     var recordFailed by remember { mutableStateOf(false) }
     var growth by remember { mutableStateOf<GrowthChange?>(null) }
+    var hint by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(repository, retry) {
         loadState = QuizLoadState.Loading
@@ -89,7 +103,9 @@ fun QuizRoute(
             }
             val targets = questionSource(repository, nowEpochMillis)
             val pool = repository.listSavedExpressions()
-            val questions = QuizBuilder.build(todayContent, targets, pool, shuffleSeed, maxQuestions).questions
+            val content = if (todayContent != null && skipComprehension()) todayContent.copy(comprehension = emptyList()) else todayContent
+            val questions = QuizBuilder.build(content, targets, pool, shuffleSeed, maxQuestions)
+                .questions.drop(comprehensionDone)
             if (totalQuestions == UNKNOWN_TOTAL) totalQuestions = questions.size
             index = 0
             selectedOption = null
@@ -105,6 +121,8 @@ fun QuizRoute(
     val questions = (loadState as? QuizLoadState.Loaded)?.questions
 
     fun record(question: QuizQuestion, option: QuizOption) {
+        // A question about the passage belongs to no expression (백로그 042): nothing to record.
+        if (question.type == QuizQuestionType.COMPREHENSION) return
         scope.launch {
             // Writes are not ordered: a slow one may land after the learner has moved on. Its
             // growth line and its failure notice belong to the card that is still showing, so
@@ -146,24 +164,35 @@ fun QuizRoute(
         )
     }
 
+    fun answer(option: QuizOption) {
+        val question = questions?.getOrNull(index)
+        if (question != null && selectedOption == null) {
+            // The selection is committed before the write, so a fast second tap cannot record
+            // a second answer for the same question: QuizScreen disables the options as soon
+            // as selectedOption is set.
+            selectedOption = option
+            recordFailed = false
+            growth = null
+            if (option.isCorrect) correctCount += 1
+            score = ScorePolicy.answer(score, option.isCorrect, pointsMultiplier)
+            // Counted the moment it is answered, with the score, so a recreation between the
+            // answer and "next" cannot offer the same passage question (and its points) again.
+            if (question.type == QuizQuestionType.COMPREHENSION) comprehensionDone += 1
+            record(question, option)
+        }
+    }
+
     BackHandler(onBack = onBack)
 
     QuizScreen(
-        state = quizUiState(loadState, questions, index, totalQuestions, selectedOption, recordFailed, score, growth),
-        onSelectOption = { option ->
+        state = quizUiState(loadState, questions, index, totalQuestions, selectedOption, recordFailed, score, growth, hint),
+        onSelectOption = ::answer,
+        // The typed text becomes an option of its own (백로그 043); an empty submission is "I don't know".
+        onSubmitTyped = { typed ->
             val question = questions?.getOrNull(index)
-            if (question != null && selectedOption == null) {
-                // The selection is committed before the write, so a fast second tap cannot record
-                // a second answer for the same question: QuizScreen disables the options as soon
-                // as selectedOption is set.
-                selectedOption = option
-                recordFailed = false
-                growth = null
-                if (option.isCorrect) correctCount += 1
-                score = ScorePolicy.answer(score, option.isCorrect, pointsMultiplier)
-                record(question, option)
-            }
+            if (question != null) answer(QuizOption(typed.trim(), typedAnswerMatches(typed, question.expression)))
         },
+        onHint = { questions?.getOrNull(index)?.let { hint = typedAnswerHint(it.expression) } },
         onNext = {
             if (selectedOption != null) {
                 if (questions != null && index + 1 < questions.size) {
@@ -171,6 +200,7 @@ fun QuizRoute(
                     selectedOption = null
                     recordFailed = false
                     growth = null
+                    hint = null
                 } else {
                     finish()
                 }

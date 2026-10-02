@@ -1,5 +1,6 @@
 package com.englishquiz.app.domain.quiz
 
+import com.englishquiz.app.data.ai.ComprehensionQuestion
 import com.englishquiz.app.data.ai.ContentExpression
 import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.data.ai.ContentSegment
@@ -50,6 +51,47 @@ class QuizBuilderTest {
         val result = QuizBuilder.build(null, candidates, candidates, SEED)
 
         assertEquals(10, result.questions.size)
+    }
+
+    @Test
+    fun anExpressionAnsweredRightBeforeIsTypedNotChosen() {
+        // 백로그 043: the first time a blank is a choice; from the first correct answer on it is typed.
+        val fresh = expression("sketchy", "수상한", contextSentence = "That sounds sketchy.")
+        val known = expression("hang out", "놀다", contextSentence = "Let's hang out.", consecutiveCorrect = 1)
+
+        val questions = QuizBuilder.build(null, listOf(fresh, known), DISTRACTORS, SEED).questions
+
+        val typed = questions.single { it.expression == "hang out" }
+        assertEquals(QuizQuestionType.TYPED_BLANK, typed.type)
+        assertEquals("Let's ____.", typed.questionText)
+        assertEquals(listOf(QuizOption("hang out", true)), typed.options)
+        assertEquals(QuizQuestionType.FILL_IN_BLANK, questions.single { it.expression == "sketchy" }.type)
+    }
+
+    @Test
+    fun thePassagesOwnQuestionsComeFirstAndCountOutsideTheCap() {
+        // 백로그 042: comprehension questions open the quiz and belong to no expression.
+        val content = LearningContent(
+            title = "A cafe",
+            mode = ContentMode.CONVERSATION,
+            segments = listOf(ContentSegment("Emma", "That sounds sketchy.")),
+            expressions = listOf(ContentExpression("sketchy", "수상한", 0, 12, 19)),
+            comprehension = listOf(
+                ComprehensionQuestion("Emma는 왜?", listOf("의심", "기쁨", "졸림", "배고픔"), 0, "수상하다고 했다."),
+                ComprehensionQuestion("다음 대답은?", listOf("Sure.", "No way.", "Why?", "Later."), 1, ""),
+            ),
+        )
+        val candidates = (1..12).map { expression("word$it", "뜻$it") }
+
+        val questions = QuizBuilder.build(content, candidates, candidates, SEED).questions
+
+        assertEquals(12, questions.size)
+        assertEquals(QuizQuestionType.COMPREHENSION, questions[0].type)
+        assertEquals("Emma는 왜?", questions[0].questionText)
+        assertEquals("", questions[0].expression)
+        assertEquals(listOf(QuizOption("의심", true), QuizOption("기쁨", false), QuizOption("졸림", false), QuizOption("배고픔", false)), questions[0].options)
+        assertEquals("지문의 흐름을 떠올려 보세요.", questions[1].explanation)
+        assertTrue(questions.drop(2).none { it.type == QuizQuestionType.COMPREHENSION })
     }
 
     @Test

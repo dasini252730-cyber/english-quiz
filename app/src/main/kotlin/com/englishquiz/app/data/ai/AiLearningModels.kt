@@ -23,6 +23,16 @@ data class LearningContent(
     val expressions: List<ContentExpression>,
     /** Words of the passage with their meanings in this context, so a tap needs no call (백로그 024). */
     val glossary: List<GlossaryEntry> = emptyList(),
+    /** Questions about the passage itself for the quiz (백로그 042); empty for a passage stored before it. */
+    val comprehension: List<ComprehensionQuestion> = emptyList(),
+)
+
+/** One multiple-choice question about the situation of the passage, written by the model. */
+data class ComprehensionQuestion(
+    val question: String,
+    val options: List<String>,
+    val answerIndex: Int,
+    val explanation: String,
 )
 
 data class GlossaryEntry(

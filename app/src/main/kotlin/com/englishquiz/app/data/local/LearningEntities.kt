@@ -21,6 +21,8 @@ data class SavedExpressionEntity(
     val incorrectCount: Int = 0,
     val isMastered: Boolean = false,
     @ColumnInfo(defaultValue = "''") val contextSentence: String = "",
+    /** How often the learner looked this expression up while reading (백로그 044); 0 for an enrolled, untapped phrase. */
+    @ColumnInfo(defaultValue = "0") val tapCount: Int = 0,
 )
 
 /**

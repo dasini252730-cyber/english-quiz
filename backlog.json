@@ -681,6 +681,56 @@
         "game",
         "quiz"
       ]
+    },
+    {
+      "id": "042",
+      "title": "지문 이해도 질문 2~3개 (생성 응답에 포함)",
+      "description": "2026-10-02 사용자 결정. Edge Function이 지문과 함께 comprehension 질문 2~3개(한국어 질문, 선택지 4개, 정답, 해설)를 같은 응답으로 돌려주고, 앱은 퀴즈 앞부분에 이 질문을 넣어 '흐름을 이해했는지'를 묻는다. 호출 횟수 변화 없음, 출력 토큰 약 10% 증가(사용자 수락).",
+      "details": "backlog/042.md",
+      "status": "review_needed",
+      "priority": "P1",
+      "estimate": "M",
+      "depends_on": [],
+      "labels": [
+        "app",
+        "server",
+        "quiz",
+        "game"
+      ]
+    },
+    {
+      "id": "043",
+      "title": "직접 입력 빈칸 퀴즈 (타이핑 생산 연습)",
+      "description": "2026-10-02 사용자 결정. 문맥 문장이 있고 이미 한 번 이상 맞힌 표현은 4지선다 대신 표현을 직접 입력한다. 대소문자·구두점·공백 무시 비교, 첫 글자 힌트, '모르겠어요' 포기 버튼. AI 비용 0.",
+      "details": "backlog/043.md",
+      "status": "review_needed",
+      "priority": "P1",
+      "estimate": "M",
+      "depends_on": [
+        "035"
+      ],
+      "labels": [
+        "app",
+        "quiz",
+        "game"
+      ]
+    },
+    {
+      "id": "044",
+      "title": "약점 보기: 자주 틀리는 표현·탭했는데 아직 씨앗인 표현",
+      "description": "2026-10-02 사용자 결정. 저장 표현에 탭 횟수(tapCount)를 기록(Room v7)하고 복습함에 '전체 / 자주 틀리는 / 탭했는데 아직 씨앗' 필터 칩을 둔다. 요구사항 19절의 '필터 없음'을 이 범위로 완화. AI 비용 0.",
+      "details": "backlog/044.md",
+      "status": "review_needed",
+      "priority": "P1",
+      "estimate": "S",
+      "depends_on": [
+        "036"
+      ],
+      "labels": [
+        "app",
+        "review",
+        "game"
+      ]
     }
   ]
 }

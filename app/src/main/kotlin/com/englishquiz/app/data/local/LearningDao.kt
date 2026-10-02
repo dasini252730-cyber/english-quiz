@@ -34,6 +34,10 @@ interface LearningDao {
     @Update
     suspend fun updateExpression(expression: SavedExpressionEntity)
 
+    /** One more look-up while reading (백로그 044). */
+    @Query("UPDATE saved_expressions SET tapCount = tapCount + 1 WHERE normalizedExpression = :normalizedExpression")
+    suspend fun incrementTapCount(normalizedExpression: String)
+
     @Query(
         "SELECT * FROM learning_sessions WHERE learningDate = :learningDate " +
             "ORDER BY completedAtEpochMillis, id",

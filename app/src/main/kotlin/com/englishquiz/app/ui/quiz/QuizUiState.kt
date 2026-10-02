@@ -24,6 +24,8 @@ sealed interface QuizUiState {
         val score: QuizScore = QuizScore(),
         /** How the answered expression grew or fell back (백로그 036), once its record is written. */
         val growth: GrowthChange? = null,
+        /** The first-letter hint of a typed blank once asked for (백로그 043). */
+        val hint: String? = null,
     ) : QuizUiState
 }
 
@@ -47,6 +49,7 @@ internal fun quizUiState(
     recordFailed: Boolean,
     score: QuizScore,
     growth: GrowthChange?,
+    hint: String? = null,
 ): QuizUiState = when (loadState) {
     QuizLoadState.Loading -> QuizUiState.Loading
     QuizLoadState.Error -> QuizUiState.Error
@@ -67,6 +70,7 @@ internal fun quizUiState(
                 recordFailed = recordFailed,
                 score = score,
                 growth = growth,
+                hint = hint,
             )
         }
     }

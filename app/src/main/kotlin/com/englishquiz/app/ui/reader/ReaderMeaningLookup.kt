@@ -68,7 +68,7 @@ suspend fun retrySaveMeaning(
     repository: LearningRepository,
     nowEpochMillis: () -> Long,
 ): MeaningUiState.Success {
-    val status = saveMeaning(state.expression, state.meaning, contextSentence, repository, nowEpochMillis)
+    val status = saveMeaning(state.expression, state.meaning, contextSentence, repository, nowEpochMillis, countTap = false)
     return state.copy(saveStatus = status)
 }
 
@@ -82,6 +82,7 @@ private suspend fun saveMeaning(
     contextSentence: String,
     repository: LearningRepository,
     nowEpochMillis: () -> Long,
+    countTap: Boolean = true,
 ): SaveStatus = try {
     withContext(NonCancellable) {
         repository.saveExpression(
@@ -89,6 +90,7 @@ private suspend fun saveMeaning(
             contextMeaning = meaning,
             savedAtEpochMillis = nowEpochMillis(),
             contextSentence = contextSentence,
+            countTap = countTap,
         )
     }
     SaveStatus.SAVED

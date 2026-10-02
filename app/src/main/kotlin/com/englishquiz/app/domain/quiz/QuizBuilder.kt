@@ -1,7 +1,7 @@
 package com.englishquiz.app.domain.quiz
 
+import com.englishquiz.app.data.ai.ComprehensionQuestion
 import com.englishquiz.app.data.ai.LearningContent
-import com.englishquiz.app.data.ai.foldTypography
 import com.englishquiz.app.data.local.SavedExpressionEntity
 import com.englishquiz.app.domain.game.GrowthStage
 import kotlin.random.Random
@@ -32,12 +32,10 @@ import kotlin.random.Random
  * tell, so the blank questions can draw from either source.
  */
 object QuizBuilder {
-    /** Matches the set the Reader strips when it turns a tapped token into a saved expression. */
-    private val EDGE_PUNCTUATION = charArrayOf(
-        '.', ',', '!', '?', ';', ':', '"', '\'', '(', ')', '[', ']', '\u2026', '-',
-    )
-
     const val DEFAULT_MAX_QUESTIONS = 10
+
+    /** Consecutive correct answers after which a blank must be typed rather than chosen (백로그 043). */
+    const val TYPED_AFTER_CORRECT = 1
     private const val MAX_OPTIONS = 4
     private const val MIN_OPTIONS = 2
 
@@ -54,8 +52,11 @@ object QuizBuilder {
         // context, never candidates: a saved expression that merely appears in it again is not
         // due again, and asking it anyway would advance its review schedule twice in one day —
         // which is exactly what re-reading the day's stored passage would do (백로그 021).
-        val candidates = todayExpressions.distinctBy { normalize(it.displayExpression) }
-        if (candidates.isEmpty()) return QuizSet(emptyList())
+        // The passage's own questions come first (백로그 042): they are about what was just
+        // read, and they cost nothing to ask. They are not part of the expression cap.
+        val comprehension = todayContent?.comprehension.orEmpty().map(::comprehensionQuestion)
+        val candidates = todayExpressions.distinctBy { normalizeQuizText(it.displayExpression) }
+        if (candidates.isEmpty()) return QuizSet(comprehension)
 
         // Take the most overdue expressions first so a long review backlog actually drains; only
         // then shuffle, so the order within one session still varies.
@@ -63,8 +64,16 @@ object QuizBuilder {
             .sortedWith(compareBy({ it.nextReviewAtEpochMillis ?: it.firstSavedAtEpochMillis }, { it.id }))
             .take(maxQuestions)
             .shuffled(random)
-        return QuizSet(selected.mapNotNull { buildQuestion(it, distractors, random) })
+        return QuizSet(comprehension + selected.mapNotNull { buildQuestion(it, distractors, random) })
     }
+
+    private fun comprehensionQuestion(item: ComprehensionQuestion) = QuizQuestion(
+        expression = "",
+        type = QuizQuestionType.COMPREHENSION,
+        questionText = item.question,
+        options = item.options.mapIndexed { index, option -> QuizOption(option, index == item.answerIndex) },
+        explanation = item.explanation.ifBlank { "지문의 흐름을 떠올려 보세요." },
+    )
 
     private fun buildQuestion(
         expression: SavedExpressionEntity,
@@ -72,17 +81,32 @@ object QuizBuilder {
         random: Random,
     ): QuizQuestion? {
         val blanked = blankSentence(expression)
-        val type = if (blanked != null) QuizQuestionType.FILL_IN_BLANK else QuizQuestionType.MULTIPLE_CHOICE
+        val type = when {
+            blanked == null -> QuizQuestionType.MULTIPLE_CHOICE
+            // Once recognised right at least once, the expression has to be produced (백로그 043).
+            expression.consecutiveCorrectCount >= TYPED_AFTER_CORRECT -> QuizQuestionType.TYPED_BLANK
+            else -> QuizQuestionType.FILL_IN_BLANK
+        }
+        if (type == QuizQuestionType.TYPED_BLANK) {
+            return QuizQuestion(
+                expression = expression.displayExpression,
+                type = type,
+                questionText = checkNotNull(blanked),
+                options = listOf(QuizOption(expression.displayExpression, true)),
+                explanation = explanationFor(expression),
+                growthBefore = GrowthStage.of(expression.consecutiveCorrectCount, expression.isMastered),
+            )
+        }
         // A fill-in-the-blank asks which expression fits the sentence (요구사항 14.2), so its
         // options are expressions; the meaning question's options are meanings.
         val answerOf: (Distractor) -> String = when (type) {
             QuizQuestionType.FILL_IN_BLANK -> Distractor::expression
-            QuizQuestionType.MULTIPLE_CHOICE -> Distractor::meaning
+            else -> Distractor::meaning
         }
         val answer = Distractor(expression.displayExpression, expression.contextMeaning, true)
         val usable = when (type) {
             QuizQuestionType.FILL_IN_BLANK -> distractors
-            QuizQuestionType.MULTIPLE_CHOICE -> distractors.filter { it.fromSaved }
+            else -> distractors.filter { it.fromSaved }
         }
         val options = buildOptions(answer, usable, random, answerOf) ?: return null
         return QuizQuestion(
@@ -105,9 +129,9 @@ object QuizBuilder {
         val correctAnswer = answerOf(answer).trim()
         if (correctAnswer.isEmpty()) return null
         val wrongAnswers = distractors
-            .filter { normalize(it.expression) != normalize(answer.expression) }
+            .filter { normalizeQuizText(it.expression) != normalizeQuizText(answer.expression) }
             .map { answerOf(it).trim() }
-            .filter { it.isNotEmpty() && normalize(it) != normalize(correctAnswer) }
+            .filter { it.isNotEmpty() && normalizeQuizText(it) != normalizeQuizText(correctAnswer) }
             .distinct()
             .shuffled(random)
             .take(MAX_OPTIONS - 1)
@@ -151,24 +175,6 @@ object QuizBuilder {
         val saved = pool.map { Distractor(it.displayExpression, it.contextMeaning, true) }
         val fromContent = content?.expressions.orEmpty()
             .map { Distractor(it.text, it.meaning, false) }
-        return (saved + fromContent).distinctBy { normalize(it.expression) }
+        return (saved + fromContent).distinctBy { normalizeQuizText(it.expression) }
     }
-
-    /**
-     * The key two spellings of one expression have to agree on.
-     *
-     * A saved expression is the text the Reader cut out of the passage with its edge punctuation
-     * removed; a content annotation is the string the model sent, trimmed and nothing else. The
-     * two differ in exactly the ways [foldTypography] folds — a curly apostrophe against a
-     * straight one — and in trailing punctuation. Without folding both, the same phrase can be
-     * offered as the correct answer and as a wrong option at once, indistinguishable on screen,
-     * and tapping the wrong copy records a wrong answer against the learner's review state.
-     */
-    private fun normalize(text: String): String = text
-        .foldTypography()
-        .trim(*EDGE_PUNCTUATION)
-        .trim()
-        .split(Regex("""\s+"""))
-        .filter { it.isNotEmpty() }
-        .joinToString(" ")
 }

@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.englishquiz.app.data.local.LearningDatabase
@@ -14,6 +15,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
+import org.junit.Assert.assertTrue
 import org.junit.runner.RunWith
 
 /**
@@ -68,6 +70,28 @@ class ReviewRouteTest {
         compose.onNodeWithText("sketchy").assertIsDisplayed()
         compose.onNodeWithText("수상한").assertIsDisplayed()
         compose.onNodeWithText("2개 · 최근 저장순").assertIsDisplayed()
+    }
+
+    @Test
+    fun theTappedSeedFilterReadsTheTapCountFromTheStore() {
+        val repository = openRepository()
+        runBlocking {
+            // "sketchy" was looked up twice while reading; "pull it off" only enrolled from a passage.
+            repository.saveExpression("sketchy", "수상한", 1_000L, "That sounds sketchy.")
+            repository.saveExpression("sketchy", "수상한", 1_500L, "That sounds sketchy.")
+            repository.saveExpressionIfNew("pull it off", "해내다", 2_000L, "I'll totally pull it off.")
+        }
+
+        mount(repository)
+        awaitText("2개 · 최근 저장순")
+        compose.onNodeWithText("탭했는데 아직 씨앗").performClick()
+
+        // 백로그 044: the filter is applied in the route, on the rows as stored.
+        awaitText("1개 · 많이 탭한 순")
+        compose.onNodeWithText("sketchy").assertIsDisplayed()
+        assertTrue(compose.onAllNodesWithText("pull it off").fetchSemanticsNodes().isEmpty())
+        compose.onNodeWithText("전체").performClick()
+        awaitText("2개 · 최근 저장순")
     }
 
     @Test

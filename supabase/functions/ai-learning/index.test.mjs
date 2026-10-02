@@ -22,6 +22,7 @@ const expectedContent = {
     { ...validContent.expressions[1], startIndex: 16, endIndex: 25 },
   ],
   glossary: [],
+  comprehension: [],
 };
 
 function providerResponse(value, httpStatus = 200, stopReason = "end_turn") {
@@ -482,6 +483,41 @@ test("a glossary rides along and bad entries are dropped, never failing the pass
   const bare = createHandler(() => "key", async () => providerResponse(validContent));
   const bareResponse = await bare(post({ action: "content", mode: "conversation", difficulty: 2 }));
   assert.deepEqual((await bareResponse.json()).data.glossary, []);
+});
+
+test("comprehension questions ride along, bad ones are dropped, and the prompt asks for them", async () => {
+  const withQuestions = {
+    ...validContent,
+    comprehension: [
+      { question: "Sam은 왜 함께 하자고 했나요?", options: ["혼자 하기 힘들어서", "심심해서", "돈 때문에", "장난으로"], answerIndex: 0, explanation: "첫 줄에서 함께 해내자고 말한다." },
+      { question: "답이 선택지 밖", options: ["a", "b"], answerIndex: 2, explanation: "" },
+      // A blank option cannot simply be dropped: the answer index would then point at the wrong one.
+      { question: "빈 선택지 포함", options: ["", "맞는 답", "틀린 답", "다른 답"], answerIndex: 1, explanation: "" },
+      { question: "선택지 하나", options: ["only"], answerIndex: 0, explanation: "" },
+      { question: "중복 선택지", options: ["same", "Same", "other"], answerIndex: 0, explanation: "" },
+      { question: "", options: ["a", "b"], answerIndex: 0, explanation: "" },
+      { question: "설명 없음도 통과", options: ["Sure, let's do it.", "No way.", "What time is it?", "I'm a teapot."], answerIndex: 0 },
+      "not an object",
+    ],
+  };
+  let sent;
+  const handler = createHandler(() => "key", async (_url, options) => {
+    sent = JSON.parse(options.body);
+    return providerResponse(withQuestions);
+  });
+  const response = await handler(post({ action: "content", mode: "conversation", difficulty: 2 }));
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).data.comprehension, [
+    { question: "Sam은 왜 함께 하자고 했나요?", options: ["혼자 하기 힘들어서", "심심해서", "돈 때문에", "장난으로"], answerIndex: 0, explanation: "첫 줄에서 함께 해내자고 말한다." },
+    { question: "설명 없음도 통과", options: ["Sure, let's do it.", "No way.", "What time is it?", "I'm a teapot."], answerIndex: 0, explanation: "" },
+  ]);
+  assert.match(sent.system, /`comprehension`: 2 or 3 multiple-choice questions, written in Korean/);
+  assertOnlySupportedKeywords(sent.output_config.format.schema);
+
+  // Without any, the passage is still a passage (백로그 042: a courtesy, like the glossary).
+  const bare = createHandler(() => "key", async () => providerResponse(validContent));
+  const bareResponse = await bare(post({ action: "content", mode: "conversation", difficulty: 2 }));
+  assert.deepEqual((await bareResponse.json()).data.comprehension, []);
 });
 
 test("a malformed annotation is dropped like an unusable one, so the passage still arrives", async () => {

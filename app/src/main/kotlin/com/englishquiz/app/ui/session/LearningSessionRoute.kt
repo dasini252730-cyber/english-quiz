@@ -157,6 +157,12 @@ fun LearningSessionRoute(
             // as saved at the start keeps "새로 저장한 표현" — and the difficulty signal it feeds
             // (백로그 013) — as the count of what the learner actually tapped.
             onExpressionsEnrolled = { savedCountAtStart += it },
+            // The passage questions (백로그 042) are asked once per passage: not on a library
+            // re-read, and not on a second entry into a day whose session for this mode is recorded.
+            skipComprehension = {
+                initialContent != null ||
+                    repository.findLearningSessions(isoDate(nowEpochMillis(), zoneId)).any { it.mode == mode.wireValue }
+            },
         )
 
         is SessionStep.Finished -> FinishedStep(

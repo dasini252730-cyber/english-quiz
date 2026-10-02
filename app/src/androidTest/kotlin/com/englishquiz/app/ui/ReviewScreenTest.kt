@@ -1,18 +1,24 @@
 package com.englishquiz.app.ui
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.englishquiz.app.data.local.SavedExpressionEntity
+import com.englishquiz.app.domain.review.ReviewFilter
 import com.englishquiz.app.ui.reader.SpeechState
 import com.englishquiz.app.ui.review.ReviewScreen
 import com.englishquiz.app.ui.review.ReviewUiState
 import com.englishquiz.app.ui.theme.EnglishQuizTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -91,6 +97,49 @@ class ReviewScreenTest {
         compose.onNodeWithText("다음 복습: ", substring = true).assertIsDisplayed()
 
         compose.onNodeWithText("3개 · 최근 저장순").assertIsDisplayed()
+    }
+
+    @Test
+    fun theWeakSpotFiltersCutTheListAndNameTheirOrder() {
+        // 백로그 044: "inProgress" was answered wrong once; "newlySaved" was tapped and never answered.
+        val missed = inProgress.copy(incorrectCount = 1)
+        val tapped = newlySaved.copy(tapCount = 2)
+        var expressions by mutableStateOf(listOf(tapped, missed, mastered))
+        var filter by mutableStateOf(ReviewFilter.OFTEN_WRONG)
+        compose.setContent {
+            EnglishQuizTheme {
+                ReviewScreen(ReviewUiState.Ready(expressions, filter), SpeechState(ready = true), {}, {}, {}, {})
+            }
+        }
+
+        compose.onNodeWithText("1개 · 오답 많은 순").assertIsDisplayed()
+        compose.onNodeWithText("sketchy").assertIsDisplayed()
+        assertTrue(compose.onAllNodesWithText("questionable").fetchSemanticsNodes().isEmpty())
+        assertTrue(compose.onAllNodesWithText("not my thing").fetchSemanticsNodes().isEmpty())
+
+        filter = ReviewFilter.TAPPED_SEED
+        compose.onNodeWithText("1개 · 많이 탭한 순").assertIsDisplayed()
+        compose.onNodeWithText("questionable").assertIsDisplayed()
+        assertTrue(compose.onAllNodesWithText("sketchy").fetchSemanticsNodes().isEmpty())
+
+        // An empty cut explains itself instead of showing a blank page.
+        filter = ReviewFilter.OFTEN_WRONG
+        expressions = listOf(mastered)
+        compose.onNodeWithText("틀린 표현이 없어요. 퀴즈에서 틀리면 여기에 모여요.").assertIsDisplayed()
+    }
+
+    @Test
+    fun tappingAChipReportsTheFilter() {
+        val chosen = mutableListOf<ReviewFilter>()
+        compose.setContent {
+            EnglishQuizTheme {
+                ReviewScreen(ReviewUiState.Ready(listOf(newlySaved)), SpeechState(ready = true), {}, {}, {}, {}, onFilter = { chosen += it })
+            }
+        }
+
+        compose.onNodeWithText("자주 틀리는").performClick()
+        compose.onNodeWithText("탭했는데 아직 씨앗").performClick()
+        assertEquals(listOf(ReviewFilter.OFTEN_WRONG, ReviewFilter.TAPPED_SEED), chosen)
     }
 
     @Test

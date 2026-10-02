@@ -109,16 +109,20 @@ class LearningRepository(
 
     /**
      * Saves the expression the first time it is looked up. A repeat lookup keeps the stored row,
-     * so the first-saved date and the review progress survive.
+     * so the first-saved date and the review progress survive. Every call counts as one tap
+     * (백로그 044): this is the Reader's path, and tapping a phrase again means it still is not known.
      */
     suspend fun saveExpression(
         displayExpression: String,
         contextMeaning: String,
         savedAtEpochMillis: Long,
         contextSentence: String = "",
+        /** False for a retry of a save that failed: the learner tapped once. */
+        countTap: Boolean = true,
     ): SavedExpressionEntity = database.withTransaction {
         val normalizedExpression = normalizeExpression(displayExpression)
         insertUnlessSaved(normalizedExpression, displayExpression, contextMeaning, savedAtEpochMillis, contextSentence)
+        if (countTap) learningDao.incrementTapCount(normalizedExpression)
         checkNotNull(learningDao.findSavedExpression(normalizedExpression))
     }
 

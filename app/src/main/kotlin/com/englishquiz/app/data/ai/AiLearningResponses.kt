@@ -39,8 +39,39 @@ internal fun parseContentResponse(response: JSONObject, expectedMode: ContentMod
         ContentExpression(text, item.requiredString("meaning"), segmentIndex, start, start + text.length)
     } ?: invalidResponse()
     if (segments.isEmpty() || expressions.isEmpty()) invalidResponse()
-    return LearningContent(data.requiredString("title"), mode, segments, expressions, data.glossary())
+    return LearningContent(
+        title = data.requiredString("title"),
+        mode = mode,
+        segments = segments,
+        expressions = expressions,
+        glossary = data.glossary(),
+        comprehension = data.comprehension(),
+    )
 }
+
+/**
+ * Comprehension questions (백로그 042) follow the glossary's rule: an entry the app cannot ask
+ * honestly — a blank question, fewer than two options, an answer outside them — is skipped and
+ * never fails the passage. The key is absent in rows stored before 042.
+ */
+private fun JSONObject.comprehension(): List<ComprehensionQuestion> {
+    val array = optJSONArray("comprehension") ?: return emptyList()
+    return buildList {
+        for (index in 0 until array.length()) {
+            if (size >= MAX_COMPREHENSION_QUESTIONS) break
+            val item = array.optJSONObject(index) ?: continue
+            val question = item.optString("question").trim()
+            val options = item.optJSONArray("options")?.let { raw -> List(raw.length()) { raw.optString(it).trim() } } ?: continue
+            val answerIndex = item.optInt("answerIndex", -1)
+            // A blank option is not dropped but disqualifies the entry: dropping it would move
+            // answerIndex onto a wrong option.
+            if (question.isEmpty() || options.size < 2 || options.any { it.isEmpty() } || answerIndex !in options.indices) continue
+            add(ComprehensionQuestion(question, options, answerIndex, item.optString("explanation").trim()))
+        }
+    }
+}
+
+private const val MAX_COMPREHENSION_QUESTIONS = 3
 
 /**
  * The glossary (백로그 024) is a courtesy, never a reason to reject a passage: an entry that is not
@@ -134,11 +165,22 @@ internal fun LearningContent.toResponseJson(): JSONObject {
     glossary.forEach { entry ->
         glossaryArray.put(JSONObject().put("word", entry.word).put("meaning", entry.meaning))
     }
+    val comprehensionArray = JSONArray()
+    comprehension.forEach { item ->
+        comprehensionArray.put(
+            JSONObject()
+                .put("question", item.question)
+                .put("options", JSONArray(item.options))
+                .put("answerIndex", item.answerIndex)
+                .put("explanation", item.explanation),
+        )
+    }
     val data = JSONObject()
         .put("title", title)
         .put("mode", mode.wireValue)
         .put("segments", segmentArray)
         .put("expressions", expressionArray)
         .put("glossary", glossaryArray)
+        .put("comprehension", comprehensionArray)
     return JSONObject().put("data", data)
 }

@@ -2,13 +2,17 @@ package com.englishquiz.app.ui
 
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.englishquiz.app.data.ai.ComprehensionQuestion
 import com.englishquiz.app.data.ai.ContentExpression
 import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.data.ai.ContentSegment
@@ -22,6 +26,7 @@ import com.englishquiz.app.ui.theme.EnglishQuizTheme
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -147,6 +152,120 @@ class QuizRouteTest {
         assertEquals(2, finished.quizCorrectCount)
         assertEquals(25, finished.score)
         assertEquals(2, finished.maxCombo)
+    }
+
+    @Test
+    fun aKnownExpressionIsTypedAndJudgedOnTheNormalisedText() = runBlocking {
+        val db = LearningDatabase.create(context, DATABASE_NAME)
+        database = db
+        val repository = LearningRepository(db)
+        repository.saveExpression("hang out", "놀다", NOW - 900, "Let's hang out.")
+        repository.saveExpression("sketchy", "수상한", NOW - 1_000)
+        // One right answer already: from here on the blank is typed (백로그 043).
+        repository.saveReviewProgress("hang out", NOW - 500, NOW - 100, consecutiveCorrectCount = 1, incorrectCount = 0, isMastered = false)
+
+        var summary: LearningSessionSummary? = null
+        compose.setContent {
+            EnglishQuizTheme {
+                QuizRoute(repository = repository, todayContent = null, onFinished = { summary = it }, now = { NOW }, seed = { SEED })
+            }
+        }
+
+        repeat(2) { number ->
+            awaitText("${number + 1} / 2").assertIsDisplayed()
+            if (compose.onAllNodesWithText("Let's ____.").fetchSemanticsNodes().isNotEmpty()) {
+                compose.onNode(hasSetTextAction()).performTextInput("Hang Out!")
+                compose.onNodeWithText("제출").performScrollTo().performClick()
+            } else {
+                awaitText("수상한").performScrollTo().performClick()
+            }
+            awaitText("정답이에요!")
+            awaitText(if (number == 0) "다음 문제" else "결과 보기").performScrollTo().performClick()
+        }
+
+        compose.waitUntil(TIMEOUT_MILLIS) { summary != null }
+        assertEquals(2, checkNotNull(summary).quizCorrectCount)
+        compose.waitUntil(TIMEOUT_MILLIS) {
+            runBlocking { db.learningDao().findSavedExpression("hang out")?.consecutiveCorrectCount == 2 }
+        }
+    }
+
+    @Test
+    fun aPassageQuestionOpensTheQuizAndRecordsNothing() = runBlocking {
+        val db = LearningDatabase.create(context, DATABASE_NAME)
+        database = db
+        val repository = LearningRepository(db)
+        repository.saveExpression("sketchy", "수상한", NOW - 1_000)
+        repository.saveExpression("hang out", "놀다", NOW - 900)
+        val content = LearningContent(
+            title = "A cafe",
+            mode = ContentMode.CONVERSATION,
+            segments = listOf(ContentSegment("Emma", "That sounds sketchy.")),
+            expressions = listOf(ContentExpression("sketchy", "수상한", 0, 12, 19)),
+            comprehension = listOf(ComprehensionQuestion("Emma는 왜?", listOf("의심스러워서", "기뻐서"), 0, "수상하다고 했다.")),
+        )
+
+        var summary: LearningSessionSummary? = null
+        val restoration = StateRestorationTester(compose)
+        restoration.setContent {
+            EnglishQuizTheme {
+                QuizRoute(
+                    repository = repository,
+                    todayContent = content,
+                    onFinished = { summary = it },
+                    now = { NOW },
+                    seed = { SEED },
+                    enrolExpressions = false,
+                )
+            }
+        }
+
+        // 백로그 042: the passage question is first and counts in the total; it touches no expression.
+        awaitText("1 / 3").assertIsDisplayed()
+        awaitText("의심스러워서").performScrollTo().performClick()
+        awaitText("+10점")
+        // Answered but not yet moved on: a recreation must not offer the same question (and its
+        // points) a second time; the quiz resumes at the next question with the score kept.
+        restoration.emulateSavedInstanceStateRestore()
+        awaitText("2 / 3").assertIsDisplayed()
+        compose.onNodeWithText("10점").assertIsDisplayed()
+        assertTrue(compose.onAllNodesWithText("Emma는 왜?").fetchSemanticsNodes().isEmpty())
+        assertEquals(null, db.learningDao().findSavedExpression("sketchy")?.lastReviewedAtEpochMillis)
+        assertEquals(null, db.learningDao().findSavedExpression("hang out")?.lastReviewedAtEpochMillis)
+        assertEquals(null, summary)
+    }
+
+    @Test
+    fun thePassageQuestionsAreSkippedWhenTheCallerSaysSo() = runBlocking {
+        val db = LearningDatabase.create(context, DATABASE_NAME)
+        database = db
+        val repository = LearningRepository(db)
+        repository.saveExpression("sketchy", "수상한", NOW - 1_000)
+        repository.saveExpression("hang out", "놀다", NOW - 900)
+        val content = LearningContent(
+            title = "A cafe",
+            mode = ContentMode.CONVERSATION,
+            segments = listOf(ContentSegment("Emma", "That sounds sketchy.")),
+            expressions = listOf(ContentExpression("sketchy", "수상한", 0, 12, 19)),
+            comprehension = listOf(ComprehensionQuestion("Emma는 왜?", listOf("의심스러워서", "기뻐서"), 0, "")),
+        )
+        compose.setContent {
+            EnglishQuizTheme {
+                QuizRoute(
+                    repository = repository,
+                    todayContent = content,
+                    onFinished = {},
+                    now = { NOW },
+                    seed = { SEED },
+                    enrolExpressions = false,
+                    skipComprehension = { true },
+                )
+            }
+        }
+
+        // 백로그 042: a second quiz on the same passage asks only the expressions.
+        awaitText("1 / 2").assertIsDisplayed()
+        assertTrue(compose.onAllNodesWithText("Emma는 왜?").fetchSemanticsNodes().isEmpty())
     }
 
     @Test

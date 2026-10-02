@@ -38,6 +38,22 @@ class LearningRepositoryTest {
     }
 
     @Test
+    fun aTapCountsEveryLookUpButPassageEnrolmentCountsNone() = runBlocking {
+        val db = LearningDatabase.create(context, DATABASE_NAME)
+        database = db
+        val repository = LearningRepository(db)
+
+        // 백로그 044: the Reader's save is a tap; the quiz's passage-wide enrolment is not.
+        repository.saveExpression("sketchy", "수상한", 100, "That sounds sketchy.")
+        repository.saveExpression("sketchy", "수상한", 200, "That sounds sketchy.")
+        repository.saveExpressionIfNew("hang out", "놀다", 100, "Let's hang out.")
+        repository.saveExpressionIfNew("hang out", "놀다", 200, "Let's hang out.")
+
+        assertEquals(2, db.learningDao().findSavedExpression("sketchy")?.tapCount)
+        assertEquals(0, db.learningDao().findSavedExpression("hang out")?.tapCount)
+    }
+
+    @Test
     fun duplicateExpressionKeepsExistingReviewStateAfterDatabaseReopen() = runBlocking {
         val firstDatabase = LearningDatabase.create(context, DATABASE_NAME)
         database = firstDatabase
