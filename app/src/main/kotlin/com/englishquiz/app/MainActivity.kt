@@ -29,6 +29,7 @@ class MainActivity : ComponentActivity() {
                     learningRepository = appContainer.learningRepository,
                     aiLearningClient = appContainer.aiLearningClient,
                     prefetchTomorrow = { appContainer.contentPrefetcher?.prefetchTomorrow() },
+                    gameProgressRepository = appContainer.gameProgressRepository,
                 )
             }
         }

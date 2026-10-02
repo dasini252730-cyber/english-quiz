@@ -53,6 +53,16 @@ class QuizBuilderTest {
     }
 
     @Test
+    fun aCallerCanRaiseTheCap() {
+        val candidates = (1..20).map { expression("word$it", "뜻$it") }
+
+        // The weekend boss (백로그 041) asks fifteen.
+        val result = QuizBuilder.build(null, candidates, candidates, SEED, maxQuestions = 15)
+
+        assertEquals(15, result.questions.size)
+    }
+
+    @Test
     fun mostOverdueExpressionsAreQuizzedBeforeTheRest() {
         // 12 candidates for 10 slots: the two with the furthest-away next review must be the two
         // left out, so a long review backlog drains instead of being resampled at random.

@@ -32,6 +32,13 @@ class LearningRepository(
 
     suspend fun listLearningDates(): List<String> = learningDao.listLearningDates()
 
+    /** Every finished session, oldest first; the game layer derives points and badges from it (백로그 038). */
+    suspend fun listAllSessions(): List<LearningSessionEntity> = learningDao.listAllSessions()
+
+    /** The weekend boss's question set (백로그 041): the shakiest due, unmastered expressions, up to [limit]. */
+    suspend fun listBossCandidates(nowEpochMillis: Long, limit: Int): List<SavedExpressionEntity> =
+        learningDao.listBossCandidates(nowEpochMillis, limit)
+
     /**
      * The meaning stored for [displayExpression], but only when it was saved from this very
      * [contextSentence] (백로그 024). A phrase read again in the same sentence — a library passage,
@@ -84,17 +91,19 @@ class LearningRepository(
         learningDao.findLearningSessions(learningDate)
 
     /**
-     * The most recently finished sessions, newest first, as the summaries the domain policies
-     * read. Difficulty adjustment (백로그 013) is the caller; it has no reason to know the Room
-     * row shape.
+     * The most recently finished sessions of [mode], newest first, as the summaries the domain
+     * policies read. Level suggestion (백로그 013/034) is the caller; it has no reason to know the
+     * Room row shape. Sessions from before 백로그 034 carry no mode and are not part of any window.
      */
-    suspend fun listRecentSessionSummaries(limit: Int): List<LearningSessionSummary> =
-        learningDao.listRecentSessions(limit).map { session ->
+    suspend fun listRecentSessionSummaries(mode: ContentMode, limit: Int): List<LearningSessionSummary> =
+        learningDao.listRecentSessions(mode.wireValue, limit).map { session ->
             LearningSessionSummary(
                 learnedExpressionCount = session.learnedExpressionCount,
                 newlySavedExpressionCount = session.newlySavedExpressionCount,
                 quizCorrectCount = session.quizCorrectCount,
                 quizQuestionCount = session.quizQuestionCount,
+                score = session.score,
+                maxCombo = session.maxCombo,
             )
         }
 

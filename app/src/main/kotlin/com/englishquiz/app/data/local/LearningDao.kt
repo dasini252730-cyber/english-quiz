@@ -43,10 +43,29 @@ interface LearningDao {
     @Query("SELECT DISTINCT learningDate FROM learning_sessions ORDER BY learningDate DESC")
     suspend fun listLearningDates(): List<String>
 
+    /** Every finished session, oldest first: the game layer (백로그 038/039) sums points and badges from it. */
+    @Query("SELECT * FROM learning_sessions ORDER BY learningDate, completedAtEpochMillis, id")
+    suspend fun listAllSessions(): List<LearningSessionEntity>
+
+    /**
+     * The weekend boss's candidates (백로그 041): what is due and not yet mastered, the shakiest
+     * first (fewest correct in a row, then most wrong). Due-only matters beyond scope: answering
+     * moves an expression's review into the future, so a quiz rebuilt after recreation finds the
+     * answered ones gone and resumes instead of asking them again (see `QuizRoute`).
+     */
     @Query(
-        "SELECT * FROM learning_sessions ORDER BY completedAtEpochMillis DESC, id DESC LIMIT :limit",
+        "SELECT * FROM saved_expressions WHERE isMastered = 0 " +
+            "AND (nextReviewAtEpochMillis IS NULL OR nextReviewAtEpochMillis <= :nowEpochMillis) " +
+            "ORDER BY consecutiveCorrectCount, incorrectCount DESC, " +
+            "COALESCE(nextReviewAtEpochMillis, firstSavedAtEpochMillis), id LIMIT :limit",
     )
-    suspend fun listRecentSessions(limit: Int): List<LearningSessionEntity>
+    suspend fun listBossCandidates(nowEpochMillis: Long, limit: Int): List<SavedExpressionEntity>
+
+    @Query(
+        "SELECT * FROM learning_sessions WHERE mode = :mode " +
+            "ORDER BY completedAtEpochMillis DESC, id DESC LIMIT :limit",
+    )
+    suspend fun listRecentSessions(mode: String, limit: Int): List<LearningSessionEntity>
 
     @Query(
         "SELECT COUNT(*) FROM learning_sessions WHERE learningDate = :learningDate " +

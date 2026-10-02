@@ -11,7 +11,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import com.englishquiz.app.data.ai.LearningContent
+import com.englishquiz.app.data.local.SavedExpressionEntity
 import com.englishquiz.app.data.repository.LearningRepository
+import com.englishquiz.app.domain.game.GrowthStage
+import com.englishquiz.app.domain.game.QuizScore
+import com.englishquiz.app.domain.game.ScorePolicy
 import com.englishquiz.app.domain.quiz.QuizBuilder
 import com.englishquiz.app.domain.quiz.QuizOption
 import com.englishquiz.app.domain.quiz.QuizQuestion
@@ -20,30 +24,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 private const val UNKNOWN_TOTAL = -1
-
-/** UI-facing quiz state. [QuizScreen] renders each variant; see that file for the layout. */
-sealed interface QuizUiState {
-    data object Loading : QuizUiState
-    data object Error : QuizUiState
-
-    /** 오늘 복습할 표현이 없을 때. Not an error, so the screen offers to finish immediately. */
-    data object Empty : QuizUiState
-
-    data class InProgress(
-        val questionNumber: Int,
-        val totalQuestions: Int,
-        val question: QuizQuestion,
-        val selectedOption: QuizOption?,
-        val isCorrect: Boolean?,
-        val recordFailed: Boolean = false,
-    ) : QuizUiState
-}
-
-private sealed interface QuizLoadState {
-    data object Loading : QuizLoadState
-    data object Error : QuizLoadState
-    data class Loaded(val questions: List<QuizQuestion>) : QuizLoadState
-}
 
 /**
  * Drives today's quiz (백로그 010). [todayContent] is the content the learner just read, or null
@@ -64,6 +44,9 @@ private sealed interface QuizLoadState {
  * With [enrolExpressions] the passage's annotated expressions are all quizzed, tapped or not
  * (백로그 031): they are saved before the due list is read, and [onExpressionsEnrolled] hears how
  * many were new. A library passage passes false (백로그 026: read again, nothing stored).
+ *
+ * [questionSource] names the expressions to ask; the default is what is due now. The weekend boss
+ * (백로그 041) passes its own larger set, a higher [maxQuestions] and a [pointsMultiplier] above 1.
  */
 @Composable
 fun QuizRoute(
@@ -76,6 +59,10 @@ fun QuizRoute(
     seed: () -> Long = { System.nanoTime() },
     enrolExpressions: Boolean = true,
     onExpressionsEnrolled: (Int) -> Unit = {},
+    questionSource: suspend (LearningRepository, Long) -> List<SavedExpressionEntity> =
+        { repo, at -> repo.findDueExpressions(at) },
+    maxQuestions: Int = QuizBuilder.DEFAULT_MAX_QUESTIONS,
+    pointsMultiplier: Int = 1,
 ) {
     val scope = rememberCoroutineScope()
     var retry by rememberSaveable { mutableIntStateOf(0) }
@@ -85,11 +72,13 @@ fun QuizRoute(
     var masteredCount by rememberSaveable { mutableIntStateOf(0) }
     var totalQuestions by rememberSaveable { mutableIntStateOf(UNKNOWN_TOTAL) }
     var finished by rememberSaveable { mutableStateOf(false) }
+    var score by rememberSaveable(stateSaver = QuizScoreSaver) { mutableStateOf(QuizScore()) }
 
     var loadState by remember { mutableStateOf<QuizLoadState>(QuizLoadState.Loading) }
     var index by remember { mutableIntStateOf(0) }
     var selectedOption by remember { mutableStateOf<QuizOption?>(null) }
     var recordFailed by remember { mutableStateOf(false) }
+    var growth by remember { mutableStateOf<GrowthChange?>(null) }
 
     LaunchedEffect(repository, retry) {
         loadState = QuizLoadState.Loading
@@ -98,9 +87,9 @@ fun QuizRoute(
             if (enrolExpressions && todayContent != null) {
                 onExpressionsEnrolled(enrolContentExpressions(todayContent, repository, nowEpochMillis))
             }
-            val due = repository.findDueExpressions(nowEpochMillis)
+            val targets = questionSource(repository, nowEpochMillis)
             val pool = repository.listSavedExpressions()
-            val questions = QuizBuilder.build(todayContent, due, pool, shuffleSeed).questions
+            val questions = QuizBuilder.build(todayContent, targets, pool, shuffleSeed, maxQuestions).questions
             if (totalQuestions == UNKNOWN_TOTAL) totalQuestions = questions.size
             index = 0
             selectedOption = null
@@ -117,22 +106,50 @@ fun QuizRoute(
 
     fun record(question: QuizQuestion, option: QuizOption) {
         scope.launch {
+            // Writes are not ordered: a slow one may land after the learner has moved on. Its
+            // growth line and its failure notice belong to the card that is still showing, so
+            // both are only applied while that question is the current one.
+            val current = { questions?.getOrNull(index) == question }
             try {
                 val updated =
                     repository.recordAnswer(question.expression, option.isCorrect, nowEpochMillis)
                 if (option.isCorrect && updated.isMastered) masteredCount += 1
+                if (current()) {
+                    growth = GrowthChange(
+                        expression = question.expression,
+                        before = question.growthBefore,
+                        after = GrowthStage.of(updated.consecutiveCorrectCount, updated.isMastered),
+                    )
+                }
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {
-                recordFailed = true
+                if (current()) {
+                    growth = null
+                    recordFailed = true
+                }
             }
         }
+    }
+
+    fun finish() {
+        if (finished) return
+        finished = true
+        onFinished(
+            baseSummary.copy(
+                quizCorrectCount = correctCount,
+                quizQuestionCount = totalQuestions.coerceAtLeast(0),
+                masteredExpressionCount = masteredCount,
+                score = score.points,
+                maxCombo = score.maxCombo,
+            ),
+        )
     }
 
     BackHandler(onBack = onBack)
 
     QuizScreen(
-        state = quizUiState(loadState, questions, index, totalQuestions, selectedOption, recordFailed),
+        state = quizUiState(loadState, questions, index, totalQuestions, selectedOption, recordFailed, score, growth),
         onSelectOption = { option ->
             val question = questions?.getOrNull(index)
             if (question != null && selectedOption == null) {
@@ -141,7 +158,9 @@ fun QuizRoute(
                 // as selectedOption is set.
                 selectedOption = option
                 recordFailed = false
+                growth = null
                 if (option.isCorrect) correctCount += 1
+                score = ScorePolicy.answer(score, option.isCorrect, pointsMultiplier)
                 record(question, option)
             }
         },
@@ -151,15 +170,9 @@ fun QuizRoute(
                     index += 1
                     selectedOption = null
                     recordFailed = false
-                } else if (!finished) {
-                    finished = true
-                    onFinished(
-                        baseSummary.copy(
-                            quizCorrectCount = correctCount,
-                            quizQuestionCount = totalQuestions.coerceAtLeast(0),
-                            masteredExpressionCount = masteredCount,
-                        ),
-                    )
+                    growth = null
+                } else {
+                    finish()
                 }
             }
         },
@@ -171,49 +184,8 @@ fun QuizRoute(
                 record(question, option)
             }
         },
-        onEmptyContinue = {
-            if (!finished) {
-                finished = true
-                onFinished(
-                    baseSummary.copy(
-                        quizCorrectCount = correctCount,
-                        quizQuestionCount = totalQuestions.coerceAtLeast(0),
-                        masteredExpressionCount = masteredCount,
-                    ),
-                )
-            }
-        },
+        onEmptyContinue = ::finish,
         onRetry = { retry++ },
         onBack = onBack,
     )
-}
-
-private fun quizUiState(
-    loadState: QuizLoadState,
-    questions: List<QuizQuestion>?,
-    index: Int,
-    totalQuestions: Int,
-    selectedOption: QuizOption?,
-    recordFailed: Boolean,
-): QuizUiState = when (loadState) {
-    QuizLoadState.Loading -> QuizUiState.Loading
-    QuizLoadState.Error -> QuizUiState.Error
-    is QuizLoadState.Loaded -> {
-        val question = questions?.getOrNull(index)
-        if (question == null) {
-            QuizUiState.Empty
-        } else {
-            // Questions already recorded have dropped out of a rebuilt list, so the number the
-            // learner sees comes from how many of the original set are left.
-            val answeredBefore = (totalQuestions - questions.size).coerceAtLeast(0)
-            QuizUiState.InProgress(
-                questionNumber = answeredBefore + index + 1,
-                totalQuestions = totalQuestions.coerceAtLeast(questions.size),
-                question = question,
-                selectedOption = selectedOption,
-                isCorrect = selectedOption?.isCorrect,
-                recordFailed = recordFailed,
-            )
-        }
-    }
 }

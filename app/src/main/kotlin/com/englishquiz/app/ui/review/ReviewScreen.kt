@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.englishquiz.app.data.local.SavedExpressionEntity
+import com.englishquiz.app.domain.game.GrowthStage
 import com.englishquiz.app.ui.reader.SpeechState
 import com.englishquiz.app.ui.theme.MongleButton
 import com.englishquiz.app.ui.theme.MongleCard
@@ -165,12 +166,17 @@ private fun ReviewExpressionCard(
     }
 }
 
-/** The short state pill of the canvas: its label plus the fill and ink it is drawn in. */
-internal fun reviewChip(expression: SavedExpressionEntity): Triple<String, Color, Color> = when {
-    expression.isMastered -> Triple("암기 완료", MongleColor.GreenSoft, MongleColor.GreenInk)
-    expression.lastReviewedAtEpochMillis == null ->
-        Triple("새로 저장", MongleColor.PurpleSoft, MongleColor.PurpleDeep)
-    else -> Triple("학습 중", MongleColor.BlueSoft, MongleColor.BlueInk)
+/**
+ * The short pill beside the expression: its growth stage (백로그 036) plus the fill and ink it is
+ * drawn in. The fruit keeps the "암기 완료" wording the rest of the app uses for mastery.
+ */
+internal fun reviewChip(expression: SavedExpressionEntity): Triple<String, Color, Color> {
+    val stage = GrowthStage.of(expression.consecutiveCorrectCount, expression.isMastered)
+    return when (stage) {
+        GrowthStage.FRUIT -> Triple("${stage.emoji} 암기 완료", MongleColor.GreenSoft, MongleColor.GreenInk)
+        GrowthStage.SEED -> Triple(stage.title, MongleColor.PurpleSoft, MongleColor.PurpleDeep)
+        else -> Triple(stage.title, MongleColor.BlueSoft, MongleColor.BlueInk)
+    }
 }
 
 /**

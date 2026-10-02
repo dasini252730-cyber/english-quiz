@@ -38,6 +38,25 @@ object StreakPolicy {
         return streak
     }
 
+    /**
+     * The longest run of consecutive learning days anywhere in the history (백로그 039): a badge
+     * for a week's streak stays earned after the streak itself is broken. Dates after [todayIso]
+     * and unparseable strings are ignored as in [currentStreakDays].
+     */
+    fun longestStreakDays(learningDates: Collection<String>, todayIso: String): Int {
+        val today = parseDate(todayIso) ?: return 0
+        val sorted = learningDates.mapNotNull(::parseDate).filter { !it.isAfter(today) }.distinct().sorted()
+        var longest = 0
+        var run = 0
+        var previous: LocalDate? = null
+        for (date in sorted) {
+            run = if (previous != null && previous.plusDays(1) == date) run + 1 else 1
+            previous = date
+            if (run > longest) longest = run
+        }
+        return longest
+    }
+
     private fun parseDate(value: String): LocalDate? =
         try {
             LocalDate.parse(value)

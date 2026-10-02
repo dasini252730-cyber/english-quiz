@@ -24,6 +24,7 @@ object MongleIcons {
     val ChevronRight = stroked("ChevronRight", "M9 5l7 7-7 7", width = 3f)
     val Close = stroked("Close", "M6 6l12 12M18 6L6 18", width = 3f)
     val Cards = stroked("Cards", "M3 4h18v16H3zM3 10h18", width = 2.2f)
+    val Star = filled("Star", "M12 2l3 7 7 .6-5.4 4.6 1.7 7L12 17.5 5.7 21.2l1.7-7L2 9.6 9 9z")
 
     /** A speaker cone plus one sound wave: the pronunciation button of the canvas. */
     val Speaker: ImageVector = ImageVector.Builder("Speaker", 24.dp, 24.dp, 24f, 24f).apply {

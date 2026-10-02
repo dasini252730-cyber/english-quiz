@@ -1,5 +1,7 @@
 package com.englishquiz.app.domain.quiz
 
+import com.englishquiz.app.domain.game.GrowthStage
+
 /** MVP quiz question types (요구사항 14.2): meaning multiple choice and fill-in-the-blank. */
 enum class QuizQuestionType { MULTIPLE_CHOICE, FILL_IN_BLANK }
 
@@ -22,6 +24,8 @@ data class QuizQuestion(
     val questionText: String,
     val options: List<QuizOption>,
     val explanation: String,
+    /** The expression's stage when the quiz was built (백로그 036), so feedback can show the move. */
+    val growthBefore: GrowthStage = GrowthStage.SEED,
 )
 
 data class QuizSet(

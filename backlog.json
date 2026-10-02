@@ -2,7 +2,7 @@
   "schema_version": 1,
   "title": "개인용 영어 학습 앱 MVP backlog",
   "source": "요구사항/요구사항.md",
-  "updated_at": "2026-09-28",
+  "updated_at": "2026-10-02",
   "statuses": {
     "todo": "할 일",
     "in_progress": "작업 중",
@@ -367,7 +367,7 @@
       "title": "같은 날 재진입의 0문항 세션이 난이도 평균을 끌어내림",
       "description": "021 이후 같은 날 같은 모드 재진입은 due 가 비어 0문항·0저장 세션을 learning_sessions 에 남긴다. DifficultyPolicy.averageSaved 가 window.size 로 나누므로 이런 세션이 평균 저장 수를 낮춰 실질 근거 1세션으로 난이도가 올라갈 수 있다. 0문항 세션을 난이도 창에서 제외하거나 재진입 세션을 기록하지 않는 쪽으로 정리한다. code-critic 후속 리뷰에서 발견(2026-09-26).",
       "details": "backlog/022.md",
-      "status": "todo",
+      "status": "done",
       "priority": "P2",
       "estimate": "S",
       "depends_on": [
@@ -466,7 +466,7 @@
       "title": "Story 모드 톤 개선 (40대 여성 독자)",
       "description": "사용자 피드백(2026-09-27): Story 가 재미없다. 현재 프롬프트는 'Narrator 가 읽는 짧은 이야기' 한 줄뿐이라 요구사항 9.1(성인용·유머·위트·약한 풍자·교훈 지양)이 반영되지 않았다. 독자를 40대 한국 여성으로 명시하고 위트·풍자·공감 소재·반전이 있는 플롯을 요구하며, 매 요청 무작위 소재로 다양성을 준다. Conversation 도 자연스러운 유머를 허용한다.",
       "details": "backlog/028.md",
-      "status": "review_needed",
+      "status": "done",
       "priority": "P1",
       "estimate": "S",
       "depends_on": [],
@@ -519,6 +519,167 @@
         "quiz",
         "ux",
         "learning"
+      ]
+    },
+    {
+      "id": "032",
+      "title": "복습 표현이 있으면 학습 내용 생성이 거의 항상 실패",
+      "description": "2026-09-30 사용자 보고: '학습 내용을 불러오지 못했어요'. 직접 측정: reviewExpressions 5개를 넘기면 12회 중 11회 502 missing_review_expression - 모델이 복습 표현을 그대로 못 넣으면 서버가 지문 전체를 버린다. 첫날(저장 표현 0)만 성공하는 구조. 수정: 누락은 경고로 강등(퀴즈는 저장 목록에서 출제하므로 021), 잘못된 segmentIndex 는 다른 세그먼트에서 찾아 복구, 계약 위반 시 1회 재시도, 프롬프트에 '글자 그대로' 명시. 서버만 배포, 앱 재설치 불필요.",
+      "details": "backlog/032.md",
+      "status": "review_needed",
+      "priority": "P0",
+      "estimate": "S",
+      "depends_on": [],
+      "labels": [
+        "server",
+        "ai",
+        "bug"
+      ]
+    },
+    {
+      "id": "033",
+      "title": "스토리 유머를 시트콤식 웃음으로 바꾸기",
+      "description": "2026-09-30 사용자: 현재 스토리(풍자·행간 유머, 예 'The Intern Effect')는 '너무 재미없다'. 원하는 것: 유머가 있는 이야기. 방향: 건조한 풍자·언더스테이트먼트 대신 상황 자체가 웃긴 시트콤식 코미디(황당한 사건, 오해, 과장된 인물, 소리 내어 웃을 펀치라인)로 프롬프트와 소재 목록을 바꾸고, 행간에 숨기지 말고 겉으로 웃기게. 서버만 변경.",
+      "details": "backlog/033.md",
+      "status": "done",
+      "priority": "P1",
+      "estimate": "S",
+      "depends_on": [],
+      "labels": [
+        "server",
+        "ai",
+        "story"
+      ]
+    },
+    {
+      "id": "034",
+      "title": "대화/스토리 모드별 5단계 레벨 + 직접 조정",
+      "description": "2026-09-30 사용자 선택: 모드별 5단계 + 내가 직접 조정. 대화와 스토리의 레벨을 각각 1~5로 나누고 홈에서 ±로 바로 바꾼다. 자동 조정(013)은 강제로 바꾸지 않고 '올려볼까요/내려볼까요' 제안만 하며 사용자가 결정. 레벨 테스트 결과(1~3)는 초기값으로 매핑. 서버 rubric 5단계, 앱 설정·홈·정책·프리페치 변경, 앱 릴리스 재설치 필요.",
+      "details": "backlog/034.md",
+      "status": "review_needed",
+      "priority": "P1",
+      "estimate": "M",
+      "depends_on": [],
+      "labels": [
+        "app",
+        "server",
+        "level",
+        "ux"
+      ]
+    },
+    {
+      "id": "035",
+      "title": "퀴즈 콤보·점수와 정답/오답 연출",
+      "description": "2026-10-02 사용자 결정: 게임 요소 1·2단계 도입(AI 비용 0). 연속 정답 콤보와 점수(10/15/20/25/30점), 정답 햅틱+펄스, 오답 흔들림. 세션에 score/maxCombo 저장(Room v6), 결과 화면에 오늘 점수·최고 콤보.",
+      "details": "backlog/035.md",
+      "status": "review_needed",
+      "priority": "P1",
+      "estimate": "M",
+      "depends_on": [],
+      "labels": [
+        "app",
+        "game",
+        "quiz"
+      ]
+    },
+    {
+      "id": "036",
+      "title": "표현 성장 단계(씨앗→열매) 표시",
+      "description": "저장 표현의 연속 정답 0~4회를 씨앗·새싹·잎·꽃·열매 5단계로 보여준다. 복습함 칩과 퀴즈 피드백('새싹→잎으로 자랐어요', 오답 시 씨앗으로). 저장 구조 변경 없음.",
+      "details": "backlog/036.md",
+      "status": "review_needed",
+      "priority": "P1",
+      "estimate": "S",
+      "depends_on": [],
+      "labels": [
+        "app",
+        "game",
+        "review"
+      ]
+    },
+    {
+      "id": "037",
+      "title": "오늘의 미션 3개와 보너스 점수",
+      "description": "홈에 오늘의 미션 카드: 학습 1회 완료 / 퀴즈 정답률 80% 이상 / 새 표현 3개 저장. 오늘 세션 기록에서 계산하며 달성 시 보너스 점수(경험치)로 반영.",
+      "details": "backlog/037.md",
+      "status": "review_needed",
+      "priority": "P1",
+      "estimate": "M",
+      "depends_on": [
+        "035"
+      ],
+      "labels": [
+        "app",
+        "game",
+        "home"
+      ]
+    },
+    {
+      "id": "038",
+      "title": "학습자 레벨·칭호·경험치 막대",
+      "description": "세션 점수+미션 보너스 합계를 경험치로 보고 학습자 레벨(1~10)과 여행 스몰토크 칭호(공항 도착→스몰토크 마스터)를 홈에 경험치 막대와 함께 표시. 결과 화면에 획득 경험치와 레벨업 안내.",
+      "details": "backlog/038.md",
+      "status": "review_needed",
+      "priority": "P1",
+      "estimate": "M",
+      "depends_on": [
+        "035",
+        "037"
+      ],
+      "labels": [
+        "app",
+        "game",
+        "home"
+      ]
+    },
+    {
+      "id": "039",
+      "title": "배지(업적) 10종과 배지 화면",
+      "description": "7일/30일 연속, 표현 50/100개, 암기 10/50개, 퀴즈 만점, 콤보 10, 첫 학습, 하루 두 모드 등 10종. 기록에서 계산하고 '확인한 배지'만 DataStore에 저장해 새 배지를 표시.",
+      "details": "backlog/039.md",
+      "status": "review_needed",
+      "priority": "P2",
+      "estimate": "S",
+      "depends_on": [
+        "035"
+      ],
+      "labels": [
+        "app",
+        "game"
+      ]
+    },
+    {
+      "id": "040",
+      "title": "스트릭 보호권(점수로 구매, 하루 자동 적용)",
+      "description": "경험치 300점으로 보호권 구매(잔액=획득−사용). 하루 빠진 날이 생기면 자동으로 1장 소비해 스트릭 유지. 사용 날짜와 보유 수는 DataStore.",
+      "details": "backlog/040.md",
+      "status": "review_needed",
+      "priority": "P2",
+      "estimate": "S",
+      "depends_on": [
+        "038"
+      ],
+      "labels": [
+        "app",
+        "game",
+        "streak"
+      ]
+    },
+    {
+      "id": "041",
+      "title": "주간 보스전(주말 한정 큰 퀴즈, 2배 점수)",
+      "description": "토·일에 홈에서 주 1회 열리는 보스전: 복습 예정+미암기 표현 최대 15문제, 점수 2배, mode='boss' 세션으로 기록(레벨 제안 제외). AI 호출 없음.",
+      "details": "backlog/041.md",
+      "status": "review_needed",
+      "priority": "P2",
+      "estimate": "M",
+      "depends_on": [
+        "035"
+      ],
+      "labels": [
+        "app",
+        "game",
+        "quiz"
       ]
     }
   ]

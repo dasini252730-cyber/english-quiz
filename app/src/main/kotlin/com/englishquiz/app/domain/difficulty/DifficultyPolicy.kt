@@ -17,9 +17,15 @@ import com.englishquiz.app.domain.session.LearningSessionSummary
  * forces many lookups was too hard, one that forces almost none was too easy.
  */
 object DifficultyPolicy {
-    /** Matches `AssessmentLevel.storedValue`: 1 = 초급, 2 = 중급, 3 = 고급. */
+    /** Five levels per mode (백로그 034); the Edge Function's rubric names each one. */
     const val MIN_DIFFICULTY = 1
-    const val MAX_DIFFICULTY = 3
+    const val MAX_DIFFICULTY = 5
+
+    /**
+     * Where the diagnosis (`AssessmentLevel.storedValue`: 1 초급, 2 중급, 3 고급) puts a learner on
+     * the five-step scale: 2, 3 and 4, so every start leaves room to move in both directions.
+     */
+    fun initialLevel(assessmentLevel: Int): Int = (assessmentLevel + 1).coerceIn(MIN_DIFFICULTY, MAX_DIFFICULTY)
 
     /** How many of the most recent sessions count as "recent performance". */
     const val SESSIONS_CONSIDERED = 3

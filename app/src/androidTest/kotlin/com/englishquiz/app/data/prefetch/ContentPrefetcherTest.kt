@@ -77,7 +77,9 @@ class ContentPrefetcherTest {
     fun bothModesAreMadeForTomorrowOnceAtTheAdjustedLevelAndAFailureIsContained() = runBlocking {
         val repository = openRepository()
         val settings = settings()
-        settings.saveAssessmentResult(difficulty = 3)
+        settings.saveAssessmentResult(assessmentLevel = 3)
+        // Story is what the learner turned up (백로그 034); tomorrow's story must be made at that level.
+        settings.setLevel(ContentMode.STORY, 5)
         // A phrase that comes due just after midnight belongs in tomorrow's passage.
         repository.saveExpression("hang out", "놀다", 1L, "Let's hang out.")
         repository.saveReviewProgress("hang out", 1L, TOMORROW_START + 1, 1, 0, false)
@@ -99,7 +101,7 @@ class ContentPrefetcherTest {
         assertEquals(listOf(ContentMode.CONVERSATION), prefetcher.prefetchTomorrowNow())
 
         assertEquals(2, requests.size)
-        assertEquals(listOf(3, 3), requests.map { it.difficulty })
+        assertEquals(listOf(4, 5), requests.map { it.difficulty })
         assertEquals(listOf("hang out"), requests[0].reviewExpressions)
         assertNotNull(repository.findDailyContent(TOMORROW, ContentMode.CONVERSATION))
         assertNull(repository.findDailyContent(TOMORROW, ContentMode.STORY))

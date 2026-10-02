@@ -55,4 +55,16 @@ data class LearningSessionEntity(
     val newlySavedExpressionCount: Int,
     val quizCorrectCount: Int,
     val quizQuestionCount: Int,
+    /**
+     * `ContentMode.wireValue` for a day's session, [LIBRARY_SESSION_MODE] for a passage read again
+     * from the library, empty for sessions recorded before 백로그 034. Only a day's session counts
+     * toward its mode's level suggestion: an old passage was not written at today's level.
+     */
+    @ColumnInfo(defaultValue = "''") val mode: String = "",
+    /** The quiz's points and longest correct run (백로그 035); sessions before it carry 0. */
+    @ColumnInfo(defaultValue = "0") val score: Int = 0,
+    @ColumnInfo(defaultValue = "0") val maxCombo: Int = 0,
 )
+
+/** The `mode` a library re-read (백로그 026) records; see [LearningSessionEntity.mode]. */
+const val LIBRARY_SESSION_MODE = "library"

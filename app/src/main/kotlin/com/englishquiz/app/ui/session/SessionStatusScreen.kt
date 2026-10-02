@@ -32,6 +32,8 @@ fun SessionStatusScreen(
     message: String,
     onBack: () -> Unit,
     onRetry: (() -> Unit)? = null,
+    /** False for a plain notice that is neither waiting nor retryable (the empty boss, 백로그 041). */
+    showWaiting: Boolean = true,
 ) {
     BackHandler(onBack = onBack)
     Column(modifier = Modifier.fillMaxSize().background(MongleColor.Cream).mongleScreenInsets()) {
@@ -52,7 +54,11 @@ fun SessionStatusScreen(
                 color = MongleColor.InkMuted,
                 textAlign = TextAlign.Center,
             )
-            if (onRetry == null) WaitingDots() else MongleButton("다시 시도", onRetry)
+            when {
+                onRetry != null -> MongleButton("다시 시도", onRetry)
+                showWaiting -> WaitingDots()
+                else -> MongleButton("홈으로", onBack)
+            }
         }
     }
 }

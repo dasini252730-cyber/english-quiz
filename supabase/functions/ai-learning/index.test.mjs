@@ -196,17 +196,108 @@ test("provider failures and expressions absent from their segment are contained"
   assert.equal(response.status, 502);
   assert.equal((await response.json()).error.check, "missing_new_expression");
 
+  // One review expression the model did not weave in is the learner's loss of one re-encounter,
+  // not of the passage (백로그 032): the quiz asks it from the saved list anyway.
   const missingReview = createHandler(() => "key", async () => providerResponse({
     ...validContent,
-    expressions: [validContent.expressions[1]],
+    expressions: [validContent.expressions[1], { text: "plan", meaning: "계획하다", segmentIndex: 2 }],
   }));
   const missing = await missingReview(post({
     action: "content",
     mode: "conversation",
     difficulty: 1,
-    reviewExpressions: ["pull it off"],
+    reviewExpressions: ["pull it off", "next step"],
   }));
-  assert.equal(missing.status, 502);
+  assert.equal(missing.status, 200);
+  assert.deepEqual((await missing.json()).data.expressions.map((item) => item.text), ["next step", "plan"]);
+
+  // Every review expression ignored is the model not doing the job: one more attempt, then fail.
+  let ignoring = 0;
+  const ignoredAll = createHandler(() => "key", async () => {
+    ignoring++;
+    return providerResponse(validContent);
+  });
+  const none = await ignoredAll(post({
+    action: "content",
+    mode: "conversation",
+    difficulty: 1,
+    reviewExpressions: ["a phrase the passage never used"],
+  }));
+  assert.equal(none.status, 502);
+  assert.equal((await none.json()).error.check, "missing_review_expression");
+  assert.equal(ignoring, 2);
+});
+
+test("the contract states the expression counts with the review phrases spelled out, and weaves at most five", async () => {
+  const systems = [];
+  const handler = createHandler(() => "key", async (url, options) => {
+    const body = JSON.parse(options.body);
+    systems.push({ system: body.system, request: JSON.parse(body.messages[0].content) });
+    return providerResponse(validContent);
+  });
+  await handler(post({ action: "content", mode: "conversation", difficulty: 1 }));
+  assert.match(systems[0].system, /`expressions`: 5 entries in total\. 5 are NEW phrases/);
+
+  const seven = ["a1", "a2", "a3", "a4", "a5", "a6", "a7"];
+  await handler(post({ action: "content", mode: "story", difficulty: 2, reviewExpressions: seven }));
+  assert.match(systems[1].system, /`expressions`: 10 entries in total\. 5 of them are the supplied review expressions/);
+  assert.deepEqual(systems[1].request.reviewExpressions, seven.slice(0, 5));
+});
+
+test("a phrase annotated with the wrong segment index is placed where it actually is", async () => {
+  const misplaced = {
+    ...validContent,
+    expressions: [{ text: "pull it off", meaning: "해내다", segmentIndex: 5 }],
+  };
+  const handler = createHandler(() => "key", async () => providerResponse(misplaced));
+  const response = await handler(post({ action: "content", mode: "conversation", difficulty: 1 }));
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).data.expressions, [
+    { text: "pull it off", meaning: "해내다", segmentIndex: 0, startIndex: 6, endIndex: 17 },
+  ]);
+});
+
+test("a payload that breaks the contract is asked for once more; a provider refusal is not", async () => {
+  let calls = 0;
+  const flaky = createHandler(() => "key", async () => {
+    calls++;
+    return providerResponse(calls === 1 ? { ...validContent, segments: validContent.segments.slice(0, 3) } : validContent);
+  });
+  const response = await flaky(post({ action: "content", mode: "conversation", difficulty: 1 }));
+  assert.equal(response.status, 200);
+  assert.equal(calls, 2);
+
+  let refusals = 0;
+  const refusing = createHandler(() => "key", async () => {
+    refusals++;
+    return new Response("no", { status: 429 });
+  });
+  assert.equal((await refusing(post({ action: "content", mode: "conversation", difficulty: 1 }))).status, 503);
+  assert.equal(refusals, 1);
+
+  // A network failure never reached the model, so it is not the model's bad day: no retry.
+  let attempts = 0;
+  const unreachable = createHandler(() => "key", async () => {
+    attempts++;
+    throw new TypeError("error sending request");
+  });
+  const down = await unreachable(post({ action: "content", mode: "conversation", difficulty: 1 }));
+  assert.equal(down.status, 502);
+  assert.equal(attempts, 1);
+
+  // Text the model returned that is not JSON is retried and, failing twice, named.
+  let garbled = 0;
+  const notJson = createHandler(() => "key", async () => {
+    garbled++;
+    return new Response(JSON.stringify({ stop_reason: "end_turn", content: [{ type: "text", text: "{not json" }] }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  });
+  const bad = await notJson(post({ action: "content", mode: "conversation", difficulty: 1 }));
+  assert.equal(bad.status, 502);
+  assert.equal((await bad.json()).error.check, "invalid_model_json");
+  assert.equal(garbled, 2);
 });
 
 test("an unusable annotation is dropped instead of discarding the whole passage", async () => {
@@ -309,17 +400,15 @@ test("a phrase whose folding would change its length is dropped, not mis-highlig
 });
 
 test("an output-contract failure names the broken check but never an internal message", async () => {
-  const missingReview = createHandler(() => "key", async () => providerResponse(validContent));
-  const named = await missingReview(post({
-    action: "content",
-    mode: "conversation",
-    difficulty: 1,
-    reviewExpressions: ["a phrase the passage never used"],
+  const tooShort = createHandler(() => "key", async () => providerResponse({
+    ...validContent,
+    segments: validContent.segments.slice(0, 3),
   }));
+  const named = await tooShort(post({ action: "content", mode: "conversation", difficulty: 1 }));
   assert.equal(named.status, 502);
   assert.deepEqual((await named.json()).error, {
     code: "invalid_provider_response",
-    check: "missing_review_expression",
+    check: "invalid_content_output(segments=3,expressions=2,mode=conversation)",
   });
 
   // Anything that is not one of our own contract names must not ride out to the caller.
@@ -420,9 +509,12 @@ test("the story prompt is written for its reader and carries a premise; the conv
   await handler(post({ action: "content", mode: "story", difficulty: 2 }));
   await handler(post({ action: "content", mode: "conversation", difficulty: 2 }));
   const [story, conversation] = systems;
-  // 요구사항 9.1: adult, witty, lightly satirical, no fable — and 백로그 028: for the learner she is.
+  // 요구사항 9.1: adult, witty, no fable — 백로그 028: for the learner she is — and 백로그 033: a
+  // sitcom that is funny on the surface, since the satirical version read as "no idea what this is".
   assert.match(story, /woman in her forties/);
-  assert.match(story, /witty/);
+  assert.match(story, /sitcom episode/);
+  assert.match(story, /laugh out loud/);
+  assert.match(story, /dry irony, understatement .* are not/);
   assert.match(story, /No moral lesson/);
   assert.match(story, /Today's premise: .+\.$/);
   assert.match(story, /Narrator/);
@@ -459,11 +551,15 @@ test("each difficulty puts its own rubric in front of the model, not a bare numb
     systems[JSON.parse(body.messages[0].content).difficulty] = body.system;
     return providerResponse(validContent);
   });
-  for (const difficulty of [1, 2, 3]) {
+  for (const difficulty of [1, 2, 3, 4, 5]) {
     await handler(post({ action: "content", mode: "conversation", difficulty }));
   }
-  assert.match(systems[1], /Difficulty 1 \(beginner\).*at most 12 words/);
-  assert.match(systems[2], /Difficulty 2 \(intermediate\)/);
-  assert.match(systems[3], /Difficulty 3 \(advanced\).*wordplay/);
+  assert.match(systems[1], /Difficulty 1 of 5 \(starter\).*at most 9 words/);
+  assert.match(systems[2], /Difficulty 2 of 5 \(beginner\).*at most 12 words/);
+  assert.match(systems[3], /Difficulty 3 of 5 \(intermediate\)/);
+  assert.match(systems[4], /Difficulty 4 of 5 \(upper-intermediate\)/);
+  assert.match(systems[5], /Difficulty 5 of 5 \(advanced\).*wordplay/);
   assert.doesNotMatch(systems[1], /advanced/);
+  // Six is outside the scale (백로그 034: five levels per mode).
+  assert.equal((await handler(post({ action: "content", mode: "conversation", difficulty: 6 }))).status, 400);
 });

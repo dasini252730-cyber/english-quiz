@@ -8,11 +8,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import com.englishquiz.app.data.ai.AiLearningException
 import com.englishquiz.app.data.ai.ContentGenerationRequest
 import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.data.ai.ContextualMeaning
 import com.englishquiz.app.data.ai.LearningContent
+import com.englishquiz.app.data.local.LIBRARY_SESSION_MODE
+import com.englishquiz.app.data.preferences.GameProgressRepository
 import com.englishquiz.app.data.ai.MeaningRequest
 import com.englishquiz.app.data.repository.LearningRepository
 import com.englishquiz.app.domain.session.LearningSessionSummary
@@ -63,6 +64,8 @@ fun LearningSessionRoute(
      */
     initialContent: LearningContent? = null,
     onSessionRecorded: suspend (sessionCompletedAtEpochMillis: Long) -> Unit = {},
+    /** Points, level and badges on the result screen (백로그 038/039); null leaves them out. */
+    gameRepository: GameProgressRepository? = null,
 ) {
     var step by rememberSaveable(stateSaver = SessionStepSaver) {
         mutableStateOf<SessionStep>(SessionStep.Preparing)
@@ -159,11 +162,13 @@ fun LearningSessionRoute(
         is SessionStep.Finished -> FinishedStep(
             repository = repository,
             summary = current.summary,
+            sessionMode = if (initialContent == null) mode.wireValue else LIBRARY_SESSION_MODE,
             savedCountAtStart = savedCountAtStart,
             onDone = onExit,
             nowEpochMillis = nowEpochMillis,
             zoneId = zoneId,
             onSessionRecorded = onSessionRecorded,
+            gameRepository = gameRepository,
         )
     }
 }
@@ -177,11 +182,13 @@ fun LearningSessionRoute(
 private fun FinishedStep(
     repository: LearningRepository,
     summary: LearningSessionSummary,
+    sessionMode: String,
     savedCountAtStart: Int,
     onDone: () -> Unit,
     nowEpochMillis: () -> Long,
     zoneId: ZoneId,
     onSessionRecorded: suspend (sessionCompletedAtEpochMillis: Long) -> Unit,
+    gameRepository: GameProgressRepository?,
 ) {
     var resolved by remember { mutableStateOf<LearningSessionSummary?>(null) }
     LaunchedEffect(summary) {
@@ -208,10 +215,12 @@ private fun FinishedStep(
         ResultRoute(
             repository = repository,
             summary = ready,
+            sessionMode = sessionMode,
             onDone = onDone,
             nowEpochMillis = nowEpochMillis,
             zoneId = zoneId,
             onSessionRecorded = onSessionRecorded,
+            gameRepository = gameRepository,
         )
     }
 }
@@ -219,17 +228,4 @@ private fun FinishedStep(
 private fun contentTitle(mode: ContentMode): String = when (mode) {
     ContentMode.CONVERSATION -> "Conversation"
     ContentMode.STORY -> "Story"
-}
-
-internal fun generationErrorMessage(error: Throwable): String = when {
-    error !is AiLearningException -> "학습 내용을 불러오지 못했어요."
-    // "timeout" is this client's own socket timeout; "provider_timeout" is the Edge Function
-    // giving up on the provider first. The read timeout sits above the function's, so in
-    // practice it is the latter that arrives - both mean the same thing to the learner.
-    error.errorCode == "timeout" || error.errorCode == "provider_timeout" ->
-        "응답이 너무 오래 걸렸어요. 잠시 후 다시 시도해 주세요."
-    error.errorCode == "network_error" -> "네트워크 연결을 확인해 주세요."
-    error.errorCode == "invalid_response" -> "학습 내용을 이해하지 못했어요. 다시 시도해 주세요."
-    error.errorCode == "provider_busy" -> "지금 요청이 몰려 있어요. 잠시 후 다시 시도해 주세요."
-    else -> "학습 내용을 불러오지 못했어요. 다시 시도해 주세요."
 }

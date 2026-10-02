@@ -76,6 +76,8 @@ private fun LearningSessionSummary.toJson(): JSONObject = JSONObject()
     .put("correct", quizCorrectCount)
     .put("questions", quizQuestionCount)
     .put("mastered", masteredExpressionCount)
+    .put("score", score)
+    .put("maxCombo", maxCombo)
 
 private fun JSONObject.toSummary(): LearningSessionSummary = LearningSessionSummary(
     learnedExpressionCount = getInt("learned"),
@@ -83,6 +85,9 @@ private fun JSONObject.toSummary(): LearningSessionSummary = LearningSessionSumm
     quizCorrectCount = getInt("correct"),
     quizQuestionCount = getInt("questions"),
     masteredExpressionCount = getInt("mastered"),
+    // Absent in a state saved by a build before 백로그 035: that session scored nothing.
+    score = optInt("score", 0),
+    maxCombo = optInt("maxCombo", 0),
 )
 
 private const val KEY_STEP = "step"

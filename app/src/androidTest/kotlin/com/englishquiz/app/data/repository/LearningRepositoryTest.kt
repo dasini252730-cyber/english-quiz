@@ -8,6 +8,7 @@ import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.data.ai.ContentSegment
 import com.englishquiz.app.data.ai.GlossaryEntry
 import com.englishquiz.app.data.ai.LearningContent
+import com.englishquiz.app.data.local.LIBRARY_SESSION_MODE
 import com.englishquiz.app.data.local.LearningDatabase
 import com.englishquiz.app.data.local.LearningSessionEntity
 import com.englishquiz.app.data.preferences.AppSettingsRepository
@@ -119,7 +120,7 @@ class LearningRepositoryTest {
                     produceFile = { settingsFile },
                 ),
             )
-            firstSettingsRepository.saveAssessmentResult(difficulty = 3)
+            firstSettingsRepository.saveAssessmentResult(assessmentLevel = 3)
             firstSettingsJob.cancelAndJoin()
 
             val reopenedSettings = AppSettingsRepository(
@@ -129,12 +130,39 @@ class LearningRepositoryTest {
                 ),
             ).settings.first()
             assertTrue(reopenedSettings.isAssessmentComplete)
-            assertEquals(3, reopenedSettings.currentDifficulty)
+            assertEquals(4, reopenedSettings.level(ContentMode.CONVERSATION))
         } finally {
             firstSettingsJob.cancelAndJoin()
             reopenedSettingsJob.cancelAndJoin()
             settingsFile.delete()
         }
+    }
+
+    @Test
+    fun aModesRecentSessionsExcludeOtherModesLibraryRereadsAndSessionsWithoutAMode() = runBlocking {
+        val db = LearningDatabase.create(context, DATABASE_NAME)
+        database = db
+        val repository = LearningRepository(db)
+        fun session(completedAt: Long, mode: String, questions: Int) = LearningSessionEntity(
+            learningDate = "2026-09-30",
+            completedAtEpochMillis = completedAt,
+            learnedExpressionCount = questions,
+            newlySavedExpressionCount = 0,
+            quizCorrectCount = questions,
+            quizQuestionCount = questions,
+            mode = mode,
+        )
+        repository.recordCompletedSession(session(100, "", 1))
+        repository.recordCompletedSession(session(200, ContentMode.STORY.wireValue, 2))
+        repository.recordCompletedSession(session(300, LIBRARY_SESSION_MODE, 3))
+        repository.recordCompletedSession(session(400, ContentMode.CONVERSATION.wireValue, 4))
+        repository.recordCompletedSession(session(500, ContentMode.CONVERSATION.wireValue, 5))
+
+        // Newest first, this mode only (백로그 034): the level suggestion must not read a story
+        // session, a re-read of an old passage, or a session from before modes were recorded.
+        val recent = repository.listRecentSessionSummaries(ContentMode.CONVERSATION, 3)
+        assertEquals(listOf(5, 4), recent.map { it.quizQuestionCount })
+        assertEquals(listOf(2), repository.listRecentSessionSummaries(ContentMode.STORY, 3).map { it.quizQuestionCount })
     }
 
     @Test

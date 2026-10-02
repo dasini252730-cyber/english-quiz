@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 
 @Database(
     entities = [SavedExpressionEntity::class, LearningSessionEntity::class, DailyContentEntity::class],
-    version = 4,
+    version = 6,
     exportSchema = true,
 )
 abstract class LearningDatabase : RoomDatabase() {
@@ -31,7 +31,7 @@ abstract class LearningDatabase : RoomDatabase() {
                 applicationContext,
                 LearningDatabase::class.java,
                 databaseFile.name,
-            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build()
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6).build()
         }
     }
 }

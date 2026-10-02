@@ -42,6 +42,23 @@ internal val MIGRATION_2_3 = object : Migration(2, 3) {
     }
 }
 
+/** 백로그 034: each mode has its own level, so a session records which mode it was. */
+internal val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL(
+            "ALTER TABLE `learning_sessions` ADD COLUMN `mode` TEXT NOT NULL DEFAULT ''",
+        )
+    }
+}
+
+/** 백로그 035: a session keeps its quiz score and best combo; earlier sessions count as 0. */
+internal val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL("ALTER TABLE `learning_sessions` ADD COLUMN `score` INTEGER NOT NULL DEFAULT 0")
+        database.execSQL("ALTER TABLE `learning_sessions` ADD COLUMN `maxCombo` INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
 /** 백로그 021: one generated passage per day and mode, so re-entry stops paying for a new one. */
 internal val MIGRATION_3_4 = object : Migration(3, 4) {
     override fun migrate(database: SupportSQLiteDatabase) {
