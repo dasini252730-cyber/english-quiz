@@ -10,6 +10,9 @@ data class LearningSessionSummary(
     val quizCorrectCount: Int = 0,
     val quizQuestionCount: Int = 0,
     val masteredExpressionCount: Int = 0,
+    /** Quiz points and the longest run of correct answers (백로그 035); 0 for a session without a quiz. */
+    val score: Int = 0,
+    val maxCombo: Int = 0,
 ) {
     val correctPercent: Int
         get() = if (quizQuestionCount <= 0) 0 else quizCorrectCount * 100 / quizQuestionCount

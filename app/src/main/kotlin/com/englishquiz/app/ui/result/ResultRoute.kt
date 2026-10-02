@@ -10,6 +10,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import com.englishquiz.app.data.local.LearningSessionEntity
+import com.englishquiz.app.data.preferences.GameProgressRepository
 import com.englishquiz.app.data.repository.LearningRepository
 import com.englishquiz.app.domain.session.LearningSessionSummary
 import com.englishquiz.app.domain.streak.StreakPolicy
@@ -18,6 +19,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 sealed interface StreakUiState {
@@ -37,6 +39,10 @@ sealed interface StreakUiState {
  * app settings. It receives the session's `completedAtEpochMillis`: the guard flag is set after
  * the write, so an interrupted effect can replay the hook, and the identifier is what lets the
  * callee ignore the repeat.
+ *
+ * With a [gameRepository] the screen also shows what the session earned (백로그 037~040): points,
+ * level, missions, new badges, and a streak that counts shielded days. Without one (tests, or a
+ * caller that has none) the plain summary and streak are shown as before.
  */
 @Composable
 fun ResultRoute(
@@ -48,12 +54,14 @@ fun ResultRoute(
     nowEpochMillis: () -> Long = System::currentTimeMillis,
     zoneId: ZoneId = ZoneId.systemDefault(),
     onSessionRecorded: suspend (sessionCompletedAtEpochMillis: Long) -> Unit = {},
+    gameRepository: GameProgressRepository? = null,
 ) {
     // Captured once and kept across recreation, so a retried write targets the same session row.
     val completedAtEpochMillis = rememberSaveable { nowEpochMillis() }
     var hasRecorded by rememberSaveable { mutableStateOf(false) }
     var retry by remember { mutableIntStateOf(0) }
     var streakState by remember { mutableStateOf<StreakUiState>(StreakUiState.Loading) }
+    var game by remember { mutableStateOf<ResultGame?>(null) }
 
     LaunchedEffect(retry) {
         streakState = StreakUiState.Loading
@@ -74,14 +82,31 @@ fun ResultRoute(
                             quizCorrectCount = summary.quizCorrectCount,
                             quizQuestionCount = summary.quizQuestionCount,
                             mode = sessionMode,
+                            score = summary.score,
+                            maxCombo = summary.maxCombo,
                         ),
                     )
                     onSessionRecorded(completedAtEpochMillis)
                 }
                 hasRecorded = true
             }
-            val learningDates = repository.listLearningDates()
-            streakState = StreakUiState.Ready(StreakPolicy.currentStreakDays(learningDates, todayIso))
+            if (gameRepository == null) {
+                val learningDates = repository.listLearningDates()
+                streakState = StreakUiState.Ready(StreakPolicy.currentStreakDays(learningDates, todayIso))
+            } else {
+                val sessions = repository.listAllSessions()
+                // 백로그 040: cover a missed yesterday now, so this screen and home agree on the streak.
+                gameRepository.shieldYesterdayIfNeeded(sessions.map { it.learningDate }, todayIso)
+                val earned = resultGame(
+                    sessions = sessions,
+                    expressions = repository.listSavedExpressions(),
+                    progress = gameRepository.progress.first(),
+                    todayIso = todayIso,
+                    sessionCompletedAtEpochMillis = completedAtEpochMillis,
+                )
+                game = earned
+                streakState = StreakUiState.Ready(earned.streakDays)
+            }
         } catch (error: CancellationException) {
             throw error
         } catch (_: Exception) {
@@ -95,5 +120,6 @@ fun ResultRoute(
         streakState = streakState,
         onRetry = { retry++ },
         onDone = onDone,
+        game = game,
     )
 }

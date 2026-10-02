@@ -21,6 +21,7 @@ import com.englishquiz.app.data.ai.AiLearningClient
 import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.data.preferences.AppSettings
 import com.englishquiz.app.data.preferences.AppSettingsRepository
+import com.englishquiz.app.data.preferences.GameProgressRepository
 import com.englishquiz.app.data.repository.LearningRepository
 import com.englishquiz.app.domain.difficulty.DifficultyPolicy
 import com.englishquiz.app.ui.assessment.AssessmentScreen
@@ -49,6 +50,8 @@ fun EnglishQuizApp(
     aiLearningClient: AiLearningClient? = null,
     /** Called once a session is recorded and the difficulty adjusted: make tomorrow's passages (백로그 025). */
     prefetchTomorrow: () -> Unit = {},
+    /** Points spent, shields and badges seen (백로그 037~041); null runs home without the game cards. */
+    gameProgressRepository: GameProgressRepository? = null,
 ) {
     var retryCount by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
@@ -83,6 +86,7 @@ fun EnglishQuizApp(
                     repository = learningRepository,
                     aiClient = aiLearningClient,
                     settings = state.settings,
+                    gameRepository = gameProgressRepository,
                     onSessionRecorded = { mode, sessionCompletedAtEpochMillis ->
                         if (mode != null) suggestLevel(learningRepository, settingsRepository, mode, sessionCompletedAtEpochMillis)
                         prefetchTomorrow()

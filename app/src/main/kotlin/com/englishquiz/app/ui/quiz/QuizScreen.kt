@@ -7,24 +7,20 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.englishquiz.app.domain.game.QuizScore
 import com.englishquiz.app.domain.quiz.QuizOption
 import com.englishquiz.app.domain.quiz.QuizQuestionType
 import com.englishquiz.app.ui.theme.MongleButton
-import com.englishquiz.app.ui.theme.MongleButtonColors
 import com.englishquiz.app.ui.theme.MongleCard
+import com.englishquiz.app.ui.theme.MongleChip
 import com.englishquiz.app.ui.theme.MongleColor
 import com.englishquiz.app.ui.theme.MongleIconButton
 import com.englishquiz.app.ui.theme.MongleIcons
@@ -89,6 +85,22 @@ private fun QuizHeader(state: QuizUiState, onBack: () -> Unit) {
             )
         }
     }
+    if (progress != null) QuizScoreRow(progress.score)
+}
+
+/** Points so far and the current combo (백로그 035); the combo chip only shows during a run. */
+@Composable
+private fun QuizScoreRow(score: QuizScore) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        MongleChip("${score.points}점", MongleColor.PurpleSoft, MongleColor.PurpleDeep)
+        if (score.combo >= 2) {
+            MongleChip("${score.combo} 콤보", MongleColor.AmberSoft, MongleColor.AmberInk)
+        }
+    }
 }
 
 @Composable
@@ -142,59 +154,6 @@ private fun QuizPrompt(state: QuizUiState.InProgress) {
         QuizQuestionType.FILL_IN_BLANK -> MongleCard(contentPadding = 20.dp) {
             Text(state.question.questionText, style = MaterialTheme.typography.titleMedium)
         }
-    }
-}
-
-@Composable
-private fun QuizFeedback(state: QuizUiState.InProgress, onNext: () -> Unit, onRetryRecord: () -> Unit) {
-    val correct = state.isCorrect == true
-    val face = if (correct) MongleColor.GreenSoft else MongleColor.Highlight
-    val ink = if (correct) MongleColor.GreenInk else MongleColor.AmberLabel
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
-            .background(face)
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            if (correct) {
-                Icon(
-                    MongleIcons.Check,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(MongleColor.Green)
-                        .padding(7.dp),
-                )
-            }
-            Text(
-                if (correct) "정답이에요!" else "아쉬워요, 오답이에요.",
-                style = MaterialTheme.typography.headlineMedium,
-                color = ink,
-            )
-        }
-        Text(state.question.explanation, style = MaterialTheme.typography.bodyLarge, color = ink)
-        if (state.recordFailed) {
-            Text(
-                "답변을 학습 기록에 저장하지 못했어요.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MongleColor.Danger,
-            )
-            MongleButton("답변 다시 기록", onRetryRecord, height = 48.dp)
-        }
-        MongleButton(
-            // The last question hands the session over to the result screen, so it says so.
-            text = if (state.questionNumber == state.totalQuestions) "결과 보기" else "다음 문제",
-            onClick = onNext,
-            colors = if (correct) MongleButtonColors.Positive else MongleButtonColors.Primary,
-        )
     }
 }
 

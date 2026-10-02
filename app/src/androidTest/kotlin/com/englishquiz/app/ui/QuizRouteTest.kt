@@ -82,6 +82,9 @@ class QuizRouteTest {
         val finished = checkNotNull(summary)
         assertEquals(2, finished.quizQuestionCount)
         assertEquals(1, finished.quizCorrectCount)
+        // One correct answer is worth the base 10 points and a best run of one (백로그 035).
+        assertEquals(10, finished.score)
+        assertEquals(1, finished.maxCombo)
 
         // onFinished fires as soon as the last answer is dispatched, but the answer itself is
         // written on Room's own executor, which Compose's idling does not track. Wait for the
@@ -105,6 +108,45 @@ class QuizRouteTest {
         assertEquals(1, answered.count { it.incorrectCount == 1 })
         assertEquals(1, answered.count { it.incorrectCount == 0 })
         answered.forEach { assertReviewScheduled(it) }
+    }
+
+    @Test
+    fun twoCorrectAnswersInARowAccumulateTheComboBonus() = runBlocking {
+        val db = LearningDatabase.create(context, DATABASE_NAME)
+        database = db
+        val repository = LearningRepository(db)
+        repository.saveExpression("sketchy", "수상한", NOW - 1_000)
+        repository.saveExpression("hang out", "놀다", NOW - 900)
+
+        var summary: LearningSessionSummary? = null
+        compose.setContent {
+            EnglishQuizTheme {
+                QuizRoute(
+                    repository = repository,
+                    todayContent = null,
+                    onFinished = { summary = it },
+                    now = { NOW },
+                    seed = { SEED },
+                )
+            }
+        }
+
+        // Each question shows its expression, so the right meaning can be picked whichever order
+        // the shuffle produced.
+        repeat(2) { number ->
+            awaitText("${number + 1} / 2").assertIsDisplayed()
+            val askingSketchy = compose.onAllNodesWithText("sketchy").fetchSemanticsNodes().isNotEmpty()
+            awaitText(if (askingSketchy) "수상한" else "놀다").performScrollTo().performClick()
+            // 백로그 035: the second answer in a row pays 15, shown on the card.
+            awaitText(if (number == 0) "+10점" else "+15점").performScrollTo().assertIsDisplayed()
+            awaitText(if (number == 0) "다음 문제" else "결과 보기").performScrollTo().performClick()
+        }
+
+        compose.waitUntil(TIMEOUT_MILLIS) { summary != null }
+        val finished = checkNotNull(summary)
+        assertEquals(2, finished.quizCorrectCount)
+        assertEquals(25, finished.score)
+        assertEquals(2, finished.maxCombo)
     }
 
     @Test

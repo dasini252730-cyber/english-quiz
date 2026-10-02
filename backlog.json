@@ -2,7 +2,7 @@
   "schema_version": 1,
   "title": "개인용 영어 학습 앱 MVP backlog",
   "source": "요구사항/요구사항.md",
-  "updated_at": "2026-09-30",
+  "updated_at": "2026-10-02",
   "statuses": {
     "todo": "할 일",
     "in_progress": "작업 중",
@@ -565,6 +565,121 @@
         "server",
         "level",
         "ux"
+      ]
+    },
+    {
+      "id": "035",
+      "title": "퀴즈 콤보·점수와 정답/오답 연출",
+      "description": "2026-10-02 사용자 결정: 게임 요소 1·2단계 도입(AI 비용 0). 연속 정답 콤보와 점수(10/15/20/25/30점), 정답 햅틱+펄스, 오답 흔들림. 세션에 score/maxCombo 저장(Room v6), 결과 화면에 오늘 점수·최고 콤보.",
+      "details": "backlog/035.md",
+      "status": "review_needed",
+      "priority": "P1",
+      "estimate": "M",
+      "depends_on": [],
+      "labels": [
+        "app",
+        "game",
+        "quiz"
+      ]
+    },
+    {
+      "id": "036",
+      "title": "표현 성장 단계(씨앗→열매) 표시",
+      "description": "저장 표현의 연속 정답 0~4회를 씨앗·새싹·잎·꽃·열매 5단계로 보여준다. 복습함 칩과 퀴즈 피드백('새싹→잎으로 자랐어요', 오답 시 씨앗으로). 저장 구조 변경 없음.",
+      "details": "backlog/036.md",
+      "status": "review_needed",
+      "priority": "P1",
+      "estimate": "S",
+      "depends_on": [],
+      "labels": [
+        "app",
+        "game",
+        "review"
+      ]
+    },
+    {
+      "id": "037",
+      "title": "오늘의 미션 3개와 보너스 점수",
+      "description": "홈에 오늘의 미션 카드: 학습 1회 완료 / 퀴즈 정답률 80% 이상 / 새 표현 3개 저장. 오늘 세션 기록에서 계산하며 달성 시 보너스 점수(경험치)로 반영.",
+      "details": "backlog/037.md",
+      "status": "review_needed",
+      "priority": "P1",
+      "estimate": "M",
+      "depends_on": [
+        "035"
+      ],
+      "labels": [
+        "app",
+        "game",
+        "home"
+      ]
+    },
+    {
+      "id": "038",
+      "title": "학습자 레벨·칭호·경험치 막대",
+      "description": "세션 점수+미션 보너스 합계를 경험치로 보고 학습자 레벨(1~10)과 여행 스몰토크 칭호(공항 도착→스몰토크 마스터)를 홈에 경험치 막대와 함께 표시. 결과 화면에 획득 경험치와 레벨업 안내.",
+      "details": "backlog/038.md",
+      "status": "review_needed",
+      "priority": "P1",
+      "estimate": "M",
+      "depends_on": [
+        "035",
+        "037"
+      ],
+      "labels": [
+        "app",
+        "game",
+        "home"
+      ]
+    },
+    {
+      "id": "039",
+      "title": "배지(업적) 10종과 배지 화면",
+      "description": "7일/30일 연속, 표현 50/100개, 암기 10/50개, 퀴즈 만점, 콤보 10, 첫 학습, 하루 두 모드 등 10종. 기록에서 계산하고 '확인한 배지'만 DataStore에 저장해 새 배지를 표시.",
+      "details": "backlog/039.md",
+      "status": "review_needed",
+      "priority": "P2",
+      "estimate": "S",
+      "depends_on": [
+        "035"
+      ],
+      "labels": [
+        "app",
+        "game"
+      ]
+    },
+    {
+      "id": "040",
+      "title": "스트릭 보호권(점수로 구매, 하루 자동 적용)",
+      "description": "경험치 300점으로 보호권 구매(잔액=획득−사용). 하루 빠진 날이 생기면 자동으로 1장 소비해 스트릭 유지. 사용 날짜와 보유 수는 DataStore.",
+      "details": "backlog/040.md",
+      "status": "review_needed",
+      "priority": "P2",
+      "estimate": "S",
+      "depends_on": [
+        "038"
+      ],
+      "labels": [
+        "app",
+        "game",
+        "streak"
+      ]
+    },
+    {
+      "id": "041",
+      "title": "주간 보스전(주말 한정 큰 퀴즈, 2배 점수)",
+      "description": "토·일에 홈에서 주 1회 열리는 보스전: 복습 예정+미암기 표현 최대 15문제, 점수 2배, mode='boss' 세션으로 기록(레벨 제안 제외). AI 호출 없음.",
+      "details": "backlog/041.md",
+      "status": "review_needed",
+      "priority": "P2",
+      "estimate": "M",
+      "depends_on": [
+        "035"
+      ],
+      "labels": [
+        "app",
+        "game",
+        "quiz"
       ]
     }
   ]

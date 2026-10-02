@@ -35,6 +35,8 @@ fun ResultScreen(
     streakState: StreakUiState,
     onRetry: () -> Unit,
     onDone: () -> Unit,
+    /** Points, level, missions and badges (백로그 037~039); null hides the panel. */
+    game: ResultGame? = null,
 ) {
     DarkBackgroundSystemBars()
     Column(
@@ -56,7 +58,13 @@ fun ResultScreen(
             ResultStat("새로 저장한 표현", "${summary.newlySavedExpressionCount}개", MongleColor.AmberLabel, Modifier.weight(1f))
             ResultStat("암기 완료 표현", "${summary.masteredExpressionCount}개", MongleColor.GreenInk, Modifier.weight(1f))
         }
+        // 백로그 035: what the quiz paid and the longest run of correct answers.
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+            ResultStat("오늘 점수", "${summary.score}점", MongleColor.PurpleDeep, Modifier.weight(1f))
+            ResultStat("최고 콤보", "${summary.maxCombo}", MongleColor.AmberLabel, Modifier.weight(1f))
+        }
         StreakPanel(streakState, onRetry)
+        game?.let { ResultGamePanel(it) }
         Spacer(Modifier.padding(top = 8.dp))
         MongleButton("완료", onDone, colors = MongleButtonColors.Accent)
     }

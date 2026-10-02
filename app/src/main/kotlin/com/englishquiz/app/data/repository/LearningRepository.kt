@@ -32,6 +32,13 @@ class LearningRepository(
 
     suspend fun listLearningDates(): List<String> = learningDao.listLearningDates()
 
+    /** Every finished session, oldest first; the game layer derives points and badges from it (백로그 038). */
+    suspend fun listAllSessions(): List<LearningSessionEntity> = learningDao.listAllSessions()
+
+    /** The weekend boss's question set (백로그 041): the shakiest due, unmastered expressions, up to [limit]. */
+    suspend fun listBossCandidates(nowEpochMillis: Long, limit: Int): List<SavedExpressionEntity> =
+        learningDao.listBossCandidates(nowEpochMillis, limit)
+
     /**
      * The meaning stored for [displayExpression], but only when it was saved from this very
      * [contextSentence] (백로그 024). A phrase read again in the same sentence — a library passage,
@@ -95,6 +102,8 @@ class LearningRepository(
                 newlySavedExpressionCount = session.newlySavedExpressionCount,
                 quizCorrectCount = session.quizCorrectCount,
                 quizQuestionCount = session.quizQuestionCount,
+                score = session.score,
+                maxCombo = session.maxCombo,
             )
         }
 

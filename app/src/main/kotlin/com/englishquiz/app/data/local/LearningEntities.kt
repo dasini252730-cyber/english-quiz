@@ -61,6 +61,9 @@ data class LearningSessionEntity(
      * toward its mode's level suggestion: an old passage was not written at today's level.
      */
     @ColumnInfo(defaultValue = "''") val mode: String = "",
+    /** The quiz's points and longest correct run (백로그 035); sessions before it carry 0. */
+    @ColumnInfo(defaultValue = "0") val score: Int = 0,
+    @ColumnInfo(defaultValue = "0") val maxCombo: Int = 0,
 )
 
 /** The `mode` a library re-read (백로그 026) records; see [LearningSessionEntity.mode]. */

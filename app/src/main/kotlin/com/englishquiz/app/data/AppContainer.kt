@@ -6,6 +6,7 @@ import com.englishquiz.app.data.ai.AiLearningClient
 import com.englishquiz.app.data.local.LearningDatabase
 import com.englishquiz.app.data.prefetch.ContentPrefetcher
 import com.englishquiz.app.data.preferences.AppSettingsRepository
+import com.englishquiz.app.data.preferences.GameProgressRepository
 import com.englishquiz.app.data.repository.LearningRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,6 +20,9 @@ class AppContainer(
 
     val learningRepository = LearningRepository(database)
     val appSettingsRepository = AppSettingsRepository(context)
+
+    /** Shields, points spent and badges seen (백로그 039/040); everything else the game shows is derived from Room. */
+    val gameProgressRepository = GameProgressRepository(context)
 
     /** Null until a build supplies the Edge Function URL, so AI screens can say so instead of failing. */
     val aiLearningClient: AiLearningClient? =

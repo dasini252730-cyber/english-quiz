@@ -7,18 +7,28 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.Preferences
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.data.local.LearningDatabase
+import com.englishquiz.app.data.preferences.GameProgressRepository
 import com.englishquiz.app.data.repository.LearningRepository
 import com.englishquiz.app.domain.session.LearningSessionSummary
 import com.englishquiz.app.ui.result.ResultRoute
 import com.englishquiz.app.ui.result.ResultScreen
 import com.englishquiz.app.ui.result.StreakUiState
 import com.englishquiz.app.ui.theme.EnglishQuizTheme
+import java.io.File
 import java.time.LocalDate
 import java.time.ZoneOffset
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -34,10 +44,24 @@ class ResultScreenTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private var database: LearningDatabase? = null
 
+    private val gameStores = mutableListOf<Pair<Job, File>>()
+
     @After
     fun removeDatabase() {
         database?.close()
         context.deleteDatabase(DATABASE_NAME)
+        gameStores.forEach { (job, file) ->
+            job.cancel()
+            file.delete()
+        }
+        gameStores.clear()
+    }
+
+    private fun newGameDataStore(): DataStore<Preferences> {
+        val file = File(context.filesDir, "result-game-${System.nanoTime()}.preferences_pb")
+        val job = SupervisorJob()
+        gameStores += job to file
+        return PreferenceDataStoreFactory.create(scope = CoroutineScope(job + Dispatchers.IO), produceFile = { file })
     }
 
     @Test
@@ -51,6 +75,8 @@ class ResultScreenTest {
                         newlySavedExpressionCount = 5,
                         quizCorrectCount = 5,
                         quizQuestionCount = 6,
+                        score = 85,
+                        maxCombo = 4,
                     ),
                     streakState = StreakUiState.Ready(8),
                     onRetry = {},
@@ -62,6 +88,9 @@ class ResultScreenTest {
         composeRule.onNodeWithText("83%").assertIsDisplayed()
         composeRule.onNodeWithText("5개").assertIsDisplayed()
         composeRule.onNodeWithText("9개").assertIsDisplayed()
+        // 백로그 035: the quiz's points and its longest run.
+        composeRule.onNodeWithText("85점").assertIsDisplayed()
+        composeRule.onNodeWithText("4").assertIsDisplayed()
         composeRule.onNodeWithText("8일 연속 학습 중").assertIsDisplayed()
 
         // The result column scrolls, so the button sits below the fold on a short viewport.
@@ -110,6 +139,45 @@ class ResultScreenTest {
         composeRule.onNodeWithText("다시 시도").performClick()
 
         assertEquals(1, retryCalls)
+    }
+
+    @Test
+    fun withAGameStoreTheResultShowsWhatTheSessionEarnedAndTheNewBadge() {
+        val freshDatabase = LearningDatabase.create(context, DATABASE_NAME)
+        database = freshDatabase
+        val repository = LearningRepository(freshDatabase)
+        val gameRepository = GameProgressRepository(newGameDataStore())
+
+        composeRule.setContent {
+            EnglishQuizTheme {
+                ResultRoute(
+                    repository = repository,
+                    summary = LearningSessionSummary(
+                        learnedExpressionCount = 10,
+                        newlySavedExpressionCount = 0,
+                        quizCorrectCount = 10,
+                        quizQuestionCount = 10,
+                        score = 250,
+                        maxCombo = 10,
+                    ),
+                    sessionMode = ContentMode.STORY.wireValue,
+                    onDone = {},
+                    nowEpochMillis = { FIXED_NOW_EPOCH_MILLIS },
+                    zoneId = ZoneOffset.UTC,
+                    gameRepository = gameRepository,
+                )
+            }
+        }
+
+        // 250 quiz points plus the finished (20) and 80% (30) missions: 300, exactly level 2.
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("+300 경험치").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("레벨 업!").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Lv.2 입국 심사 통과").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("오늘의 미션 2 / 3 · 보너스 +50점").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("새 배지: ", substring = true).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("1일 연속 학습 중").performScrollTo().assertIsDisplayed()
     }
 
     @Test

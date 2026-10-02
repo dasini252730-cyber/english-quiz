@@ -41,6 +41,7 @@ class ReviewScreenTest {
         firstSavedAtEpochMillis = 2_000L,
         lastReviewedAtEpochMillis = 2_500L,
         nextReviewAtEpochMillis = 9_000L,
+        consecutiveCorrectCount = 1,
     )
     private val mastered = SavedExpressionEntity(
         id = 3,
@@ -73,15 +74,17 @@ class ReviewScreenTest {
 
         compose.onNodeWithText("questionable").assertIsDisplayed()
         compose.onNodeWithText("조금 의심스러운").assertIsDisplayed()
-        compose.onNodeWithText("새로 저장").assertIsDisplayed()
+        // 백로그 036: the pill is the growth stage — a fresh save is a seed, one correct answer a
+        // sprout, and mastery keeps the "암기 완료" wording behind the fruit.
+        compose.onNodeWithText("🌰 씨앗").assertIsDisplayed()
 
         compose.onNodeWithText("sketchy").assertIsDisplayed()
         compose.onNodeWithText("수상한").assertIsDisplayed()
-        compose.onNodeWithText("학습 중").assertIsDisplayed()
+        compose.onNodeWithText("🌱 새싹").assertIsDisplayed()
 
         compose.onNodeWithText("not my thing").assertIsDisplayed()
         compose.onNodeWithText("내 취향은 아니다").assertIsDisplayed()
-        compose.onNodeWithText("암기 완료").assertIsDisplayed()
+        compose.onNodeWithText("🍎 암기 완료").assertIsDisplayed()
 
         // Only an expression still in rotation shows a scheduled date, so a single node matches.
         // The date itself is device-timezone dependent, so the prefix is what this asserts.

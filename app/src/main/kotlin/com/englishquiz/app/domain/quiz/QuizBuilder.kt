@@ -3,6 +3,7 @@ package com.englishquiz.app.domain.quiz
 import com.englishquiz.app.data.ai.LearningContent
 import com.englishquiz.app.data.ai.foldTypography
 import com.englishquiz.app.data.local.SavedExpressionEntity
+import com.englishquiz.app.domain.game.GrowthStage
 import kotlin.random.Random
 
 /**
@@ -36,7 +37,7 @@ object QuizBuilder {
         '.', ',', '!', '?', ';', ':', '"', '\'', '(', ')', '[', ']', '\u2026', '-',
     )
 
-    private const val MAX_QUESTIONS = 10
+    const val DEFAULT_MAX_QUESTIONS = 10
     private const val MAX_OPTIONS = 4
     private const val MIN_OPTIONS = 2
 
@@ -45,6 +46,7 @@ object QuizBuilder {
         todayExpressions: List<SavedExpressionEntity>,
         distractorPool: List<SavedExpressionEntity>,
         seed: Long,
+        maxQuestions: Int = DEFAULT_MAX_QUESTIONS,
     ): QuizSet {
         val random = Random(seed)
         val distractors = distractorCandidates(todayContent, distractorPool)
@@ -59,7 +61,7 @@ object QuizBuilder {
         // then shuffle, so the order within one session still varies.
         val selected = candidates
             .sortedWith(compareBy({ it.nextReviewAtEpochMillis ?: it.firstSavedAtEpochMillis }, { it.id }))
-            .take(MAX_QUESTIONS)
+            .take(maxQuestions)
             .shuffled(random)
         return QuizSet(selected.mapNotNull { buildQuestion(it, distractors, random) })
     }
@@ -89,6 +91,7 @@ object QuizBuilder {
             questionText = blanked ?: expression.displayExpression,
             options = options,
             explanation = explanationFor(expression),
+            growthBefore = GrowthStage.of(expression.consecutiveCorrectCount, expression.isMastered),
         )
     }
 

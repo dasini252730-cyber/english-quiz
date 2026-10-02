@@ -7,9 +7,12 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.englishquiz.app.domain.game.GrowthStage
+import com.englishquiz.app.domain.game.QuizScore
 import com.englishquiz.app.domain.quiz.QuizOption
 import com.englishquiz.app.domain.quiz.QuizQuestion
 import com.englishquiz.app.domain.quiz.QuizQuestionType
+import com.englishquiz.app.ui.quiz.GrowthChange
 import com.englishquiz.app.ui.quiz.QuizScreen
 import com.englishquiz.app.ui.quiz.QuizUiState
 import com.englishquiz.app.ui.theme.EnglishQuizTheme
@@ -58,6 +61,38 @@ class QuizScreenTest {
         // The meaning is a two-line explanation; the card shows all of it, not just the first line.
         compose.onNodeWithText(EXPLANATION).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("다음 문제").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun scoreComboAndGrowthShowWithTheAnswer() {
+        compose.setContent {
+            EnglishQuizTheme {
+                QuizScreen(
+                    state = QuizUiState.InProgress(
+                        questionNumber = 1,
+                        totalQuestions = 2,
+                        question = meaningQuestion,
+                        selectedOption = meaningQuestion.options[0],
+                        isCorrect = true,
+                        score = QuizScore(points = 45, combo = 3, maxCombo = 3, lastEarned = 20),
+                        growth = GrowthChange("sketchy", GrowthStage.SPROUT, GrowthStage.LEAF),
+                    ),
+                    onSelectOption = {},
+                    onNext = {},
+                    onRetryRecord = {},
+                    onEmptyContinue = {},
+                    onRetry = {},
+                    onBack = {},
+                )
+            }
+        }
+
+        // 백로그 035: the running total and the combo in the header, what this answer paid on the card.
+        compose.onNodeWithText("45점").assertIsDisplayed()
+        compose.onNodeWithText("3 콤보").assertIsDisplayed()
+        compose.onNodeWithText("+20점").performScrollTo().assertIsDisplayed()
+        // 백로그 036: the expression's stage moved up.
+        compose.onNodeWithText("sketchy: 🌱 새싹 → 🌿 잎으로 자랐어요").performScrollTo().assertIsDisplayed()
     }
 
     @Test

@@ -23,7 +23,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.englishquiz.app.data.ai.ContentMode
+import com.englishquiz.app.domain.game.GameStats
+import com.englishquiz.app.domain.game.Badge
 import com.englishquiz.app.ui.theme.MongleCard
+import com.englishquiz.app.ui.theme.MongleChip
 import com.englishquiz.app.ui.theme.MongleColor
 import com.englishquiz.app.ui.theme.MongleIcons
 import com.englishquiz.app.ui.theme.StatTile
@@ -35,6 +38,8 @@ data class HomeSummary(
     val masteredExpressionCount: Int,
     /** Each mode's level (백로그 034); a mode absent here shows no level row. */
     val levels: Map<ContentMode, HomeLevel> = emptyMap(),
+    /** Level, missions, badges and the boss (백로그 037~041); null shows none of the game cards. */
+    val game: GameStats? = null,
 )
 
 @Composable
@@ -47,6 +52,9 @@ fun HomeScreen(
     onLibraryClick: () -> Unit = {},
     onLevelChange: (ContentMode, Int) -> Unit = { _, _ -> },
     onSuggestionAnswer: (ContentMode, accepted: Boolean) -> Unit = { _, _ -> },
+    onBuyShield: () -> Unit = {},
+    onBadgesClick: () -> Unit = {},
+    onBossClick: () -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -63,6 +71,10 @@ fun HomeScreen(
             color = MongleColor.Purple,
         )
         SummaryTiles(summary)
+        summary.game?.let { game ->
+            HomeLevelCard(game, onBuyShield)
+            HomeMissionCard(game.missions)
+        }
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Column {
                 Text("오늘 뭐 할까요?", style = MaterialTheme.typography.headlineLarge)
@@ -97,9 +109,18 @@ fun HomeScreen(
                 onSuggestionAnswer = { onSuggestionAnswer(ContentMode.STORY, it) },
             )
         }
+        summary.game?.let { HomeBossCard(it.boss, onBossClick) }
         EntryRow(icon = MongleIcons.Cards, label = "복습함", onClick = onReviewClick)
         // 백로그 026: a passage read again weeks later is a review that costs no generation.
         EntryRow(icon = MongleIcons.Book, label = "지난 이야기 다시 읽기", onClick = onLibraryClick)
+        summary.game?.let { game ->
+            EntryRow(
+                icon = MongleIcons.Star,
+                label = "배지 ${game.earnedBadges.size} / ${Badge.entries.size}",
+                onClick = onBadgesClick,
+                badge = game.newBadges.size.takeIf { it > 0 }?.let { "새 배지 $it" },
+            )
+        }
     }
 }
 
@@ -136,8 +157,9 @@ private fun SummaryTiles(summary: HomeSummary) {
     }
 }
 
+/** [badge] is a short highlight pill before the chevron, such as the count of unseen badges. */
 @Composable
-private fun EntryRow(icon: ImageVector, label: String, onClick: () -> Unit) {
+private fun EntryRow(icon: ImageVector, label: String, onClick: () -> Unit, badge: String? = null) {
     MongleCard(
         modifier = Modifier
             .clickable(role = Role.Button, onClick = onClick),
@@ -162,6 +184,7 @@ private fun EntryRow(icon: ImageVector, label: String, onClick: () -> Unit) {
                 )
                 Text(label, style = MaterialTheme.typography.titleSmall)
             }
+            badge?.let { MongleChip(it, MongleColor.Yellow, MongleColor.Ink, Modifier.padding(end = 8.dp)) }
             Icon(
                 MongleIcons.ChevronRight,
                 contentDescription = null,

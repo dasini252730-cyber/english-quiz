@@ -6,8 +6,12 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.englishquiz.app.data.ai.ContentMode
+import com.englishquiz.app.data.local.LearningSessionEntity
+import com.englishquiz.app.data.preferences.GameProgress
+import com.englishquiz.app.domain.game.GameStatsPolicy
 import com.englishquiz.app.ui.theme.EnglishQuizTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -50,6 +54,62 @@ class HomeScreenTest {
         composeRule.onNodeWithText("복습함").performClick()
 
         assertEquals(listOf("conversation", "story", "review"), destinations)
+    }
+
+    @Test
+    fun gameCardsShowLevelMissionsBossAndBadgesAndRouteTheirTaps() {
+        val taps = mutableListOf<String>()
+        val stats = GameStatsPolicy.compute(
+            sessions = listOf(
+                LearningSessionEntity(
+                    learningDate = "2026-10-03",
+                    completedAtEpochMillis = 1L,
+                    learnedExpressionCount = 10,
+                    newlySavedExpressionCount = 1,
+                    quizCorrectCount = 9,
+                    quizQuestionCount = 10,
+                    mode = "story",
+                    score = 180,
+                    maxCombo = 6,
+                ),
+            ),
+            expressions = emptyList(),
+            progress = GameProgress(shields = 1, pointsSpent = 0),
+            todayIso = "2026-10-03",
+        )
+        composeRule.setContent {
+            EnglishQuizTheme {
+                HomeScreen(
+                    summary = HomeSummary(
+                        streakDays = 1,
+                        savedExpressionCount = 0,
+                        masteredExpressionCount = 0,
+                        game = stats,
+                    ),
+                    onConversationClick = {},
+                    onStoryClick = {},
+                    onReviewClick = {},
+                    onBuyShield = { taps += "shield" },
+                    onBadgesClick = { taps += "badges" },
+                    onBossClick = { taps += "boss" },
+                )
+            }
+        }
+
+        // 180 quiz points plus the finished (20) and 80% (30) missions: level 1 with 230 of 300.
+        composeRule.onNodeWithText("Lv.1 공항 도착").assertIsDisplayed()
+        composeRule.onNodeWithText("230점").assertIsDisplayed()
+        composeRule.onNodeWithText("다음 레벨까지 70점").assertIsDisplayed()
+        composeRule.onNodeWithText("보호권 1개 · 쓸 수 있는 점수 230점").assertIsDisplayed()
+        // Below the shield's price, the shop button does nothing.
+        composeRule.onNodeWithText("보호권 사기 (300점)").assertIsNotEnabled()
+        composeRule.onNodeWithText("오늘의 미션").assertIsDisplayed()
+        composeRule.onNodeWithText("퀴즈 정답률 80% 이상").assertIsDisplayed()
+        // A Saturday with no boss session yet: the card opens the boss.
+        composeRule.onNodeWithText("주간 보스전", substring = true).performScrollTo().performClick()
+        composeRule.onNodeWithText("배지 1 / 10").performScrollTo().performClick()
+        composeRule.onNodeWithText("새 배지 1").assertIsDisplayed()
+        assertEquals(listOf("boss", "badges"), taps)
     }
 
     @Test

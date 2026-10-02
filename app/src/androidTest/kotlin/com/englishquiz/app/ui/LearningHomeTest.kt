@@ -8,14 +8,28 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.Preferences
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.englishquiz.app.data.local.LearningDatabase
+import com.englishquiz.app.data.local.LearningSessionEntity
 import com.englishquiz.app.data.preferences.AppSettings
+import com.englishquiz.app.data.preferences.GameProgressRepository
 import com.englishquiz.app.data.repository.LearningRepository
+import com.englishquiz.app.ui.boss.BossRoute
 import com.englishquiz.app.ui.theme.EnglishQuizTheme
+import java.io.File
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -43,6 +57,11 @@ class LearningHomeTest {
         database?.close()
         database = null
         context.deleteDatabase(DATABASE_NAME)
+        gameStores.forEach { (job, file) ->
+            job.cancel()
+            file.delete()
+        }
+        gameStores.clear()
     }
 
     private fun openRepository(): LearningRepository {
@@ -51,10 +70,121 @@ class LearningHomeTest {
         return LearningRepository(opened)
     }
 
-    private fun home(repository: LearningRepository): @Composable () -> Unit = {
+    private fun home(
+        repository: LearningRepository,
+        gameRepository: GameProgressRepository? = null,
+    ): @Composable () -> Unit = {
         EnglishQuizTheme {
-            LearningHome(repository = repository, aiClient = null, settings = AppSettings(isAssessmentComplete = true))
+            LearningHome(
+                repository = repository,
+                aiClient = null,
+                settings = AppSettings(isAssessmentComplete = true),
+                gameRepository = gameRepository,
+            )
         }
+    }
+
+    @Test
+    fun withAGameStoreHomeShowsLevelMissionsAndBadgesFromTheRecords() {
+        val repository = openRepository()
+        runBlocking {
+            repository.recordCompletedSession(
+                LearningSessionEntity(
+                    learningDate = todayIso(),
+                    completedAtEpochMillis = 1L,
+                    learnedExpressionCount = 5,
+                    newlySavedExpressionCount = 3,
+                    quizCorrectCount = 5,
+                    quizQuestionCount = 5,
+                    mode = "story",
+                    score = 100,
+                    maxCombo = 5,
+                ),
+            )
+        }
+        compose.setContent(home(repository, GameProgressRepository(newGameDataStore())))
+
+        // 100 quiz points plus all three missions (70): level 1 with 170 of 300 (백로그 037/038).
+        awaitText("Lv.1 공항 도착")
+        compose.onNodeWithText("170점").assertIsDisplayed()
+        compose.onNodeWithText("오늘의 미션").assertIsDisplayed()
+        // First session and a perfect quiz: two badges, both unseen (백로그 039).
+        compose.onNodeWithText("새 배지 2").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("배지 2 / 10").performScrollTo().performClick()
+        awaitText("배지 2 / 10")
+        compose.onNodeWithText("첫 학습을 끝냈어요").assertIsDisplayed()
+
+        // Opening the badge screen marks them seen, so home no longer flags them.
+        compose.onNodeWithContentDescription("홈으로").performClick()
+        awaitText(HOME_PROMPT)
+        compose.waitUntil(TIMEOUT_MILLIS) {
+            compose.onAllNodesWithText("새 배지 2").fetchSemanticsNodes().isEmpty()
+        }
+    }
+
+    @Test
+    fun theBossRecordsADoublePointSessionAndReturnsHome() {
+        val repository = openRepository()
+        runBlocking {
+            repository.saveExpression("sketchy", "수상한", 1_000L)
+            repository.saveExpression("hang out", "놀다", 900L)
+        }
+        val recorded = mutableListOf<Long>()
+        compose.setContent {
+            EnglishQuizTheme {
+                BossRoute(
+                    repository = repository,
+                    gameRepository = GameProgressRepository(newGameDataStore()),
+                    onExit = {},
+                    onSessionRecorded = { recorded += it },
+                )
+            }
+        }
+
+        awaitText("도전하기")
+        compose.onNodeWithText("도전하기").performClick()
+        repeat(2) { number ->
+            awaitText("${number + 1} / 2")
+            val askingSketchy = compose.onAllNodesWithText("sketchy").fetchSemanticsNodes().isNotEmpty()
+            compose.onNodeWithText(if (askingSketchy) "수상한" else "놀다").performScrollTo().performClick()
+            // 백로그 041: every answer pays double — 20, then 30 for the second in a row.
+            awaitText(if (number == 0) "+20점" else "+30점")
+            compose.onNodeWithText(if (number == 0) "다음 문제" else "결과 보기").performScrollTo().performClick()
+        }
+
+        awaitText("오늘 학습 완료")
+        compose.waitUntil(TIMEOUT_MILLIS) { recorded.size == 1 }
+        val session = runBlocking { repository.listAllSessions() }.single()
+        assertEquals("boss", session.mode)
+        assertEquals(50, session.score)
+        assertEquals(2, session.quizQuestionCount)
+    }
+
+    @Test
+    fun aBossWithNothingToAskRecordsNothing() {
+        val repository = openRepository()
+        compose.setContent {
+            EnglishQuizTheme {
+                BossRoute(repository = repository, gameRepository = null, onExit = {})
+            }
+        }
+
+        awaitText("도전하기")
+        compose.onNodeWithText("도전하기").performClick()
+        awaitText("오늘 복습할 표현이 없어요.")
+        compose.onNodeWithText("완료").performClick()
+
+        awaitText("지금은 도전할 표현이 없어요. 복습 예정인 표현이 쌓이면 다시 열려요.")
+        assertTrue(runBlocking { repository.listAllSessions() }.isEmpty())
+    }
+
+    private val gameStores = mutableListOf<Pair<Job, File>>()
+
+    private fun newGameDataStore(): DataStore<Preferences> {
+        val file = File(context.filesDir, "home-game-${System.nanoTime()}.preferences_pb")
+        val job = SupervisorJob()
+        gameStores += job to file
+        return PreferenceDataStoreFactory.create(scope = CoroutineScope(job + Dispatchers.IO), produceFile = { file })
     }
 
     @Test

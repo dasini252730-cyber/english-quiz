@@ -36,6 +36,9 @@ class SessionStepSaverTest {
         quizCorrectCount = 3,
         quizQuestionCount = 5,
         masteredExpressionCount = 1,
+        // 백로그 035: a restored result screen must not record the session as scoreless.
+        score = 65,
+        maxCombo = 3,
     )
 
     private fun roundTrip(step: SessionStep): SessionStep? {
