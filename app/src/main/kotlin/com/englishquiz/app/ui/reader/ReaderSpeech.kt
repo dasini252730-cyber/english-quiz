@@ -1,6 +1,7 @@
 package com.englishquiz.app.ui.reader
 
 import android.content.Context
+import com.englishquiz.app.data.ai.SpeakerGender
 import android.os.Handler
 import android.os.Looper
 import android.speech.tts.TextToSpeech
@@ -35,6 +36,8 @@ class ReaderSpeech internal constructor(createEngine: ((Int) -> Unit) -> SpeechE
      * reader with no passage (the review box), leaves it empty and gets the default voice.
      */
     var cast: List<String> = emptyList()
+    /** Who each speaker is, as the passage says (백로그 050); empty assigns by order of appearance. */
+    var genders: Map<String, SpeakerGender> = emptyMap()
     private var closed = false
     private var generation = 0L
     private var lastId: String? = null
@@ -99,7 +102,7 @@ class ReaderSpeech internal constructor(createEngine: ((Int) -> Unit) -> SpeechE
             fail()
             return
         }
-        val plan = SpeakerVoices.assign(cast + lines.mapNotNull { it.speaker }, tts.voices)
+        val plan = SpeakerVoices.assign(cast + lines.mapNotNull { it.speaker }, tts.voices, genders)
         if (BuildConfig.DEBUG) Log.i(TAG, "voices: $plan")
         lastId = "$generation:${lines.lastIndex}"
         mutableState.value = mutableState.value.copy(playing = true, error = null)

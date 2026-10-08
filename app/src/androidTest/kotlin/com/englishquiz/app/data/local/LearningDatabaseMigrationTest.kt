@@ -153,7 +153,7 @@ class LearningDatabaseMigrationTest {
 
         val migrated = migrationHelper.runMigrationsAndValidate(
             CHAINED_MIGRATION_DATABASE_NAME,
-            7,
+            8,
             true,
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -161,10 +161,11 @@ class LearningDatabaseMigrationTest {
             MIGRATION_4_5,
             MIGRATION_5_6,
             MIGRATION_6_7,
+            MIGRATION_7_8,
         )
         val expressions = migrated.query(
             "SELECT displayExpression, firstSavedAtEpochMillis, consecutiveCorrectCount, " +
-                "contextSentence, tapCount FROM saved_expressions",
+                "contextSentence, tapCount, shortMeaning FROM saved_expressions",
         )
         // A session from before 백로그 034 keeps its numbers and carries no mode; before 백로그 035
         // it scored nothing.
@@ -180,6 +181,8 @@ class LearningDatabaseMigrationTest {
             assertEquals("", expressions.getString(3))
             // 백로그 044: an expression saved before tap counting was never tapped as far as it knows.
             assertEquals(0, expressions.getInt(4))
+            // 백로그 046: no short gloss before it existed; the quiz falls back to the full meaning.
+            assertEquals("", expressions.getString(5))
             assertTrue(sessions.moveToFirst())
             assertEquals("2026-09-17", sessions.getString(0))
             assertEquals(300L, sessions.getLong(1))

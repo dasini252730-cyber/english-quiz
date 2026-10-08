@@ -23,6 +23,8 @@ data class SavedExpressionEntity(
     @ColumnInfo(defaultValue = "''") val contextSentence: String = "",
     /** How often the learner looked this expression up while reading (백로그 044); 0 for an enrolled, untapped phrase. */
     @ColumnInfo(defaultValue = "0") val tapCount: Int = 0,
+    /** The gloss used as a quiz option (백로그 046); "" when the passage carried none. */
+    @ColumnInfo(defaultValue = "''") val shortMeaning: String = "",
 )
 
 /**

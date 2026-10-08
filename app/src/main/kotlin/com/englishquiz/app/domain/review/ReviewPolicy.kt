@@ -12,6 +12,9 @@ object ReviewPolicy {
     private const val DAY_MILLIS = 24 * 60 * 60 * 1000L
     private const val MASTERED_AFTER_CORRECT = 4
 
+    /** When a card answered "모르겠어요" (백로그 045) comes back: tomorrow, with no mark against it. */
+    fun seenAgainAt(seenAtEpochMillis: Long): Long = seenAtEpochMillis + DAY_MILLIS
+
     fun recordAnswer(
         current: ReviewProgress,
         wasCorrect: Boolean,

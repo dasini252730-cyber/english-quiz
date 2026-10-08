@@ -36,7 +36,14 @@ internal fun parseContentResponse(response: JSONObject, expectedMode: ContentMod
         }
         val start = foldedSegment.indexOf(foldedText)
         if (start < 0) invalidResponse()
-        ContentExpression(text, item.requiredString("meaning"), segmentIndex, start, start + text.length)
+        ContentExpression(
+            text = text,
+            meaning = item.requiredString("meaning"),
+            segmentIndex = segmentIndex,
+            startIndex = start,
+            endIndex = start + text.length,
+            shortMeaning = item.optString("shortMeaning").trim().takeIf { it.length <= MAX_SHORT_MEANING_CHARS } ?: "",
+        )
     } ?: invalidResponse()
     if (segments.isEmpty() || expressions.isEmpty()) invalidResponse()
     return LearningContent(
@@ -46,7 +53,22 @@ internal fun parseContentResponse(response: JSONObject, expectedMode: ContentMod
         expressions = expressions,
         glossary = data.glossary(),
         comprehension = data.comprehension(),
+        speakers = data.speakers(segments),
     )
+}
+
+/** Speaker genders (백로그 050): a courtesy like the glossary; an entry naming nobody is skipped. */
+private fun JSONObject.speakers(segments: List<ContentSegment>): Map<String, SpeakerGender> {
+    val array = optJSONArray("speakers") ?: return emptyMap()
+    val known = segments.map { it.speaker.trim() }.toSet()
+    return buildMap {
+        for (index in 0 until array.length()) {
+            val item = array.optJSONObject(index) ?: continue
+            val name = item.optString("name").trim()
+            val gender = SpeakerGender.fromWire(item.optString("gender")) ?: continue
+            if (name in known && name !in this) put(name, gender)
+        }
+    }
 }
 
 /**
@@ -72,6 +94,9 @@ private fun JSONObject.comprehension(): List<ComprehensionQuestion> {
 }
 
 private const val MAX_COMPREHENSION_QUESTIONS = 3
+
+/** Mirrors the Edge Function's bound; a longer gloss is kept out of the options, not rejected. */
+private const val MAX_SHORT_MEANING_CHARS = 20
 
 /**
  * The glossary (백로그 024) is a courtesy, never a reason to reject a passage: an entry that is not
@@ -158,6 +183,7 @@ internal fun LearningContent.toResponseJson(): JSONObject {
             JSONObject()
                 .put("text", expression.text)
                 .put("meaning", expression.meaning)
+                .put("shortMeaning", expression.shortMeaning)
                 .put("segmentIndex", expression.segmentIndex),
         )
     }
@@ -175,6 +201,10 @@ internal fun LearningContent.toResponseJson(): JSONObject {
                 .put("explanation", item.explanation),
         )
     }
+    val speakerArray = JSONArray()
+    speakers.forEach { (name, gender) ->
+        speakerArray.put(JSONObject().put("name", name).put("gender", gender.wireValue))
+    }
     val data = JSONObject()
         .put("title", title)
         .put("mode", mode.wireValue)
@@ -182,5 +212,6 @@ internal fun LearningContent.toResponseJson(): JSONObject {
         .put("expressions", expressionArray)
         .put("glossary", glossaryArray)
         .put("comprehension", comprehensionArray)
+        .put("speakers", speakerArray)
     return JSONObject().put("data", data)
 }

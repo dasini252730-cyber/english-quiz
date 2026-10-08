@@ -57,6 +57,8 @@ class QuizRouteTest {
         val repository = LearningRepository(db)
         repository.saveExpression("sketchy", "수상한", NOW - 1_000)
         repository.saveExpression("hang out", "놀다", NOW - 900)
+        repository.markReviewed("sketchy")
+        repository.markReviewed("hang out")
 
         var summary: LearningSessionSummary? = null
         compose.setContent {
@@ -122,6 +124,8 @@ class QuizRouteTest {
         val repository = LearningRepository(db)
         repository.saveExpression("sketchy", "수상한", NOW - 1_000)
         repository.saveExpression("hang out", "놀다", NOW - 900)
+        repository.markReviewed("sketchy")
+        repository.markReviewed("hang out")
 
         var summary: LearningSessionSummary? = null
         compose.setContent {
@@ -161,8 +165,9 @@ class QuizRouteTest {
         val repository = LearningRepository(db)
         repository.saveExpression("hang out", "놀다", NOW - 900, "Let's hang out.")
         repository.saveExpression("sketchy", "수상한", NOW - 1_000)
-        // One right answer already: from here on the blank is typed (백로그 043).
-        repository.saveReviewProgress("hang out", NOW - 500, NOW - 100, consecutiveCorrectCount = 1, incorrectCount = 0, isMastered = false)
+        // At the 꽃 stage the blank is typed (백로그 043/045); the other is just past its card.
+        repository.markReviewed("hang out", correctRun = 3)
+        repository.markReviewed("sketchy")
 
         var summary: LearningSessionSummary? = null
         compose.setContent {
@@ -269,6 +274,112 @@ class QuizRouteTest {
     }
 
     @Test
+    fun aMissedQuestionComesBackOnceAtTheEndWithoutScoring() = runBlocking {
+        val db = LearningDatabase.create(context, DATABASE_NAME)
+        database = db
+        val repository = LearningRepository(db)
+        repository.saveExpression("sketchy", "수상한", NOW - 1_000)
+        repository.saveExpression("hang out", "놀다", NOW - 900)
+        repository.markReviewed("sketchy")
+        repository.markReviewed("hang out")
+
+        var summary: LearningSessionSummary? = null
+        compose.setContent {
+            EnglishQuizTheme {
+                QuizRoute(repository = repository, todayContent = null, onFinished = { summary = it }, now = { NOW }, seed = { SEED })
+            }
+        }
+
+        // Both wrong on purpose: "놀다" for sketchy, "수상한" for hang out.
+        repeat(2) { number ->
+            awaitText("${number + 1} / 2")
+            val askingSketchy = compose.onAllNodesWithText("sketchy").fetchSemanticsNodes().isNotEmpty()
+            compose.onNodeWithText(if (askingSketchy) "놀다" else "수상한").performScrollTo().performClick()
+            awaitText("아쉬워요, 오답이에요.")
+            compose.onNodeWithText("다음 문제").performScrollTo().performClick()
+        }
+
+        // 백로그 047: the retry round — the counter grew, the questions say so, and a right answer
+        // now pays nothing and changes no record.
+        awaitText("3 / 4")
+        compose.onNodeWithText("다시 풀기 · ", substring = true).assertIsDisplayed()
+        repeat(2) { number ->
+            val askingSketchy = compose.onAllNodesWithText("sketchy").fetchSemanticsNodes().isNotEmpty()
+            compose.onNodeWithText(if (askingSketchy) "수상한" else "놀다").performScrollTo().performClick()
+            awaitText("정답이에요!")
+            assertTrue(compose.onAllNodesWithText("+10점").fetchSemanticsNodes().isEmpty())
+            compose.onNodeWithText(if (number == 0) "다음 문제" else "결과 보기").performScrollTo().performClick()
+        }
+        compose.waitUntil(TIMEOUT_MILLIS) { summary != null }
+        val finished = checkNotNull(summary)
+        assertEquals(2, finished.quizQuestionCount)
+        assertEquals(0, finished.quizCorrectCount)
+        assertEquals(0, finished.score)
+        EXPRESSIONS.forEach { assertEquals(0, db.learningDao().findSavedExpression(it)?.consecutiveCorrectCount) }
+    }
+
+    @Test
+    fun aFirstMeetingIsACardWhoseAnswersScheduleButNeverScore() = runBlocking {
+        val db = LearningDatabase.create(context, DATABASE_NAME)
+        database = db
+        val repository = LearningRepository(db)
+        repository.saveExpression("sketchy", "수상한", NOW - 1_000, "That sounds sketchy.", shortMeaning = "수상한")
+        repository.saveExpression("hang out", "놀다", NOW - 900)
+
+        var summary: LearningSessionSummary? = null
+        compose.setContent {
+            EnglishQuizTheme {
+                QuizRoute(repository = repository, todayContent = null, onFinished = { summary = it }, now = { NOW }, seed = { SEED })
+            }
+        }
+
+        // 백로그 045: two cards. "알아요" on one, "모르겠어요" on the other, whichever order; both only
+        // bring the expression back tomorrow, judged by nobody.
+        awaitText("처음 보는 표현이에요. 읽어 보고 아는지 골라 주세요.")
+        if (compose.onAllNodesWithText("sketchy").fetchSemanticsNodes().isNotEmpty()) {
+            compose.onNodeWithText("That sounds sketchy.").assertIsDisplayed()
+        }
+        compose.onNodeWithText("알아요").performScrollTo().performClick()
+        awaitText("2 / 2")
+        compose.onNodeWithText("모르겠어요, 내일 다시").performScrollTo().performClick()
+
+        compose.waitUntil(TIMEOUT_MILLIS) { summary != null }
+        val finished = checkNotNull(summary)
+        assertEquals(0, finished.quizQuestionCount)
+        assertEquals(2, finished.learnedExpressionCount)
+        assertEquals(0, finished.score)
+        compose.waitUntil(TIMEOUT_MILLIS) {
+            runBlocking { EXPRESSIONS.all { db.learningDao().findSavedExpression(it)?.lastReviewedAtEpochMillis == NOW } }
+        }
+        EXPRESSIONS.forEach {
+            val seen = checkNotNull(db.learningDao().findSavedExpression(it))
+            assertEquals(0, seen.incorrectCount)
+            assertEquals(0, seen.consecutiveCorrectCount)
+            assertEquals(NOW + DAY, seen.nextReviewAtEpochMillis)
+        }
+    }
+
+    @Test
+    fun cardsAlreadyShownTodayCountAgainstTheDaysFive() = runBlocking {
+        val db = LearningDatabase.create(context, DATABASE_NAME)
+        database = db
+        val repository = LearningRepository(db)
+        (1..8).forEach { repository.saveExpression("new$it", "뜻$it", NOW - 1_000 - it) }
+        // Four cards were seen earlier today (백로그 048): only one more fits.
+        (1..4).forEach { repository.markSeen("new$it", NOW - 60_000) }
+
+        compose.setContent {
+            EnglishQuizTheme {
+                QuizRoute(repository = repository, todayContent = null, onFinished = {}, now = { NOW }, seed = { SEED })
+            }
+        }
+
+        awaitText("1 / 1")
+        compose.onNodeWithText("알아요").assertIsDisplayed()
+        Unit
+    }
+
+    @Test
     fun quizWithNothingDueFinishesWithAnEmptySummaryInsteadOfAnError() = runBlocking {
         val db = LearningDatabase.create(context, DATABASE_NAME)
         database = db
@@ -301,8 +412,10 @@ class QuizRouteTest {
         val db = LearningDatabase.create(context, DATABASE_NAME)
         database = db
         val repository = LearningRepository(db)
-        // "hang out" was tapped while reading and saved with the meaning the Reader found.
+        // "hang out" was tapped while reading and saved with the meaning the Reader found, and
+        // has been asked once since; "sketchy" is met for the first time today.
         repository.saveExpression("hang out", "놀다", NOW - 900, "Let's hang out.")
+        repository.markReviewed("hang out")
         val content = LearningContent(
             title = "A cafe",
             mode = ContentMode.CONVERSATION,
@@ -343,15 +456,23 @@ class QuizRouteTest {
         )
         assertEquals("That sounds sketchy.", saved.single { it.displayExpression == "sketchy" }.contextSentence)
 
-        // Both rows carry their sentence, so both are fill-in-the-blank questions whose options
-        // are the expressions themselves; "hang out" fits exactly one of the two blanks.
-        awaitText("hang out").performScrollTo().performClick()
-        awaitText("다음 문제").performScrollTo().performClick()
-        awaitText("2 / 2").assertIsDisplayed()
-        awaitText("hang out").performScrollTo().performClick()
-        awaitText("결과 보기").performScrollTo().performClick()
+        // The new "sketchy" is a card to read (백로그 045); "hang out" is a blank to fill. Either
+        // may come first; the card is met but not counted as a question.
+        val expectedLearned = 2
+        repeat(2) { number ->
+            awaitText("${number + 1} / 2")
+            if (compose.onAllNodesWithText("알아요").fetchSemanticsNodes().isNotEmpty()) {
+                compose.onNodeWithText("알아요").performScrollTo().performClick()
+            } else {
+                compose.onNodeWithText("hang out").performScrollTo().performClick()
+                awaitText("정답이에요!")
+                compose.onNodeWithText(if (number == 0) "다음 문제" else "결과 보기").performScrollTo().performClick()
+            }
+        }
         compose.waitUntil(TIMEOUT_MILLIS) { summary != null }
-        assertEquals(2, checkNotNull(summary).quizQuestionCount)
+        assertEquals(1, checkNotNull(summary).quizQuestionCount)
+        assertEquals(1, checkNotNull(summary).quizCorrectCount)
+        assertEquals(expectedLearned, checkNotNull(summary).learnedExpressionCount)
 
         // Both answers reached the review schedule, so neither is asked again today.
         compose.waitUntil(TIMEOUT_MILLIS) {
@@ -360,6 +481,11 @@ class QuizRouteTest {
             }
         }
         repository.listSavedExpressions().forEach { assertReviewScheduled(it) }
+    }
+
+    /** Puts [expression] past its first meeting (백로그 045) so the quiz asks it rather than showing a card. */
+    private suspend fun LearningRepository.markReviewed(expression: String, correctRun: Int = 0) {
+        saveReviewProgress(expression, NOW - DAY, NOW - 1, consecutiveCorrectCount = correctRun, incorrectCount = 0, isMastered = false)
     }
 
     private fun assertReviewScheduled(expression: SavedExpressionEntity) {
@@ -381,6 +507,7 @@ class QuizRouteTest {
     private companion object {
         const val DATABASE_NAME = "test-quiz-route.db"
         const val NOW = 1_700_000_000_000L
+        const val DAY = 24 * 60 * 60 * 1000L
         const val SEED = 42L
         const val TIMEOUT_MILLIS = 5_000L
         val EXPRESSIONS = listOf("sketchy", "hang out")

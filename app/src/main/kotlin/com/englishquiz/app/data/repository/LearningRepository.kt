@@ -119,10 +119,12 @@ class LearningRepository(
         contextSentence: String = "",
         /** False for a retry of a save that failed: the learner tapped once. */
         countTap: Boolean = true,
+        shortMeaning: String = "",
     ): SavedExpressionEntity = database.withTransaction {
         val normalizedExpression = normalizeExpression(displayExpression)
-        insertUnlessSaved(normalizedExpression, displayExpression, contextMeaning, savedAtEpochMillis, contextSentence)
+        insertUnlessSaved(normalizedExpression, displayExpression, contextMeaning, savedAtEpochMillis, contextSentence, shortMeaning)
         if (countTap) learningDao.incrementTapCount(normalizedExpression)
+        if (shortMeaning.isNotBlank()) learningDao.fillShortMeaning(normalizedExpression, shortMeaning.trim())
         checkNotNull(learningDao.findSavedExpression(normalizedExpression))
     }
 
@@ -135,9 +137,12 @@ class LearningRepository(
         contextMeaning: String,
         savedAtEpochMillis: Long,
         contextSentence: String,
+        shortMeaning: String = "",
     ): Boolean = database.withTransaction {
         val normalizedExpression = normalizeExpression(displayExpression)
-        insertUnlessSaved(normalizedExpression, displayExpression, contextMeaning, savedAtEpochMillis, contextSentence)
+        val added = insertUnlessSaved(normalizedExpression, displayExpression, contextMeaning, savedAtEpochMillis, contextSentence, shortMeaning)
+        if (!added && shortMeaning.isNotBlank()) learningDao.fillShortMeaning(normalizedExpression, shortMeaning.trim())
+        added
     }
 
     /** True when the row was inserted; false when the ignored duplicate kept the stored row. */
@@ -147,6 +152,7 @@ class LearningRepository(
         contextMeaning: String,
         savedAtEpochMillis: Long,
         contextSentence: String,
+        shortMeaning: String,
     ): Boolean {
         require(normalizedExpression.isNotEmpty()) { "표현은 비어 있을 수 없습니다." }
         val rowId = learningDao.insertExpressionIgnoringDuplicate(
@@ -156,6 +162,7 @@ class LearningRepository(
                 contextMeaning = contextMeaning.trim(),
                 firstSavedAtEpochMillis = savedAtEpochMillis,
                 contextSentence = contextSentence.trim(),
+                shortMeaning = shortMeaning.trim(),
             ),
         )
         return rowId != IGNORED_ROW_ID
@@ -198,6 +205,21 @@ class LearningRepository(
             )
         }
     }
+
+    /**
+     * The learner saw the expression's card and said they do not know it yet (백로그 045): it
+     * comes back tomorrow, but nothing is held against it — no wrong answer, no reset.
+     */
+    suspend fun markSeen(displayExpression: String, seenAtEpochMillis: Long): SavedExpressionEntity =
+        database.withTransaction {
+            val existing = checkNotNull(learningDao.findSavedExpression(normalizeExpression(displayExpression)))
+            val updated = existing.copy(
+                lastReviewedAtEpochMillis = seenAtEpochMillis,
+                nextReviewAtEpochMillis = ReviewPolicy.seenAgainAt(seenAtEpochMillis),
+            )
+            learningDao.updateExpression(updated)
+            updated
+        }
 
     suspend fun recordAnswer(
         displayExpression: String,

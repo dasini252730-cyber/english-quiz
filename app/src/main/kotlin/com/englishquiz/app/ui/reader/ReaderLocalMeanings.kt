@@ -21,6 +21,18 @@ internal fun LearningContent.localMeaningFor(token: ReaderToken): String? {
     return glossary.firstOrNull { it.word.lookupKey() == key }?.meaning
 }
 
+/** The passage's short gloss for an annotated [token] (백로그 046), or "" for a glossary word or none. */
+internal fun LearningContent.localShortMeaningFor(token: ReaderToken): String {
+    expressions.firstOrNull {
+        it.segmentIndex == token.segmentIndex &&
+            it.startIndex == token.startIndex &&
+            it.endIndex == token.endIndex
+    }?.let { return it.shortMeaning }
+    val key = token.lookup.lookupKey()
+    if (key.isEmpty()) return ""
+    return expressions.firstOrNull { it.text.lookupKey() == key }?.shortMeaning ?: ""
+}
+
 private val EDGE_PUNCTUATION = charArrayOf('.', ',', '!', '?', ';', ':', '"', '\'', '(', ')')
 
 private fun String.lookupKey(): String = foldTypography().trim().trim(*EDGE_PUNCTUATION).trim()

@@ -25,7 +25,21 @@ data class LearningContent(
     val glossary: List<GlossaryEntry> = emptyList(),
     /** Questions about the passage itself for the quiz (백로그 042); empty for a passage stored before it. */
     val comprehension: List<ComprehensionQuestion> = emptyList(),
+    /** Who each speaker is (백로그 050), keyed by the segment speaker name; empty before it or when the model gave none. */
+    val speakers: Map<String, SpeakerGender> = emptyMap(),
 )
+
+/** What the model says about a speaker, so a voice can be chosen to match (백로그 050). */
+enum class SpeakerGender(val wireValue: String) {
+    FEMALE("female"),
+    MALE("male"),
+    NARRATOR("narrator"),
+    ;
+
+    companion object {
+        fun fromWire(value: String): SpeakerGender? = entries.firstOrNull { it.wireValue == value }
+    }
+}
 
 /** One multiple-choice question about the situation of the passage, written by the model. */
 data class ComprehensionQuestion(
@@ -51,6 +65,8 @@ data class ContentExpression(
     val segmentIndex: Int,
     val startIndex: Int,
     val endIndex: Int,
+    /** A few words for a quiz option (백로그 046); "" for a passage from before it or when the model gave none. */
+    val shortMeaning: String = "",
 )
 
 data class ContextualMeaning(

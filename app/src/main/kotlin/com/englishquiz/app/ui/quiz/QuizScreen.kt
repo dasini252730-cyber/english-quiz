@@ -41,6 +41,11 @@ fun QuizScreen(
     /** The typed blank's submit and hint (백로그 043); unused by the other question types. */
     onSubmitTyped: (String) -> Unit = {},
     onHint: () -> Unit = {},
+    /** The learn card's answers and pronunciation (백로그 045). */
+    onKnown: () -> Unit = {},
+    onUnknown: () -> Unit = {},
+    speechReady: Boolean = false,
+    onPlay: (String) -> Unit = {},
 ) {
     Column(Modifier.fillMaxSize().background(MongleColor.Cream).mongleScreenInsets()) {
         QuizHeader(state, onBack)
@@ -58,8 +63,12 @@ fun QuizScreen(
                 )
                 QuizUiState.Error -> QuizErrorContent(onRetry)
                 QuizUiState.Empty -> QuizEmptyContent(onEmptyContinue)
-                is QuizUiState.InProgress ->
+                is QuizUiState.InProgress -> if (state.question.type == QuizQuestionType.LEARN_CARD) {
+                    Text("처음 보는 표현이에요. 읽어 보고 아는지 골라 주세요.", style = MaterialTheme.typography.headlineSmall)
+                    QuizLearnCard(state.question, speechReady, onPlay, onKnown, onUnknown)
+                } else {
                     QuizQuestionContent(state, onSelectOption, onNext, onRetryRecord, onSubmitTyped, onHint)
+                }
             }
         }
     }
@@ -133,7 +142,8 @@ private fun QuizQuestionContent(
     onHint: () -> Unit,
 ) {
     val answered = state.selectedOption != null
-    Text(questionInstruction(state.question.type), style = MaterialTheme.typography.headlineSmall)
+    val instruction = questionInstruction(state.question.type)
+    Text(if (state.question.isRetry) "다시 풀기 · $instruction" else instruction, style = MaterialTheme.typography.headlineSmall)
     QuizPrompt(state)
     if (state.question.type == QuizQuestionType.TYPED_BLANK) {
         QuizTypedAnswer(state, onSubmitTyped, onHint)
@@ -156,7 +166,7 @@ private fun QuizQuestionContent(
 @Composable
 private fun QuizPrompt(state: QuizUiState.InProgress) {
     when (state.question.type) {
-        QuizQuestionType.MULTIPLE_CHOICE -> Text(
+        QuizQuestionType.MULTIPLE_CHOICE, QuizQuestionType.LEARN_CARD -> Text(
             state.question.questionText,
             style = MaterialTheme.typography.displayLarge,
         )
@@ -181,4 +191,5 @@ private fun questionInstruction(type: QuizQuestionType): String = when (type) {
     QuizQuestionType.FILL_IN_BLANK -> "빈칸에 들어갈 표현을 고르세요."
     QuizQuestionType.TYPED_BLANK -> "빈칸에 들어갈 표현을 직접 입력하세요."
     QuizQuestionType.COMPREHENSION -> "오늘 읽은 내용을 떠올려 답하세요."
+    QuizQuestionType.LEARN_CARD -> "처음 보는 표현이에요."
 }

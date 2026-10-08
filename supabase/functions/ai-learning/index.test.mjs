@@ -10,7 +10,7 @@ const validContent = {
     text: index === 0 ? "Let's pull it off together." : `We can plan the next step ${index}.`,
   })),
   expressions: [
-    { text: "pull it off", meaning: "해내다", segmentIndex: 0 },
+    { text: "pull it off", meaning: "해내다", shortMeaning: "해내다", segmentIndex: 0 },
     { text: "next step", meaning: "다음 단계", segmentIndex: 1 },
   ],
 };
@@ -19,10 +19,12 @@ const expectedContent = {
   ...validContent,
   expressions: [
     { ...validContent.expressions[0], startIndex: 6, endIndex: 17 },
-    { ...validContent.expressions[1], startIndex: 16, endIndex: 25 },
+    // 백로그 046: a missing short meaning comes back empty, never failing the phrase.
+    { ...validContent.expressions[1], shortMeaning: "", startIndex: 16, endIndex: 25 },
   ],
   glossary: [],
   comprehension: [],
+  speakers: [],
 };
 
 function providerResponse(value, httpStatus = 200, stopReason = "end_turn") {
@@ -254,7 +256,7 @@ test("a phrase annotated with the wrong segment index is placed where it actuall
   const response = await handler(post({ action: "content", mode: "conversation", difficulty: 1 }));
   assert.equal(response.status, 200);
   assert.deepEqual((await response.json()).data.expressions, [
-    { text: "pull it off", meaning: "해내다", segmentIndex: 0, startIndex: 6, endIndex: 17 },
+    { text: "pull it off", meaning: "해내다", shortMeaning: "", segmentIndex: 0, startIndex: 6, endIndex: 17 },
   ]);
 });
 
@@ -483,6 +485,56 @@ test("a glossary rides along and bad entries are dropped, never failing the pass
   const bare = createHandler(() => "key", async () => providerResponse(validContent));
   const bareResponse = await bare(post({ action: "content", mode: "conversation", difficulty: 2 }));
   assert.deepEqual((await bareResponse.json()).data.glossary, []);
+});
+
+test("speaker genders ride along for the voices; unknown names and genders are dropped", async () => {
+  const content = {
+    ...validContent,
+    speakers: [
+      { name: "Alex", gender: "female" },
+      { name: "sam", gender: "male" },
+      { name: "Sam", gender: "male" },
+      { name: "Nobody", gender: "male" },
+      { name: "Alex", gender: "robot" },
+      "not an object",
+    ],
+  };
+  let sent;
+  const handler = createHandler(() => "key", async (_url, options) => {
+    sent = JSON.parse(options.body);
+    return providerResponse(content);
+  });
+  const response = await handler(post({ action: "content", mode: "conversation", difficulty: 2 }));
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).data.speakers, [
+    { name: "Alex", gender: "female" },
+    { name: "sam", gender: "male" },
+  ]);
+  assert.match(sent.system, /`speakers`: one entry per distinct segment speaker/);
+  assertOnlySupportedKeywords(sent.output_config.format.schema);
+});
+
+test("a short meaning rides with each phrase and an overlong one is dropped on its own", async () => {
+  const content = {
+    ...validContent,
+    expressions: [
+      { text: "pull it off", meaning: "성공적으로 해내다", shortMeaning: "해내다", segmentIndex: 0 },
+      { text: "next step", meaning: "다음 단계", shortMeaning: "이것은 선택지로 쓰기에는 너무 긴 뜻풀이입니다", segmentIndex: 1 },
+    ],
+  };
+  let sent;
+  const handler = createHandler(() => "key", async (_url, options) => {
+    sent = JSON.parse(options.body);
+    return providerResponse(content);
+  });
+  const response = await handler(post({ action: "content", mode: "conversation", difficulty: 2 }));
+  assert.equal(response.status, 200);
+  const expressions = (await response.json()).data.expressions;
+  assert.equal(expressions[0].shortMeaning, "해내다");
+  assert.equal(expressions[1].shortMeaning, "");
+  assert.equal(expressions[1].meaning, "다음 단계");
+  assert.match(sent.system, /`shortMeaning` of at most 12 Korean characters/);
+  assertOnlySupportedKeywords(sent.output_config.format.schema);
 });
 
 test("comprehension questions ride along, bad ones are dropped, and the prompt asks for them", async () => {

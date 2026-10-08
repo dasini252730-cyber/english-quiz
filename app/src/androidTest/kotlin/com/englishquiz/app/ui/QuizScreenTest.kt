@@ -109,6 +109,50 @@ class QuizScreenTest {
     }
 
     @Test
+    fun aLearnCardShowsTheExpressionAndTakesKnownOrUnknown() {
+        val card = QuizQuestion(
+            expression = "sketchy",
+            type = QuizQuestionType.LEARN_CARD,
+            questionText = "That sounds sketchy.",
+            options = emptyList(),
+            explanation = EXPLANATION,
+            shortMeaning = "수상한",
+        )
+        val answers = mutableListOf<String>()
+        compose.setContent {
+            EnglishQuizTheme {
+                QuizScreen(
+                    state = QuizUiState.InProgress(questionNumber = 1, totalQuestions = 2, question = card, selectedOption = null, isCorrect = null),
+                    onSelectOption = {},
+                    onNext = {},
+                    onRetryRecord = {},
+                    onEmptyContinue = {},
+                    onRetry = {},
+                    onBack = {},
+                    onKnown = { answers += "known" },
+                    onUnknown = { answers += "unknown" },
+                )
+            }
+        }
+
+        // 백로그 045: read, not tested — gloss, full meaning, sentence, and two ways out.
+        compose.onNodeWithText("sketchy").assertIsDisplayed()
+        compose.onNodeWithText("수상한").assertIsDisplayed()
+        compose.onNodeWithText("수상해 보인다는 뜻입니다.").assertIsDisplayed()
+        compose.onNodeWithText("That sounds sketchy.").assertIsDisplayed()
+        compose.onNodeWithText("알아요").performScrollTo().performClick()
+        compose.onNodeWithText("모르겠어요, 내일 다시").performScrollTo().performClick()
+        assertEquals(listOf("known", "unknown"), answers)
+    }
+
+    @Test
+    fun aRetryQuestionSaysSo() {
+        showQuestion(meaningQuestion.copy(isRetry = true), questionNumber = 3, selected = null)
+
+        compose.onNodeWithText("다시 풀기 · 다음 표현의 뜻으로 알맞은 것을 고르세요.").assertIsDisplayed()
+    }
+
+    @Test
     fun aComprehensionQuestionAsksAboutThePassage() {
         val question = QuizQuestion(
             expression = "",

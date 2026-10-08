@@ -205,10 +205,8 @@ private fun FinishedStep(
         } catch (_: Exception) {
             0
         }
-        resolved = summary.copy(
-            newlySavedExpressionCount = newlySaved,
-            learnedExpressionCount = summary.quizQuestionCount,
-        )
+        // The quiz reports what was met, cards included (백로그 045); only the saved count is filled here.
+        resolved = summary.copy(newlySavedExpressionCount = newlySaved)
     }
 
     val ready = resolved

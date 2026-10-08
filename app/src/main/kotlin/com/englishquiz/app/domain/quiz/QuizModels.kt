@@ -3,11 +3,11 @@ package com.englishquiz.app.domain.quiz
 import com.englishquiz.app.domain.game.GrowthStage
 
 /**
- * Quiz question types (요구사항 14.2): meaning multiple choice, fill-in-the-blank by choice, the
- * typed blank for an expression already answered right once (백로그 043), and a question about
- * the passage itself (백로그 042).
+ * Quiz question types (요구사항 14.2): the first-meeting card (백로그 045), meaning multiple
+ * choice, fill-in-the-blank by choice, the typed blank for an expression at the 꽃 stage
+ * (백로그 043/045), and a question about the passage itself (백로그 042).
  */
-enum class QuizQuestionType { MULTIPLE_CHOICE, FILL_IN_BLANK, TYPED_BLANK, COMPREHENSION }
+enum class QuizQuestionType { LEARN_CARD, MULTIPLE_CHOICE, FILL_IN_BLANK, TYPED_BLANK, COMPREHENSION }
 
 data class QuizOption(
     val text: String,
@@ -32,6 +32,10 @@ data class QuizQuestion(
     val explanation: String,
     /** The expression's stage when the quiz was built (백로그 036), so feedback can show the move. */
     val growthBefore: GrowthStage = GrowthStage.SEED,
+    /** The short gloss shown on a learn card (백로그 045/046); "" when the expression has none. */
+    val shortMeaning: String = "",
+    /** True in the retry round (백로그 047): asked again, scored and recorded no more. */
+    val isRetry: Boolean = false,
 )
 
 data class QuizSet(

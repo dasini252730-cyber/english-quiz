@@ -139,6 +139,42 @@ class AiLearningResponsesTest {
     }
 
     @Test
+    fun speakerGendersRideAlongAndNameOnlyWhoActuallySpeaks() {
+        // 백로그 050: "Nobody" is not in the passage and a made-up gender is skipped.
+        val body = """
+            {"data":{"title":"A cafe","mode":"conversation","segments":[
+              {"speaker":"Emma","text":"That sounds sketchy."},{"speaker":"Tom","text":"Does it?"}],
+             "expressions":[{"text":"sketchy","meaning":"수상한","segmentIndex":0}],
+             "speakers":[{"name":"Emma","gender":"female"},{"name":"Tom","gender":"male"},
+                         {"name":"Nobody","gender":"male"},{"name":"Emma","gender":"robot"}]}}
+        """.trimIndent()
+
+        val parsed = parseContentResponse(JSONObject(body), ContentMode.CONVERSATION)
+        val restored = parseContentResponse(parsed.toResponseJson(), ContentMode.CONVERSATION)
+
+        assertEquals(mapOf("Emma" to SpeakerGender.FEMALE, "Tom" to SpeakerGender.MALE), parsed.speakers)
+        assertEquals(parsed, restored)
+    }
+
+    @Test
+    fun aShortMeaningRidesWithItsPhraseAndAnOverlongOneIsLeftOut() {
+        // 백로그 046: a gloss short enough to be an option is kept; a longer one is not an option.
+        val body = """
+            {"data":{"title":"A cafe","mode":"conversation","segments":[
+              {"speaker":"Emma","text":"That sounds sketchy, so hang out later."}],
+             "expressions":[{"text":"sketchy","meaning":"수상하다는 뜻이에요.","shortMeaning":"수상한","segmentIndex":0},
+                            {"text":"hang out","meaning":"어울려 놀다","shortMeaning":"이건 선택지로 쓰기에는 너무 긴 뜻풀이예요 정말로","segmentIndex":0}]}}
+        """.trimIndent()
+
+        val parsed = parseContentResponse(JSONObject(body), ContentMode.CONVERSATION)
+        val restored = parseContentResponse(parsed.toResponseJson(), ContentMode.CONVERSATION)
+
+        assertEquals("수상한", parsed.expressions[0].shortMeaning)
+        assertEquals("", parsed.expressions[1].shortMeaning)
+        assertEquals(parsed, restored)
+    }
+
+    @Test
     fun aPassageStoredBeforeTheGlossaryExistedStillReads() {
         // Rows written by 백로그 021 have no "glossary" key at all.
         val body = """
