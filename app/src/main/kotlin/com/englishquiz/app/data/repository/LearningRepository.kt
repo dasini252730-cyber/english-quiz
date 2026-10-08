@@ -3,6 +3,7 @@ package com.englishquiz.app.data.repository
 import androidx.room.withTransaction
 import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.data.ai.LearningContent
+import com.englishquiz.app.data.ai.isKoreanPassage
 import com.englishquiz.app.data.ai.parseContentResponse
 import com.englishquiz.app.data.ai.toResponseJson
 import com.englishquiz.app.data.local.DailyContentEntity
@@ -58,7 +59,8 @@ class LearningRepository(
     suspend fun findDailyContent(learningDate: String, mode: ContentMode): LearningContent? {
         val row = learningDao.findDailyContent(learningDate, mode.wireValue) ?: return null
         return try {
-            parseContentResponse(JSONObject(row.contentJson), mode)
+            // A passage stored in Korean (백로그 051) is as good as none: the next save replaces it.
+            parseContentResponse(JSONObject(row.contentJson), mode).takeIf { !it.isKoreanPassage }
         } catch (_: Exception) {
             null
         }

@@ -41,6 +41,22 @@ enum class SpeakerGender(val wireValue: String) {
     }
 }
 
+/**
+ * True when the passage itself is written in Korean (백로그 051): a reply the server accepted
+ * before it learnt to refuse one, or a row stored from it. Such a passage is not learning
+ * material and is regenerated rather than shown. Names and a quoted word do not trip this.
+ */
+val LearningContent.isKoreanPassage: Boolean
+    get() {
+        val text = segments.joinToString(" ") { it.text }
+        val letters = text.count { !it.isWhitespace() }
+        if (letters == 0) return false
+        val hangul = text.count { it in 'ㄱ'..'ㆎ' || it in '가'..'힣' }
+        return hangul > letters * MAX_HANGUL_SHARE
+    }
+
+private const val MAX_HANGUL_SHARE = 0.2
+
 /** One multiple-choice question about the situation of the passage, written by the model. */
 data class ComprehensionQuestion(
     val question: String,

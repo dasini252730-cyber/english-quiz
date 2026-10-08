@@ -487,6 +487,37 @@ test("a glossary rides along and bad entries are dropped, never failing the pass
   assert.deepEqual((await bareResponse.json()).data.glossary, []);
 });
 
+test("a passage written in Korean is refused and asked for once more; the contract says English first", async () => {
+  // 백로그 051: with Korean glosses and questions in the contract, the model once wrote the whole
+  // passage in Korean, which the learner cannot study and the review expressions cannot be woven into.
+  const korean = {
+    ...validContent,
+    title: "커피숍에서 만난 옛 친구",
+    segments: validContent.segments.map((segment, index) => ({ ...segment, text: `정말 오랜만이다, 요즘 어떻게 지내 ${index}` })),
+    expressions: [{ text: "오랜만이다", meaning: "오랜 시간 만에 만났다", segmentIndex: 0 }],
+  };
+  let calls = 0;
+  let sent;
+  const handler = createHandler(() => "key", async (_url, options) => {
+    calls++;
+    sent = JSON.parse(options.body);
+    return providerResponse(calls === 1 ? korean : validContent);
+  });
+  const response = await handler(post({ action: "content", mode: "conversation", difficulty: 2 }));
+  assert.equal(response.status, 200);
+  assert.equal(calls, 2);
+  assert.equal((await response.json()).data.title, "A Saturday Plan");
+  assert.match(sent.system, /^Your reply is learning material[^]*THE PASSAGE IS IN ENGLISH/);
+
+  // Korean inside an English passage — a name, a quoted word — is still English.
+  const sprinkled = {
+    ...validContent,
+    segments: validContent.segments.map((segment, index) => (index === 2 ? { ...segment, text: "She said 안녕 and left." } : segment)),
+  };
+  const lenient = createHandler(() => "key", async () => providerResponse(sprinkled));
+  assert.equal((await lenient(post({ action: "content", mode: "conversation", difficulty: 2 }))).status, 200);
+});
+
 test("speaker genders ride along for the voices; unknown names and genders are dropped", async () => {
   const content = {
     ...validContent,
@@ -563,7 +594,7 @@ test("comprehension questions ride along, bad ones are dropped, and the prompt a
     { question: "Sam은 왜 함께 하자고 했나요?", options: ["혼자 하기 힘들어서", "심심해서", "돈 때문에", "장난으로"], answerIndex: 0, explanation: "첫 줄에서 함께 해내자고 말한다." },
     { question: "설명 없음도 통과", options: ["Sure, let's do it.", "No way.", "What time is it?", "I'm a teapot."], answerIndex: 0, explanation: "" },
   ]);
-  assert.match(sent.system, /`comprehension`: 2 or 3 multiple-choice questions, written in Korean/);
+  assert.match(sent.system, /`comprehension`: 2 or 3 multiple-choice questions about the English passage/);
   assertOnlySupportedKeywords(sent.output_config.format.schema);
 
   // Without any, the passage is still a passage (백로그 042: a courtesy, like the glossary).

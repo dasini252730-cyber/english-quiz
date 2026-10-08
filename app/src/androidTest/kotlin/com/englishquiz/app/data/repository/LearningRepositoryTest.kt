@@ -225,6 +225,15 @@ class LearningRepositoryTest {
         assertEquals(conversation, first.findDailyContent("2026-09-26", ContentMode.CONVERSATION))
         assertNull(first.findDailyContent("2026-09-26", ContentMode.STORY))
         assertNull(first.findDailyContent("2026-09-27", ContentMode.CONVERSATION))
+        // A passage stored in Korean (백로그 051) reads as none, so the session generates again.
+        val korean = conversation.copy(
+            segments = listOf(ContentSegment("지은", "어? 민지? 정말 오랜만이다! 요즘 어떻게 지내?")),
+            expressions = listOf(ContentExpression("오랜만이다", "오래간만", 0, 10, 15)),
+            glossary = emptyList(),
+        )
+        first.saveDailyContent("2026-09-26", content = korean, nowEpochMillis = 150)
+        assertNull(first.findDailyContent("2026-09-26", ContentMode.CONVERSATION))
+        first.saveDailyContent("2026-09-26", content = conversation, nowEpochMillis = 200)
         firstDatabase.close()
 
         // The whole point: a fresh process the same day must not generate again.
