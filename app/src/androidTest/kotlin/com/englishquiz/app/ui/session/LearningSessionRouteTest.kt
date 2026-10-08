@@ -12,7 +12,7 @@ import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.data.ai.ContextualMeaning
 import com.englishquiz.app.data.local.LearningDatabase
 import com.englishquiz.app.data.repository.LearningRepository
-import com.englishquiz.app.ui.session.SessionRouteFixtures.EMPTY_QUIZ
+import com.englishquiz.app.ui.session.SessionRouteFixtures.FIRST_CARD
 import com.englishquiz.app.ui.session.SessionRouteFixtures.QUIZ_BUTTON
 import com.englishquiz.app.ui.session.SessionRouteFixtures.READER_TOKEN
 import com.englishquiz.app.ui.session.SessionRouteFixtures.content
@@ -142,12 +142,12 @@ class LearningSessionRouteTest {
         // Restoration is emulated from the quiz step: the Reader's lazy list cannot be rebuilt off
         // the main looper in this harness, and the guard being proved is the same either way.
         compose.onNodeWithText(QUIZ_BUTTON).performClick()
-        compose.awaitText(EMPTY_QUIZ)
+        compose.awaitText(FIRST_CARD)
 
         restoration.emulateSavedInstanceStateRestore()
 
         // Recreation must not spend another provider call, nor restart the session.
-        compose.awaitText(EMPTY_QUIZ)
+        compose.awaitText(FIRST_CARD)
         assertEquals("회전 후 생성이 다시 호출됐다", 1, attempts)
     }
 

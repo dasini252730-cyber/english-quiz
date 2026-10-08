@@ -36,11 +36,67 @@ internal fun parseContentResponse(response: JSONObject, expectedMode: ContentMod
         }
         val start = foldedSegment.indexOf(foldedText)
         if (start < 0) invalidResponse()
-        ContentExpression(text, item.requiredString("meaning"), segmentIndex, start, start + text.length)
+        ContentExpression(
+            text = text,
+            meaning = item.requiredString("meaning"),
+            segmentIndex = segmentIndex,
+            startIndex = start,
+            endIndex = start + text.length,
+            shortMeaning = item.optString("shortMeaning").trim().takeIf { it.length <= MAX_SHORT_MEANING_CHARS } ?: "",
+        )
     } ?: invalidResponse()
     if (segments.isEmpty() || expressions.isEmpty()) invalidResponse()
-    return LearningContent(data.requiredString("title"), mode, segments, expressions, data.glossary())
+    return LearningContent(
+        title = data.requiredString("title"),
+        mode = mode,
+        segments = segments,
+        expressions = expressions,
+        glossary = data.glossary(),
+        comprehension = data.comprehension(),
+        speakers = data.speakers(segments),
+    )
 }
+
+/** Speaker genders (백로그 050): a courtesy like the glossary; an entry naming nobody is skipped. */
+private fun JSONObject.speakers(segments: List<ContentSegment>): Map<String, SpeakerGender> {
+    val array = optJSONArray("speakers") ?: return emptyMap()
+    val known = segments.map { it.speaker.trim() }.toSet()
+    return buildMap {
+        for (index in 0 until array.length()) {
+            val item = array.optJSONObject(index) ?: continue
+            val name = item.optString("name").trim()
+            val gender = SpeakerGender.fromWire(item.optString("gender")) ?: continue
+            if (name in known && name !in this) put(name, gender)
+        }
+    }
+}
+
+/**
+ * Comprehension questions (백로그 042) follow the glossary's rule: an entry the app cannot ask
+ * honestly — a blank question, fewer than two options, an answer outside them — is skipped and
+ * never fails the passage. The key is absent in rows stored before 042.
+ */
+private fun JSONObject.comprehension(): List<ComprehensionQuestion> {
+    val array = optJSONArray("comprehension") ?: return emptyList()
+    return buildList {
+        for (index in 0 until array.length()) {
+            if (size >= MAX_COMPREHENSION_QUESTIONS) break
+            val item = array.optJSONObject(index) ?: continue
+            val question = item.optString("question").trim()
+            val options = item.optJSONArray("options")?.let { raw -> List(raw.length()) { raw.optString(it).trim() } } ?: continue
+            val answerIndex = item.optInt("answerIndex", -1)
+            // A blank option is not dropped but disqualifies the entry: dropping it would move
+            // answerIndex onto a wrong option.
+            if (question.isEmpty() || options.size < 2 || options.any { it.isEmpty() } || answerIndex !in options.indices) continue
+            add(ComprehensionQuestion(question, options, answerIndex, item.optString("explanation").trim()))
+        }
+    }
+}
+
+private const val MAX_COMPREHENSION_QUESTIONS = 3
+
+/** Mirrors the Edge Function's bound; a longer gloss is kept out of the options, not rejected. */
+private const val MAX_SHORT_MEANING_CHARS = 20
 
 /**
  * The glossary (백로그 024) is a courtesy, never a reason to reject a passage: an entry that is not
@@ -127,6 +183,7 @@ internal fun LearningContent.toResponseJson(): JSONObject {
             JSONObject()
                 .put("text", expression.text)
                 .put("meaning", expression.meaning)
+                .put("shortMeaning", expression.shortMeaning)
                 .put("segmentIndex", expression.segmentIndex),
         )
     }
@@ -134,11 +191,27 @@ internal fun LearningContent.toResponseJson(): JSONObject {
     glossary.forEach { entry ->
         glossaryArray.put(JSONObject().put("word", entry.word).put("meaning", entry.meaning))
     }
+    val comprehensionArray = JSONArray()
+    comprehension.forEach { item ->
+        comprehensionArray.put(
+            JSONObject()
+                .put("question", item.question)
+                .put("options", JSONArray(item.options))
+                .put("answerIndex", item.answerIndex)
+                .put("explanation", item.explanation),
+        )
+    }
+    val speakerArray = JSONArray()
+    speakers.forEach { (name, gender) ->
+        speakerArray.put(JSONObject().put("name", name).put("gender", gender.wireValue))
+    }
     val data = JSONObject()
         .put("title", title)
         .put("mode", mode.wireValue)
         .put("segments", segmentArray)
         .put("expressions", expressionArray)
         .put("glossary", glossaryArray)
+        .put("comprehension", comprehensionArray)
+        .put("speakers", speakerArray)
     return JSONObject().put("data", data)
 }

@@ -15,6 +15,9 @@ internal object SessionRouteFixtures {
     // A fresh store has nothing due, so the quiz opens on its empty state - still a plain
     // scrolling screen, which is what a restoration or a teardown in this harness needs.
     const val EMPTY_QUIZ = "오늘 복습할 표현이 없어요."
+
+    /** The passage's one expression is met for the first time, so the quiz opens on its card (백로그 045). */
+    const val FIRST_CARD = "처음 보는 표현이에요. 읽어 보고 아는지 골라 주세요."
     const val TIMEOUT_MILLIS = 5_000L
 
     fun content(title: String) = LearningContent(

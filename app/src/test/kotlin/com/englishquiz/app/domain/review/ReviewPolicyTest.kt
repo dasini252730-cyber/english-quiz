@@ -29,6 +29,12 @@ class ReviewPolicyTest {
     }
 
     @Test
+    fun aCardSeenComesBackTomorrow() {
+        // 백로그 045: "모르겠어요" schedules, it does not judge.
+        assertEquals(1_000L + 24 * 60 * 60 * 1000L, ReviewPolicy.seenAgainAt(1_000L))
+    }
+
+    @Test
     fun incorrectAnswerResetsMasteryAndSchedulesOneDay() {
         val mastered = ReviewProgress(
             consecutiveCorrectCount = 4,

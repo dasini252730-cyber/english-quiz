@@ -126,6 +126,7 @@ class LearningHomeTest {
     fun theBossRecordsADoublePointSessionAndReturnsHome() {
         val repository = openRepository()
         runBlocking {
+            // Never asked before: the boss still asks them as questions, never as cards (백로그 045).
             repository.saveExpression("sketchy", "수상한", 1_000L)
             repository.saveExpression("hang out", "놀다", 900L)
         }

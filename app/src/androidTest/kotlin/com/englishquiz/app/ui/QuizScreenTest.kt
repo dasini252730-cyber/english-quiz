@@ -1,11 +1,15 @@
 package com.englishquiz.app.ui
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.englishquiz.app.domain.game.GrowthStage
 import com.englishquiz.app.domain.game.QuizScore
@@ -16,6 +20,7 @@ import com.englishquiz.app.ui.quiz.GrowthChange
 import com.englishquiz.app.ui.quiz.QuizScreen
 import com.englishquiz.app.ui.quiz.QuizUiState
 import com.englishquiz.app.ui.theme.EnglishQuizTheme
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -61,6 +66,106 @@ class QuizScreenTest {
         // The meaning is a two-line explanation; the card shows all of it, not just the first line.
         compose.onNodeWithText(EXPLANATION).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("다음 문제").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun aTypedBlankTakesTextAndOffersHintAndGivingUp() {
+        val typedQuestion = blankQuestion.copy(type = QuizQuestionType.TYPED_BLANK, options = listOf(QuizOption("sketchy", true)))
+        val submitted = mutableListOf<String>()
+        var hints = 0
+        compose.setContent {
+            EnglishQuizTheme {
+                QuizScreen(
+                    state = QuizUiState.InProgress(
+                        questionNumber = 1,
+                        totalQuestions = 1,
+                        question = typedQuestion,
+                        selectedOption = null,
+                        isCorrect = null,
+                        hint = "s______",
+                    ),
+                    onSelectOption = {},
+                    onNext = {},
+                    onRetryRecord = {},
+                    onEmptyContinue = {},
+                    onRetry = {},
+                    onBack = {},
+                    onSubmitTyped = { submitted += it },
+                    onHint = { hints++ },
+                )
+            }
+        }
+
+        compose.onNodeWithText("빈칸에 들어갈 표현을 직접 입력하세요.").assertIsDisplayed()
+        // No choices to tap: the answer has to be produced (백로그 043).
+        compose.onAllNodesWithText("sketchy").assertCountEquals(0)
+        compose.onNodeWithText("힌트: s______").assertIsDisplayed()
+        compose.onNodeWithText("힌트").assertIsNotEnabled()
+        compose.onNodeWithText("제출").assertIsNotEnabled()
+        compose.onNode(hasSetTextAction()).performTextInput("Sketchy.")
+        compose.onNodeWithText("제출").performScrollTo().performClick()
+        compose.onNodeWithText("모르겠어요").performScrollTo().performClick()
+        assertEquals(listOf("Sketchy.", ""), submitted)
+    }
+
+    @Test
+    fun aLearnCardShowsTheExpressionAndTakesKnownOrUnknown() {
+        val card = QuizQuestion(
+            expression = "sketchy",
+            type = QuizQuestionType.LEARN_CARD,
+            questionText = "That sounds sketchy.",
+            options = emptyList(),
+            explanation = EXPLANATION,
+            shortMeaning = "수상한",
+        )
+        val answers = mutableListOf<String>()
+        compose.setContent {
+            EnglishQuizTheme {
+                QuizScreen(
+                    state = QuizUiState.InProgress(questionNumber = 1, totalQuestions = 2, question = card, selectedOption = null, isCorrect = null),
+                    onSelectOption = {},
+                    onNext = {},
+                    onRetryRecord = {},
+                    onEmptyContinue = {},
+                    onRetry = {},
+                    onBack = {},
+                    onKnown = { answers += "known" },
+                    onUnknown = { answers += "unknown" },
+                )
+            }
+        }
+
+        // 백로그 045: read, not tested — gloss, full meaning, sentence, and two ways out.
+        compose.onNodeWithText("sketchy").assertIsDisplayed()
+        compose.onNodeWithText("수상한").assertIsDisplayed()
+        compose.onNodeWithText("수상해 보인다는 뜻입니다.").assertIsDisplayed()
+        compose.onNodeWithText("That sounds sketchy.").assertIsDisplayed()
+        compose.onNodeWithText("알아요").performScrollTo().performClick()
+        compose.onNodeWithText("모르겠어요, 내일 다시").performScrollTo().performClick()
+        assertEquals(listOf("known", "unknown"), answers)
+    }
+
+    @Test
+    fun aRetryQuestionSaysSo() {
+        showQuestion(meaningQuestion.copy(isRetry = true), questionNumber = 3, selected = null)
+
+        compose.onNodeWithText("다시 풀기 · 다음 표현의 뜻으로 알맞은 것을 고르세요.").assertIsDisplayed()
+    }
+
+    @Test
+    fun aComprehensionQuestionAsksAboutThePassage() {
+        val question = QuizQuestion(
+            expression = "",
+            type = QuizQuestionType.COMPREHENSION,
+            questionText = "Emma는 왜 그렇게 말했나요?",
+            options = listOf(QuizOption("의심스러워서", true), QuizOption("배가 고파서", false)),
+            explanation = "수상하다고 했다.",
+        )
+        showQuestion(question, questionNumber = 1, selected = null)
+
+        compose.onNodeWithText("오늘 읽은 내용을 떠올려 답하세요.").assertIsDisplayed()
+        compose.onNodeWithText("Emma는 왜 그렇게 말했나요?").assertIsDisplayed()
+        compose.onNodeWithText("의심스러워서").assertIsDisplayed()
     }
 
     @Test

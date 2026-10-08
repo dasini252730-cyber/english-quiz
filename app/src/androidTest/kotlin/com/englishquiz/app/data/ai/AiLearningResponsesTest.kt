@@ -113,6 +113,68 @@ class AiLearningResponsesTest {
     }
 
     @Test
+    fun comprehensionQuestionsSurviveTheRoundTripAndBadOnesAreSkipped() {
+        // 백로그 042: the questions ride with the passage; one bad entry never costs the passage.
+        val body = """
+            {"data":{"title":"A cafe","mode":"conversation","segments":[
+              {"speaker":"Emma","text":"That sounds sketchy."}],
+             "expressions":[{"text":"sketchy","meaning":"수상한","segmentIndex":0}],
+             "comprehension":[
+               {"question":"Emma는 왜 그렇게 말했나요?","options":["의심스러워서","배가 고파서","늦어서","기뻐서"],"answerIndex":0,"explanation":"수상하다고 했다."},
+               {"question":"답이 범위 밖","options":["a","b"],"answerIndex":5,"explanation":""},
+               {"question":"","options":["a","b"],"answerIndex":0,"explanation":""},
+               {"question":"선택지 하나","options":["a"],"answerIndex":0,"explanation":""},
+               {"question":"빈 선택지가 있으면 통째로 버림","options":["","맞음","틀림"],"answerIndex":1,"explanation":""},
+               "not an object"]}}
+        """.trimIndent()
+
+        val parsed = parseContentResponse(JSONObject(body), ContentMode.CONVERSATION)
+        val restored = parseContentResponse(parsed.toResponseJson(), ContentMode.CONVERSATION)
+
+        assertEquals(
+            listOf(ComprehensionQuestion("Emma는 왜 그렇게 말했나요?", listOf("의심스러워서", "배가 고파서", "늦어서", "기뻐서"), 0, "수상하다고 했다.")),
+            parsed.comprehension,
+        )
+        assertEquals(parsed, restored)
+    }
+
+    @Test
+    fun speakerGendersRideAlongAndNameOnlyWhoActuallySpeaks() {
+        // 백로그 050: "Nobody" is not in the passage and a made-up gender is skipped.
+        val body = """
+            {"data":{"title":"A cafe","mode":"conversation","segments":[
+              {"speaker":"Emma","text":"That sounds sketchy."},{"speaker":"Tom","text":"Does it?"}],
+             "expressions":[{"text":"sketchy","meaning":"수상한","segmentIndex":0}],
+             "speakers":[{"name":"Emma","gender":"female"},{"name":"Tom","gender":"male"},
+                         {"name":"Nobody","gender":"male"},{"name":"Emma","gender":"robot"}]}}
+        """.trimIndent()
+
+        val parsed = parseContentResponse(JSONObject(body), ContentMode.CONVERSATION)
+        val restored = parseContentResponse(parsed.toResponseJson(), ContentMode.CONVERSATION)
+
+        assertEquals(mapOf("Emma" to SpeakerGender.FEMALE, "Tom" to SpeakerGender.MALE), parsed.speakers)
+        assertEquals(parsed, restored)
+    }
+
+    @Test
+    fun aShortMeaningRidesWithItsPhraseAndAnOverlongOneIsLeftOut() {
+        // 백로그 046: a gloss short enough to be an option is kept; a longer one is not an option.
+        val body = """
+            {"data":{"title":"A cafe","mode":"conversation","segments":[
+              {"speaker":"Emma","text":"That sounds sketchy, so hang out later."}],
+             "expressions":[{"text":"sketchy","meaning":"수상하다는 뜻이에요.","shortMeaning":"수상한","segmentIndex":0},
+                            {"text":"hang out","meaning":"어울려 놀다","shortMeaning":"이건 선택지로 쓰기에는 너무 긴 뜻풀이예요 정말로","segmentIndex":0}]}}
+        """.trimIndent()
+
+        val parsed = parseContentResponse(JSONObject(body), ContentMode.CONVERSATION)
+        val restored = parseContentResponse(parsed.toResponseJson(), ContentMode.CONVERSATION)
+
+        assertEquals("수상한", parsed.expressions[0].shortMeaning)
+        assertEquals("", parsed.expressions[1].shortMeaning)
+        assertEquals(parsed, restored)
+    }
+
+    @Test
     fun aPassageStoredBeforeTheGlossaryExistedStillReads() {
         // Rows written by 백로그 021 have no "glossary" key at all.
         val body = """
@@ -124,6 +186,7 @@ class AiLearningResponsesTest {
         val parsed = parseContentResponse(JSONObject(body), ContentMode.STORY)
 
         assertEquals(emptyList<GlossaryEntry>(), parsed.glossary)
+        assertEquals(emptyList<ComprehensionQuestion>(), parsed.comprehension)
     }
 
     @Test

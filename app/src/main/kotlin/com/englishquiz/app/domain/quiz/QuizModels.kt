@@ -2,8 +2,12 @@ package com.englishquiz.app.domain.quiz
 
 import com.englishquiz.app.domain.game.GrowthStage
 
-/** MVP quiz question types (요구사항 14.2): meaning multiple choice and fill-in-the-blank. */
-enum class QuizQuestionType { MULTIPLE_CHOICE, FILL_IN_BLANK }
+/**
+ * Quiz question types (요구사항 14.2): the first-meeting card (백로그 045), meaning multiple
+ * choice, fill-in-the-blank by choice, the typed blank for an expression at the 꽃 stage
+ * (백로그 043/045), and a question about the passage itself (백로그 042).
+ */
+enum class QuizQuestionType { LEARN_CARD, MULTIPLE_CHOICE, FILL_IN_BLANK, TYPED_BLANK, COMPREHENSION }
 
 data class QuizOption(
     val text: String,
@@ -11,12 +15,14 @@ data class QuizOption(
 )
 
 /**
- * One quiz item built from a single saved expression.
+ * One quiz item. For an expression question, [expression] is the saved expression's
+ * `displayExpression`: the UI shows it (for [QuizQuestionType.MULTIPLE_CHOICE]) and also passes
+ * it straight to `LearningRepository.recordAnswer` after the learner answers, so it must match
+ * the stored value exactly. A [QuizQuestionType.COMPREHENSION] question is about the passage,
+ * belongs to no expression and leaves [expression] empty: nothing is recorded for it.
  *
- * [expression] is the saved expression's `displayExpression`. The UI shows it (for
- * [QuizQuestionType.MULTIPLE_CHOICE]) and also passes it straight to
- * `LearningRepository.recordAnswer` after the learner answers, so it must match the stored
- * value exactly.
+ * A [QuizQuestionType.TYPED_BLANK] carries the one correct option, so the answer can be shown
+ * after a wrong attempt; the learner's own text arrives as a synthetic option.
  */
 data class QuizQuestion(
     val expression: String,
@@ -26,6 +32,10 @@ data class QuizQuestion(
     val explanation: String,
     /** The expression's stage when the quiz was built (백로그 036), so feedback can show the move. */
     val growthBefore: GrowthStage = GrowthStage.SEED,
+    /** The short gloss shown on a learn card (백로그 045/046); "" when the expression has none. */
+    val shortMeaning: String = "",
+    /** True in the retry round (백로그 047): asked again, scored and recorded no more. */
+    val isRetry: Boolean = false,
 )
 
 data class QuizSet(

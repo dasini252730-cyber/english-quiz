@@ -31,7 +31,7 @@ suspend fun lookupMeaning(
     val local = content.localMeaningFor(token) ?: savedMeaningOrNull(token.lookup, contextSentence, repository)
     val meaning = local
         ?: explainMeaning(MeaningRequest(expression = token.lookup, context = contextSentence)).meaning
-    val status = saveMeaning(token.lookup, meaning, contextSentence, repository, nowEpochMillis)
+    val status = saveMeaning(token.lookup, meaning, contextSentence, repository, nowEpochMillis, shortMeaning = content.localShortMeaningFor(token))
     MeaningUiState.Success(token.lookup, meaning, status)
 } catch (error: CancellationException) {
     throw error
@@ -68,7 +68,7 @@ suspend fun retrySaveMeaning(
     repository: LearningRepository,
     nowEpochMillis: () -> Long,
 ): MeaningUiState.Success {
-    val status = saveMeaning(state.expression, state.meaning, contextSentence, repository, nowEpochMillis)
+    val status = saveMeaning(state.expression, state.meaning, contextSentence, repository, nowEpochMillis, countTap = false)
     return state.copy(saveStatus = status)
 }
 
@@ -82,6 +82,8 @@ private suspend fun saveMeaning(
     contextSentence: String,
     repository: LearningRepository,
     nowEpochMillis: () -> Long,
+    countTap: Boolean = true,
+    shortMeaning: String = "",
 ): SaveStatus = try {
     withContext(NonCancellable) {
         repository.saveExpression(
@@ -89,6 +91,8 @@ private suspend fun saveMeaning(
             contextMeaning = meaning,
             savedAtEpochMillis = nowEpochMillis(),
             contextSentence = contextSentence,
+            countTap = countTap,
+            shortMeaning = shortMeaning,
         )
     }
     SaveStatus.SAVED

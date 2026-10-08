@@ -18,6 +18,7 @@ import com.englishquiz.app.data.ai.ContextualMeaning
 import com.englishquiz.app.data.local.LearningDatabase
 import com.englishquiz.app.data.repository.LearningRepository
 import com.englishquiz.app.ui.session.SessionRouteFixtures.EMPTY_QUIZ
+import com.englishquiz.app.ui.session.SessionRouteFixtures.FIRST_CARD
 import com.englishquiz.app.ui.session.SessionRouteFixtures.QUIZ_BUTTON
 import com.englishquiz.app.ui.session.SessionRouteFixtures.READER_TOKEN
 import com.englishquiz.app.ui.session.SessionRouteFixtures.content
@@ -93,7 +94,7 @@ class LearningSessionContentTest {
         // down in this harness can trip Compose's slot table (백로그 018), and the guard being
         // proved — no second generation, the same passage back — is the same from either step.
         compose.onNodeWithText(QUIZ_BUTTON).performClick()
-        compose.awaitText(EMPTY_QUIZ)
+        compose.awaitText(FIRST_CARD)
 
         compose.runOnIdle { entry++ }
 
@@ -131,6 +132,7 @@ class LearningSessionContentTest {
         // Nor are its expressions enrolled for the quiz the way today's are (백로그 031): nothing
         // was tapped and nothing is due, so the quiz is empty and the review box stays empty.
         compose.onNodeWithText(QUIZ_BUTTON).performClick()
+        // Nothing is enrolled from a library passage (백로그 026/031), so there is no card either.
         compose.awaitText(EMPTY_QUIZ)
         assertTrue(runBlocking { repository.listSavedExpressions() }.isEmpty())
     }
@@ -160,9 +162,9 @@ class LearningSessionContentTest {
         compose.awaitText(READER_TOKEN)
         compose.onNodeWithText(QUIZ_BUTTON).performClick()
         compose.awaitText("1 / 1")
-        // Saved with its sentence, it is asked as a blank whose options are expressions.
-        compose.onNodeWithText("pull it off").performScrollTo().performClick()
-        compose.onNodeWithText("결과 보기").performScrollTo().performClick()
+        // Met for the first time, the passage's expression is a card, not a question (백로그 045).
+        compose.onNodeWithText("pull it off").assertIsDisplayed()
+        compose.onNodeWithText("알아요").performScrollTo().performClick()
 
         // ... but the recorded session - what difficulty adjustment reads (백로그 013) - counts
         // no newly saved expression: the learner tapped nothing.
@@ -171,7 +173,8 @@ class LearningSessionContentTest {
             runBlocking { repository.listRecentSessionSummaries(ContentMode.CONVERSATION, 1) }.isNotEmpty()
         }
         val recorded = runBlocking { repository.listRecentSessionSummaries(ContentMode.CONVERSATION, 1) }.single()
-        assertEquals(1, recorded.quizQuestionCount)
+        assertEquals(0, recorded.quizQuestionCount)
+        assertEquals(1, recorded.learnedExpressionCount)
         assertEquals(0, recorded.newlySavedExpressionCount)
         assertEquals(2, runBlocking { repository.listSavedExpressions() }.size)
     }

@@ -59,6 +59,20 @@ internal val MIGRATION_5_6 = object : Migration(5, 6) {
     }
 }
 
+/** 백로그 044: how often an expression was tapped while reading; older rows count as never tapped. */
+internal val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL("ALTER TABLE `saved_expressions` ADD COLUMN `tapCount` INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
+/** 백로그 046: the short gloss a quiz option is made of; older rows have none and use the full meaning. */
+internal val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL("ALTER TABLE `saved_expressions` ADD COLUMN `shortMeaning` TEXT NOT NULL DEFAULT ''")
+    }
+}
+
 /** 백로그 021: one generated passage per day and mode, so re-entry stops paying for a new one. */
 internal val MIGRATION_3_4 = object : Migration(3, 4) {
     override fun migrate(database: SupportSQLiteDatabase) {

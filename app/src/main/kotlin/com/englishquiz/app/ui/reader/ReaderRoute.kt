@@ -33,7 +33,10 @@ fun ReaderRoute(
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
     val speech = remember(content, context, owner) {
-        ReaderSpeech(context).apply { cast = content.segments.map { it.speaker } }
+        ReaderSpeech(context).apply {
+            cast = content.segments.map { it.speaker }
+            genders = content.speakers
+        }
     }
     val state by speech.state.collectAsState()
     DisposableEffect(speech, owner) {

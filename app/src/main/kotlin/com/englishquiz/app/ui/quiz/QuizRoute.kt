@@ -3,6 +3,7 @@ package com.englishquiz.app.ui.quiz
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -19,34 +20,27 @@ import com.englishquiz.app.domain.game.ScorePolicy
 import com.englishquiz.app.domain.quiz.QuizBuilder
 import com.englishquiz.app.domain.quiz.QuizOption
 import com.englishquiz.app.domain.quiz.QuizQuestion
+import com.englishquiz.app.domain.quiz.QuizQuestionType
+import com.englishquiz.app.domain.quiz.typedAnswerHint
+import com.englishquiz.app.domain.quiz.typedAnswerMatches
 import com.englishquiz.app.domain.session.LearningSessionSummary
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private const val UNKNOWN_TOTAL = -1
 
 /**
- * Drives today's quiz (백로그 010). [todayContent] is the content the learner just read, or null
- * when entering the quiz without a fresh reading session. [baseSummary] carries counts the caller
- * already knows (newlySavedExpressionCount and learnedExpressionCount from the reading step);
- * this route fills in the quiz counts and hands the merged summary to [onFinished], including the
- * empty-quiz case.
+ * Drives today's quiz (백로그 010). [todayContent] is what was just read, or null outside a
+ * reading session; [baseSummary] carries the counts the caller knows, and the merged summary goes
+ * to [onFinished], the empty quiz included.
  *
- * The question list is built once per entry and is not rebuilt when the app returns to the
- * foreground: recording an answer moves that expression's next review into the future, so a
- * reload would hand back a different, shorter quiz and restart the learner at question one. After
- * the activity is recreated the list is rebuilt from the same saved seed; answers already recorded
- * have dropped out of it, so the learner resumes instead of starting over.
- *
- * [now] and [seed] are providers rather than plain values so a test can inject a fixed instant and
- * shuffle seed; each is read once and then kept across recreation.
- *
- * With [enrolExpressions] the passage's annotated expressions are all quizzed, tapped or not
- * (백로그 031): they are saved before the due list is read, and [onExpressionsEnrolled] hears how
- * many were new. A library passage passes false (백로그 026: read again, nothing stored).
- *
- * [questionSource] names the expressions to ask; the default is what is due now. The weekend boss
- * (백로그 041) passes its own larger set, a higher [maxQuestions] and a [pointsMultiplier] above 1.
+ * The list is built once per entry; after recreation it is rebuilt from the same saved seed, and
+ * answers already recorded have dropped out, so the learner resumes. Passage questions (백로그
+ * 042) are counted and skipped instead, and a recreation in the retry round (백로그 047) ends the
+ * quiz. [now]/[seed] are providers so a test can fix them. [questionSource], [maxQuestions],
+ * [pointsMultiplier] and [askCards] are the weekend boss's knobs (백로그 041/045).
  */
 @Composable
 fun QuizRoute(
@@ -63,6 +57,9 @@ fun QuizRoute(
         { repo, at -> repo.findDueExpressions(at) },
     maxQuestions: Int = QuizBuilder.DEFAULT_MAX_QUESTIONS,
     pointsMultiplier: Int = 1,
+    skipComprehension: suspend () -> Boolean = { false },
+    /** False for the boss (백로그 041): first meetings are asked, not shown as cards. */
+    askCards: Boolean = true,
 ) {
     val scope = rememberCoroutineScope()
     var retry by rememberSaveable { mutableIntStateOf(0) }
@@ -71,30 +68,56 @@ fun QuizRoute(
     var correctCount by rememberSaveable { mutableIntStateOf(0) }
     var masteredCount by rememberSaveable { mutableIntStateOf(0) }
     var totalQuestions by rememberSaveable { mutableIntStateOf(UNKNOWN_TOTAL) }
+    // Cards (백로그 045) and the retry round (백로그 047) are shown but not counted as questions.
+    var uncounted by rememberSaveable { mutableIntStateOf(0) }
+    var retries by rememberSaveable { mutableIntStateOf(0) }
     var finished by rememberSaveable { mutableStateOf(false) }
+    var retryRound by rememberSaveable { mutableStateOf(false) }
     var score by rememberSaveable(stateSaver = QuizScoreSaver) { mutableStateOf(QuizScore()) }
+    var comprehensionDone by rememberSaveable { mutableIntStateOf(0) }
 
     var loadState by remember { mutableStateOf<QuizLoadState>(QuizLoadState.Loading) }
     var index by remember { mutableIntStateOf(0) }
     var selectedOption by remember { mutableStateOf<QuizOption?>(null) }
     var recordFailed by remember { mutableStateOf(false) }
     var growth by remember { mutableStateOf<GrowthChange?>(null) }
+    var hint by remember { mutableStateOf<String?>(null) }
+    val wrong = remember { mutableListOf<QuizQuestion>() }
+    val speech = rememberQuizSpeech()
+    val speechState by speech.state.collectAsState()
+
+    fun finish() {
+        if (finished) return
+        finished = true
+        onFinished(
+            baseSummary.copy(
+                // Cards are expressions met today even though they are not questions.
+                learnedExpressionCount = (totalQuestions - retries).coerceAtLeast(0),
+                quizCorrectCount = correctCount,
+                quizQuestionCount = (totalQuestions - uncounted).coerceAtLeast(0),
+                masteredExpressionCount = masteredCount,
+                score = score.points,
+                maxCombo = score.maxCombo,
+            ),
+        )
+    }
 
     LaunchedEffect(repository, retry) {
         loadState = QuizLoadState.Loading
         try {
-            // Re-runs (retry, recreation) find the rows already there and report zero.
-            if (enrolExpressions && todayContent != null) {
-                onExpressionsEnrolled(enrolContentExpressions(todayContent, repository, nowEpochMillis))
+            val questions = loadQuizQuestions(
+                repository, todayContent, nowEpochMillis, shuffleSeed, enrolExpressions, onExpressionsEnrolled,
+                questionSource, maxQuestions, skipComprehension, comprehensionDone, askCards,
+            )
+            if (totalQuestions == UNKNOWN_TOTAL) {
+                totalQuestions = questions.size
+                uncounted = questions.count { it.type == QuizQuestionType.LEARN_CARD }
             }
-            val targets = questionSource(repository, nowEpochMillis)
-            val pool = repository.listSavedExpressions()
-            val questions = QuizBuilder.build(todayContent, targets, pool, shuffleSeed, maxQuestions).questions
-            if (totalQuestions == UNKNOWN_TOTAL) totalQuestions = questions.size
             index = 0
             selectedOption = null
             recordFailed = false
             loadState = QuizLoadState.Loaded(questions)
+            if (retryRound) finish()
         } catch (error: CancellationException) {
             throw error
         } catch (_: Exception) {
@@ -105,14 +128,18 @@ fun QuizRoute(
     val questions = (loadState as? QuizLoadState.Loaded)?.questions
 
     fun record(question: QuizQuestion, option: QuizOption) {
+        // A passage question belongs to no expression (백로그 042) and a retry was recorded the
+        // first time (백로그 047): nothing to write for either.
+        if (question.type == QuizQuestionType.COMPREHENSION || question.isRetry) return
         scope.launch {
-            // Writes are not ordered: a slow one may land after the learner has moved on. Its
-            // growth line and its failure notice belong to the card that is still showing, so
-            // both are only applied while that question is the current one.
+            // A slow write may land after the learner moved on: its growth line and failure
+            // notice apply only while that question is still the current one.
             val current = { questions?.getOrNull(index) == question }
             try {
-                val updated =
+                // The last answer's write must outlive the screen: "결과 보기" leaves at once.
+                val updated = withContext(NonCancellable) {
                     repository.recordAnswer(question.expression, option.isCorrect, nowEpochMillis)
+                }
                 if (option.isCorrect && updated.isMastered) masteredCount += 1
                 if (current()) {
                     growth = GrowthChange(
@@ -132,50 +159,78 @@ fun QuizRoute(
         }
     }
 
-    fun finish() {
-        if (finished) return
-        finished = true
-        onFinished(
-            baseSummary.copy(
-                quizCorrectCount = correctCount,
-                quizQuestionCount = totalQuestions.coerceAtLeast(0),
-                masteredExpressionCount = masteredCount,
-                score = score.points,
-                maxCombo = score.maxCombo,
-            ),
-        )
+    fun next() {
+        val list = questions ?: return
+        if (index + 1 < list.size) {
+            index += 1
+            selectedOption = null
+            recordFailed = false
+            growth = null
+            hint = null
+        } else if (!retryRound && wrong.isNotEmpty()) {
+            // Once through, the missed ones come back for one more go (백로그 047): no points,
+            // nothing recorded, just the chance to get it right while it is fresh.
+            val again = wrong.map { it.copy(isRetry = true) }
+            wrong.clear()
+            retryRound = true
+            uncounted += again.size
+            retries += again.size
+            totalQuestions += again.size
+            loadState = QuizLoadState.Loaded(list + again)
+            index += 1
+            selectedOption = null
+            recordFailed = false
+            growth = null
+            hint = null
+        } else {
+            finish()
+        }
     }
 
-    BackHandler(onBack = onBack)
+    fun answer(option: QuizOption) {
+        val question = questions?.getOrNull(index)
+        if (question == null || selectedOption != null) return
+        // Committed before the write, so a fast second tap cannot answer the same question twice.
+        selectedOption = option
+        recordFailed = false
+        growth = null
+        if (question.isRetry) {
+            score = score.copy(lastEarned = 0)
+            return
+        }
+        if (option.isCorrect) correctCount += 1 else wrong += question
+        score = ScorePolicy.answer(score, option.isCorrect, pointsMultiplier)
+        // Counted at answer time, so a recreation before "next" cannot re-ask it for points.
+        if (question.type == QuizQuestionType.COMPREHENSION) comprehensionDone += 1
+        record(question, option)
+    }
+
+    /**
+     * The card's two answers (백로그 045) move straight on. Neither scores and neither is judged:
+     * both bring the expression back tomorrow, where the ladder starts at 씨앗. ("알아요" is the
+     * learner's word, not the quiz's — the two-option question tomorrow is the quick check.)
+     */
+    fun card() {
+        val question = questions?.getOrNull(index) ?: return
+        scope.launch {
+            // The tap that answers the last card also leaves the screen; the write must land.
+            withContext(NonCancellable) { runCatching { repository.markSeen(question.expression, nowEpochMillis) } }
+        }
+        next()
+    }
+
+    BackHandler { speech.stop(); onBack() }
 
     QuizScreen(
-        state = quizUiState(loadState, questions, index, totalQuestions, selectedOption, recordFailed, score, growth),
-        onSelectOption = { option ->
+        state = quizUiState(loadState, questions, index, totalQuestions, selectedOption, recordFailed, score, growth, hint),
+        onSelectOption = ::answer,
+        // The typed text becomes an option of its own (백로그 043); an empty submission is "I don't know".
+        onSubmitTyped = { typed ->
             val question = questions?.getOrNull(index)
-            if (question != null && selectedOption == null) {
-                // The selection is committed before the write, so a fast second tap cannot record
-                // a second answer for the same question: QuizScreen disables the options as soon
-                // as selectedOption is set.
-                selectedOption = option
-                recordFailed = false
-                growth = null
-                if (option.isCorrect) correctCount += 1
-                score = ScorePolicy.answer(score, option.isCorrect, pointsMultiplier)
-                record(question, option)
-            }
+            if (question != null) answer(QuizOption(typed.trim(), typedAnswerMatches(typed, question.expression)))
         },
-        onNext = {
-            if (selectedOption != null) {
-                if (questions != null && index + 1 < questions.size) {
-                    index += 1
-                    selectedOption = null
-                    recordFailed = false
-                    growth = null
-                } else {
-                    finish()
-                }
-            }
-        },
+        onHint = { questions?.getOrNull(index)?.let { hint = typedAnswerHint(it.expression) } },
+        onNext = { if (selectedOption != null) next() },
         onRetryRecord = {
             val question = questions?.getOrNull(index)
             val option = selectedOption
@@ -186,6 +241,10 @@ fun QuizRoute(
         },
         onEmptyContinue = ::finish,
         onRetry = { retry++ },
-        onBack = onBack,
+        onBack = { speech.stop(); onBack() },
+        onKnown = ::card,
+        onUnknown = ::card,
+        speechReady = speechState.ready,
+        onPlay = { speech.play(listOf(it)) },
     )
 }

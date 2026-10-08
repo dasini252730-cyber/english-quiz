@@ -72,6 +72,8 @@ fun BossRoute(
             questionSource = { repo, at -> repo.listBossCandidates(at, BossPolicy.MAX_QUESTIONS) },
             maxQuestions = BossPolicy.MAX_QUESTIONS,
             pointsMultiplier = BossPolicy.POINTS_MULTIPLIER,
+            // A boss is a test, not a first meeting: every candidate is asked (백로그 045).
+            askCards = false,
         )
         else -> BossIntro(onStart = { started = true }, onBack = onExit)
     }

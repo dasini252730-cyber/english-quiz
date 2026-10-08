@@ -2,7 +2,7 @@
   "schema_version": 1,
   "title": "개인용 영어 학습 앱 MVP backlog",
   "source": "요구사항/요구사항.md",
-  "updated_at": "2026-10-02",
+  "updated_at": "2026-10-08",
   "statuses": {
     "todo": "할 일",
     "in_progress": "작업 중",
@@ -680,6 +680,149 @@
         "app",
         "game",
         "quiz"
+      ]
+    },
+    {
+      "id": "042",
+      "title": "지문 이해도 질문 2~3개 (생성 응답에 포함)",
+      "description": "2026-10-02 사용자 결정. Edge Function이 지문과 함께 comprehension 질문 2~3개(한국어 질문, 선택지 4개, 정답, 해설)를 같은 응답으로 돌려주고, 앱은 퀴즈 앞부분에 이 질문을 넣어 '흐름을 이해했는지'를 묻는다. 호출 횟수 변화 없음, 출력 토큰 약 10% 증가(사용자 수락).",
+      "details": "backlog/042.md",
+      "status": "review_needed",
+      "priority": "P1",
+      "estimate": "M",
+      "depends_on": [],
+      "labels": [
+        "app",
+        "server",
+        "quiz",
+        "game"
+      ]
+    },
+    {
+      "id": "043",
+      "title": "직접 입력 빈칸 퀴즈 (타이핑 생산 연습)",
+      "description": "2026-10-02 사용자 결정. 문맥 문장이 있고 이미 한 번 이상 맞힌 표현은 4지선다 대신 표현을 직접 입력한다. 대소문자·구두점·공백 무시 비교, 첫 글자 힌트, '모르겠어요' 포기 버튼. AI 비용 0.",
+      "details": "backlog/043.md",
+      "status": "review_needed",
+      "priority": "P1",
+      "estimate": "M",
+      "depends_on": [
+        "035"
+      ],
+      "labels": [
+        "app",
+        "quiz",
+        "game"
+      ]
+    },
+    {
+      "id": "044",
+      "title": "약점 보기: 자주 틀리는 표현·탭했는데 아직 씨앗인 표현",
+      "description": "2026-10-02 사용자 결정. 저장 표현에 탭 횟수(tapCount)를 기록(Room v7)하고 복습함에 '전체 / 자주 틀리는 / 탭했는데 아직 씨앗' 필터 칩을 둔다. 요구사항 19절의 '필터 없음'을 이 범위로 완화. AI 비용 0.",
+      "details": "backlog/044.md",
+      "status": "review_needed",
+      "priority": "P1",
+      "estimate": "S",
+      "depends_on": [
+        "036"
+      ],
+      "labels": [
+        "app",
+        "review",
+        "game"
+      ]
+    },
+    {
+      "id": "045",
+      "title": "성장 단계별 문제 사다리와 처음 등장 카드",
+      "description": "2026-10-07 사용자: 퀴즈가 너무 어렵다. 처음 보는 표현은 카드(표현·뜻·문장·발음, 알아요/모르겠어요)로 먼저 보여주고, 씨앗=2지선다, 새싹=4지선다, 잎=빈칸 고르기, 꽃=직접 입력으로 단계마다 한 칸씩만 어려워진다. 직접 입력은 연속 정답 3회부터.",
+      "details": "backlog/045.md",
+      "status": "review_needed",
+      "priority": "P0",
+      "estimate": "M",
+      "depends_on": [
+        "036",
+        "043"
+      ],
+      "labels": [
+        "app",
+        "quiz"
+      ]
+    },
+    {
+      "id": "046",
+      "title": "짧은 뜻으로 선택지 구성 (생성 응답에 shortMeaning)",
+      "description": "2026-10-07. 표현마다 12자 안팎 짧은 뜻을 생성 응답에 함께 받아(Room v8 shortMeaning) 뜻 고르기 선택지에 쓰고 긴 설명은 정답 화면에만. 짧은 뜻이 없는 옛 표현이 섞이면 길이로 답이 드러나지 않게 전부 긴 뜻으로.",
+      "details": "backlog/046.md",
+      "status": "review_needed",
+      "priority": "P0",
+      "estimate": "M",
+      "depends_on": [],
+      "labels": [
+        "app",
+        "server",
+        "quiz"
+      ]
+    },
+    {
+      "id": "047",
+      "title": "틀린 문제 퀴즈 끝에 한 번 되묻기",
+      "description": "2026-10-07. 틀린 문제는 그 퀴즈 마지막에 한 번 더 나온다(점수·기록 없음, '다시 풀기' 표시). 말해보카식 즉시 재학습.",
+      "details": "backlog/047.md",
+      "status": "review_needed",
+      "priority": "P1",
+      "estimate": "S",
+      "depends_on": [
+        "035"
+      ],
+      "labels": [
+        "app",
+        "quiz"
+      ]
+    },
+    {
+      "id": "048",
+      "title": "하루 새 표현 퀴즈 상한 5개",
+      "description": "2026-10-07. 한 번도 퀴즈에 나오지 않은 표현은 하루 5개까지만 묻고 나머지는 다음 날로. 복습 표현을 먼저 채운다.",
+      "details": "backlog/048.md",
+      "status": "review_needed",
+      "priority": "P1",
+      "estimate": "S",
+      "depends_on": [],
+      "labels": [
+        "app",
+        "quiz"
+      ]
+    },
+    {
+      "id": "049",
+      "title": "듣고 고르기 문제 (TTS)",
+      "description": "2026-10-07 제안, 보류: 사다리 체감 확인 후 진행. 기존 TTS로 문장을 읽어주고 들린 표현을 고르는 유형을 새싹과 잎 사이에 넣는다.",
+      "details": "backlog/049.md",
+      "status": "todo",
+      "priority": "P2",
+      "estimate": "M",
+      "depends_on": [
+        "045"
+      ],
+      "labels": [
+        "app",
+        "quiz"
+      ]
+    },
+    {
+      "id": "050",
+      "title": "화자 성별을 생성 응답에 받아 목소리 배정",
+      "description": "2026-10-07 사용자 관찰: 스토리에서 남녀 목소리가 바뀜. 지금은 등장 순서로 첫 화자=여성 목소리, 둘째=남성 목소리를 배정하고 이름의 성별은 모른다. Edge Function이 segments 화자별 gender(female/male/narrator)를 함께 돌려주면 SpeakerVoices가 그에 맞춰 배정한다. 출력 토큰 소폭 증가. 사용자 확인 후 진행.",
+      "details": "backlog/050.md",
+      "status": "review_needed",
+      "priority": "P2",
+      "estimate": "S",
+      "depends_on": [],
+      "labels": [
+        "app",
+        "server",
+        "tts"
       ]
     }
   ]

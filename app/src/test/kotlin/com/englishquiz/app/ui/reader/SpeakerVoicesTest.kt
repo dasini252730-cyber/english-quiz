@@ -1,5 +1,6 @@
 package com.englishquiz.app.ui.reader
 
+import com.englishquiz.app.data.ai.SpeakerGender
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
@@ -20,6 +21,20 @@ class SpeakerVoicesTest {
         assertNotEquals(plan.getValue("Anna").voiceName, plan.getValue("Tom").voiceName)
         assertEquals(1f, plan.getValue("Anna").pitch)
         assertEquals(1f, plan.getValue("Tom").pitch)
+    }
+
+    @Test
+    fun thePassagesOwnGendersBeatTheOrderOfAppearance() {
+        // 백로그 050: Tom speaks first but is a man; the narrator takes what is left.
+        val plan = SpeakerVoices.assign(
+            listOf("Tom", "Narrator", "Anna"),
+            listOf(voice("en-US-SMTx01"), voice("en-US-SMTm00"), voice("en-US-SMTf00")),
+            mapOf("Tom" to SpeakerGender.MALE, "Anna" to SpeakerGender.FEMALE, "Narrator" to SpeakerGender.NARRATOR),
+        )
+
+        assertEquals("en-US-SMTm00", plan.getValue("Tom").voiceName)
+        assertEquals("en-US-SMTf00", plan.getValue("Anna").voiceName)
+        assertEquals("en-US-SMTx01", plan.getValue("Narrator").voiceName)
     }
 
     @Test

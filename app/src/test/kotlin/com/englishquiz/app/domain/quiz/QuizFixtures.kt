@@ -8,19 +8,30 @@ internal object QuizFixtures {
     const val SEED = 42L
     const val DAY = 24 * 60 * 60 * 1000L
 
+    /**
+     * By default an expression already reviewed once and at the 잎 stage (백로그 045): a blank by
+     * choice when it has a sentence, four meanings when it has not. [reviewed] false makes it a
+     * first meeting, which is a card rather than a question.
+     */
     fun expression(
         display: String,
         meaning: String,
         contextSentence: String = "",
         nextReviewAt: Long? = null,
+        consecutiveCorrect: Int = 2,
+        reviewed: Boolean = true,
+        shortMeaning: String = "",
     ) = SavedExpressionEntity(
         id = display.hashCode().toLong(),
         normalizedExpression = display.lowercase(),
         displayExpression = display,
         contextMeaning = meaning,
         firstSavedAtEpochMillis = NOW,
+        lastReviewedAtEpochMillis = if (reviewed) NOW - DAY else null,
         nextReviewAtEpochMillis = nextReviewAt,
         contextSentence = contextSentence,
+        consecutiveCorrectCount = consecutiveCorrect,
+        shortMeaning = shortMeaning,
     )
 
     /** Deliberately disjoint from every expression the tests use as a target or as content. */

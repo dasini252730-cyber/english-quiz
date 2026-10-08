@@ -1,5 +1,6 @@
 package com.englishquiz.app.domain.quiz
 
+import com.englishquiz.app.data.ai.ComprehensionQuestion
 import com.englishquiz.app.data.ai.ContentExpression
 import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.data.ai.ContentSegment
@@ -50,6 +51,125 @@ class QuizBuilderTest {
         val result = QuizBuilder.build(null, candidates, candidates, SEED)
 
         assertEquals(10, result.questions.size)
+    }
+
+    @Test
+    fun theLadderGoesOneStepHarderPerGrowthStage() {
+        // 백로그 045: never asked → card; 씨앗 → two meanings; 새싹 → four; 잎 → blank by choice; 꽃 → typed.
+        val never = expression("brush up", "다시 익히다", contextSentence = "I need to brush up.", reviewed = false)
+        val seed = expression("sketchy", "수상한", contextSentence = "That sounds sketchy.", consecutiveCorrect = 0)
+        val sprout = expression("hang out", "놀다", contextSentence = "Let's hang out.", consecutiveCorrect = 1)
+        val leaf = expression("call it a day", "그만하다", contextSentence = "Let's call it a day.", consecutiveCorrect = 2)
+        val flower = expression("piece of cake", "식은 죽 먹기", contextSentence = "It's a piece of cake.", consecutiveCorrect = 3)
+        val all = listOf(never, seed, sprout, leaf, flower)
+
+        val questions = QuizBuilder.build(null, all, all + DISTRACTORS, SEED).questions.associateBy { it.expression }
+
+        val card = questions.getValue("brush up")
+        assertEquals(QuizQuestionType.LEARN_CARD, card.type)
+        assertEquals("I need to brush up.", card.questionText)
+        assertTrue(card.options.isEmpty())
+        assertEquals(QuizQuestionType.MULTIPLE_CHOICE, questions.getValue("sketchy").type)
+        assertEquals(2, questions.getValue("sketchy").options.size)
+        assertEquals(QuizQuestionType.MULTIPLE_CHOICE, questions.getValue("hang out").type)
+        assertEquals(4, questions.getValue("hang out").options.size)
+        assertEquals(QuizQuestionType.FILL_IN_BLANK, questions.getValue("call it a day").type)
+        val typed = questions.getValue("piece of cake")
+        assertEquals(QuizQuestionType.TYPED_BLANK, typed.type)
+        assertEquals("It's a ____.", typed.questionText)
+        assertEquals(listOf(QuizOption("piece of cake", true)), typed.options)
+    }
+
+    @Test
+    fun withoutASentenceTheBlankStepsFallBackToFourMeanings() {
+        val leaf = expression("sketchy", "수상한", consecutiveCorrect = 2)
+        val flower = expression("hang out", "놀다", consecutiveCorrect = 3)
+
+        val questions = QuizBuilder.build(null, listOf(leaf, flower), listOf(leaf, flower) + DISTRACTORS, SEED).questions
+
+        assertTrue(questions.all { it.type == QuizQuestionType.MULTIPLE_CHOICE && it.options.size == 4 })
+    }
+
+    @Test
+    fun onlyFiveFirstMeetingsADayAndReviewsComeFirst() {
+        // 백로그 048: eight expressions never asked before, three due reviews: 3 reviews + 5 cards.
+        val fresh = (1..8).map { expression("new$it", "뜻$it", reviewed = false) }
+        val reviews = (1..3).map { expression("old$it", "옛뜻$it", nextReviewAt = NOW - it * DAY) }
+
+        val questions = QuizBuilder.build(null, fresh + reviews, fresh + reviews + DISTRACTORS, SEED).questions
+
+        assertEquals(8, questions.size)
+        assertEquals(5, questions.count { it.type == QuizQuestionType.LEARN_CARD })
+        assertTrue(reviews.all { review -> questions.any { it.expression == review.displayExpression } })
+    }
+
+    @Test
+    fun theBossAsksFirstMeetingsAsQuestionsWithNoDailyCap() {
+        val fresh = (1..8).map { expression("new$it", "뜻$it", reviewed = false, consecutiveCorrect = 0) }
+
+        val questions = QuizBuilder.build(null, fresh, fresh + DISTRACTORS, SEED, maxQuestions = 15, askCards = false).questions
+
+        assertEquals(8, questions.size)
+        assertTrue(questions.all { it.type == QuizQuestionType.MULTIPLE_CHOICE && it.options.size == 2 })
+    }
+
+    @Test
+    fun cardsShownEarlierTodayReduceTheDaysAllowance() {
+        val fresh = (1..8).map { expression("new$it", "뜻$it", reviewed = false) }
+
+        val questions = QuizBuilder.build(null, fresh, fresh + DISTRACTORS, SEED, firstMeetingsShownToday = 3).questions
+
+        assertEquals(2, questions.count { it.type == QuizQuestionType.LEARN_CARD })
+        // A row a card left behind today is recognised as such; a judged row is not.
+        val seen = expression("seen", "뜻", consecutiveCorrect = 0).copy(lastReviewedAtEpochMillis = NOW)
+        assertTrue(QuizBuilder.isFirstMeetingShown(seen, NOW - 1, NOW + 1))
+        assertTrue(!QuizBuilder.isFirstMeetingShown(seen.copy(consecutiveCorrectCount = 1), NOW - 1, NOW + 1))
+        assertTrue(!QuizBuilder.isFirstMeetingShown(seen, NOW + 1, NOW + 2))
+    }
+
+    @Test
+    fun shortGlossesMakeTheOptionsOnlyWhenEveryOptionHasOne() {
+        // 백로그 046: short for all, or long for all — never a mix that gives the answer away.
+        val target = expression("sketchy", "수상한 느낌이 드는 것을 말해요", consecutiveCorrect = 1, shortMeaning = "수상한")
+        val shortPool = listOf(
+            expression("hang out", "친구와 시간을 보내다", shortMeaning = "놀다"),
+            expression("call it a day", "오늘 일을 여기서 끝내다", shortMeaning = "그만하다"),
+            expression("on the fence", "결정을 못 하고 있다", shortMeaning = "망설이는"),
+        )
+        val withShort = QuizBuilder.build(null, listOf(target), listOf(target) + shortPool, SEED).questions.single()
+        assertEquals(setOf("수상한", "놀다", "그만하다", "망설이는"), withShort.options.map { it.text }.toSet())
+
+        // One distractor without a gloss: not enough short ones for four options, so all long.
+        val mixedPool = shortPool.take(2) + expression("piece of cake", "아주 쉬운 일", shortMeaning = "")
+        val withLong = QuizBuilder.build(null, listOf(target), listOf(target) + mixedPool, SEED).questions.single()
+        assertTrue(withLong.options.any { it.text == "수상한 느낌이 드는 것을 말해요" })
+        assertTrue(withLong.options.none { it.text == "수상한" })
+    }
+
+    @Test
+    fun thePassagesOwnQuestionsComeFirstAndCountOutsideTheCap() {
+        // 백로그 042: comprehension questions open the quiz and belong to no expression.
+        val content = LearningContent(
+            title = "A cafe",
+            mode = ContentMode.CONVERSATION,
+            segments = listOf(ContentSegment("Emma", "That sounds sketchy.")),
+            expressions = listOf(ContentExpression("sketchy", "수상한", 0, 12, 19)),
+            comprehension = listOf(
+                ComprehensionQuestion("Emma는 왜?", listOf("의심", "기쁨", "졸림", "배고픔"), 0, "수상하다고 했다."),
+                ComprehensionQuestion("다음 대답은?", listOf("Sure.", "No way.", "Why?", "Later."), 1, ""),
+            ),
+        )
+        val candidates = (1..12).map { expression("word$it", "뜻$it") }
+
+        val questions = QuizBuilder.build(content, candidates, candidates, SEED).questions
+
+        assertEquals(12, questions.size)
+        assertEquals(QuizQuestionType.COMPREHENSION, questions[0].type)
+        assertEquals("Emma는 왜?", questions[0].questionText)
+        assertEquals("", questions[0].expression)
+        assertEquals(listOf(QuizOption("의심", true), QuizOption("기쁨", false), QuizOption("졸림", false), QuizOption("배고픔", false)), questions[0].options)
+        assertEquals("지문의 흐름을 떠올려 보세요.", questions[1].explanation)
+        assertTrue(questions.drop(2).none { it.type == QuizQuestionType.COMPREHENSION })
     }
 
     @Test

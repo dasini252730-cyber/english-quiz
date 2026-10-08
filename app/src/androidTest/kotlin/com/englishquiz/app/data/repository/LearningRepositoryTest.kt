@@ -38,6 +38,45 @@ class LearningRepositoryTest {
     }
 
     @Test
+    fun aTapCountsEveryLookUpButPassageEnrolmentCountsNone() = runBlocking {
+        val db = LearningDatabase.create(context, DATABASE_NAME)
+        database = db
+        val repository = LearningRepository(db)
+
+        // 백로그 044: the Reader's save is a tap; the quiz's passage-wide enrolment is not.
+        repository.saveExpression("sketchy", "수상한", 100, "That sounds sketchy.")
+        repository.saveExpression("sketchy", "수상한", 200, "That sounds sketchy.")
+        repository.saveExpressionIfNew("hang out", "놀다", 100, "Let's hang out.")
+        repository.saveExpressionIfNew("hang out", "놀다", 200, "Let's hang out.")
+
+        assertEquals(2, db.learningDao().findSavedExpression("sketchy")?.tapCount)
+        assertEquals(0, db.learningDao().findSavedExpression("hang out")?.tapCount)
+    }
+
+    @Test
+    fun aCardSeenIsScheduledForTomorrowWithNothingHeldAgainstIt() = runBlocking {
+        val db = LearningDatabase.create(context, DATABASE_NAME)
+        database = db
+        val repository = LearningRepository(db)
+        repository.saveExpressionIfNew("sketchy", "수상한", 100, "That sounds sketchy.", shortMeaning = "수상한")
+
+        val seen = repository.markSeen("sketchy", seenAtEpochMillis = 1_000L)
+
+        // 백로그 045/046: scheduled, not judged; and the gloss the passage gave is kept.
+        assertEquals(1_000L, seen.lastReviewedAtEpochMillis)
+        assertEquals(1_000L + 24 * 60 * 60 * 1000L, seen.nextReviewAtEpochMillis)
+        assertEquals(0, seen.incorrectCount)
+        assertEquals(0, seen.consecutiveCorrectCount)
+        assertEquals("수상한", seen.shortMeaning)
+
+        // A row saved before the gloss existed takes the gloss a later passage brings (백로그 046).
+        repository.saveExpressionIfNew("hang out", "놀다", 100, "Let's hang out.")
+        repository.saveExpressionIfNew("hang out", "놀다", 200, "Let's hang out.", shortMeaning = "놀다")
+        repository.saveExpression("hang out", "놀다", 300, "Let's hang out.", shortMeaning = "다른 뜻")
+        assertEquals("놀다", db.learningDao().findSavedExpression("hang out")?.shortMeaning)
+    }
+
+    @Test
     fun duplicateExpressionKeepsExistingReviewStateAfterDatabaseReopen() = runBlocking {
         val firstDatabase = LearningDatabase.create(context, DATABASE_NAME)
         database = firstDatabase

@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.englishquiz.app.data.local.SavedExpressionEntity
 import com.englishquiz.app.domain.game.GrowthStage
+import com.englishquiz.app.domain.review.ReviewFilter
 import com.englishquiz.app.ui.reader.SpeechState
 import com.englishquiz.app.ui.theme.MongleButton
 import com.englishquiz.app.ui.theme.MongleCard
@@ -38,8 +39,9 @@ fun ReviewScreen(
     onStop: () -> Unit,
     onRetry: () -> Unit,
     onBack: () -> Unit,
+    onFilter: (ReviewFilter) -> Unit = {},
 ) {
-    val count = (state as? ReviewUiState.Ready)?.expressions?.size
+    val ready = state as? ReviewUiState.Ready
     Column(Modifier.fillMaxSize().background(MongleColor.Cream).mongleScreenInsets()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
@@ -51,15 +53,18 @@ fun ReviewScreen(
                 style = MaterialTheme.typography.headlineMedium,
                 modifier = Modifier.weight(1f).padding(start = 4.dp),
             )
-            count?.let {
+            ready?.let {
                 Text(
-                    "${it}개 · 최근 저장순",
+                    "${it.shown.size}개 · ${it.filter.orderLabel}",
                     style = MaterialTheme.typography.labelLarge,
                     color = MongleColor.InkMuted,
                     modifier = Modifier.padding(end = 8.dp),
                 )
             }
         }
+        // 백로그 044: the weak-spot views. Shown once the list is known, so an empty filter result
+        // can still be switched away from.
+        ready?.let { ReviewFilterChips(it.filter, onFilter) }
         speechState.error?.let {
             Text(
                 it,
@@ -97,16 +102,16 @@ fun ReviewScreen(
                     }
                 }
                 is ReviewUiState.Ready -> {
-                    if (state.expressions.isEmpty()) {
+                    if (state.shown.isEmpty()) {
                         item {
                             Text(
-                                "아직 저장한 표현이 없어요. Conversation이나 Story에서 모르는 표현의 뜻을 확인하면 자동으로 저장돼요.",
+                                emptyMessage(state),
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MongleColor.InkMuted,
                             )
                         }
                     }
-                    items(state.expressions, key = { it.id }) { expression ->
+                    items(state.shown, key = { it.id }) { expression ->
                         ReviewExpressionCard(expression, speechState.ready, onPlay)
                     }
                 }
@@ -164,6 +169,13 @@ private fun ReviewExpressionCard(
             )
         }
     }
+}
+
+private fun emptyMessage(state: ReviewUiState.Ready): String = when {
+    state.expressions.isEmpty() ->
+        "아직 저장한 표현이 없어요. Conversation이나 Story에서 모르는 표현의 뜻을 확인하면 자동으로 저장돼요."
+    state.filter == ReviewFilter.OFTEN_WRONG -> "틀린 표현이 없어요. 퀴즈에서 틀리면 여기에 모여요."
+    else -> "읽다가 탭해서 뜻을 봤는데 아직 한 번도 못 맞힌 표현이 없어요."
 }
 
 /**

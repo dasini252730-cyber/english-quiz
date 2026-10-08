@@ -1,5 +1,7 @@
 package com.englishquiz.app.ui.reader
 
+import com.englishquiz.app.data.ai.SpeakerGender
+
 /** One voice the engine offers, reduced to what the assignment needs. */
 internal data class VoiceOption(val name: String, val requiresNetwork: Boolean, val quality: Int)
 
@@ -32,24 +34,51 @@ internal object SpeakerVoices {
     private val FEMALE_MARKERS = Regex("female|smtf|[#_-]f\\d")
     private val MALE_MARKERS = Regex("male|smtm|[#_-]m\\d")
 
-    fun assign(speakers: List<String>, voices: List<VoiceOption>): Map<String, VoiceChoice> {
+    /**
+     * [genders] is what the passage says about its speakers (백로그 050). A speaker it names gets
+     * the first voice of that gender; the rest are handed out in order of appearance as before,
+     * so a passage from before 050, or a model that named nobody, sounds as it did.
+     */
+    fun assign(
+        speakers: List<String>,
+        voices: List<VoiceOption>,
+        genders: Map<String, SpeakerGender> = emptyMap(),
+    ): Map<String, VoiceChoice> {
         val distinct = speakers.distinct()
         // A single narrator is the story mode of 요구사항 13절: it keeps the engine's own voice.
         if (distinct.size <= 1) return distinct.associateWith { VoiceChoice(null, DEFAULT_PITCH) }
-        val ordered = orderForContrast(
-            voices.filter { !it.requiresNetwork && !it.isGeneric }
-                .sortedWith(compareByDescending<VoiceOption> { it.quality }.thenBy { it.name }),
-        )
+        val usable = voices.filter { !it.requiresNetwork && !it.isGeneric }
+            .sortedWith(compareByDescending<VoiceOption> { it.quality }.thenBy { it.name })
+        val ordered = orderForContrast(usable)
+        // Known genders first: a woman takes the best female voice, a man the best male one. The
+        // narrator and anyone unnamed take the remaining voices in order of appearance.
+        val taken = mutableSetOf<String>()
+        val named = distinct.mapNotNull { speaker ->
+            val wanted = when (genders[speaker]) {
+                SpeakerGender.FEMALE -> Gender.FEMALE
+                SpeakerGender.MALE -> Gender.MALE
+                else -> return@mapNotNull null
+            }
+            val voice = usable.firstOrNull { it.gender() == wanted && it.name !in taken } ?: return@mapNotNull null
+            taken += voice.name
+            speaker to voice
+        }.toMap()
+        val remaining = ordered.filter { it.name !in taken }
+        var next = 0
         return distinct.withIndex().associate { (index, speaker) ->
             val fallback = fallbackPitch(index)
+            val chosen = named[speaker]
             speaker to when {
-                ordered.isEmpty() -> VoiceChoice(null, fallback, fallback)
-                index < ordered.size -> VoiceChoice(ordered[index].name, DEFAULT_PITCH, fallback)
-                else -> VoiceChoice(
-                    ordered[index % ordered.size].name,
-                    fallbackPitch(index / ordered.size),
-                    fallback,
-                )
+                chosen != null -> VoiceChoice(chosen.name, DEFAULT_PITCH, fallback)
+                remaining.isEmpty() -> VoiceChoice(null, fallback, fallback)
+                else -> {
+                    val slot = next++
+                    if (slot < remaining.size) {
+                        VoiceChoice(remaining[slot].name, DEFAULT_PITCH, fallback)
+                    } else {
+                        VoiceChoice(remaining[slot % remaining.size].name, fallbackPitch(slot / remaining.size), fallback)
+                    }
+                }
             }
         }
     }
