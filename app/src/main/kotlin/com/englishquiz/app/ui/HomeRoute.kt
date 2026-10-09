@@ -16,6 +16,7 @@ import com.englishquiz.app.ui.badge.BadgeRoute
 import com.englishquiz.app.ui.boss.BossRoute
 import com.englishquiz.app.ui.library.LibraryRoute
 import com.englishquiz.app.ui.library.LibrarySessionRoute
+import com.englishquiz.app.ui.review.ReviewQuizRoute
 import com.englishquiz.app.ui.review.ReviewRoute
 import com.englishquiz.app.ui.session.LearningSessionRoute
 import com.englishquiz.app.ui.session.SessionStatusScreen
@@ -28,6 +29,7 @@ internal enum class HomeDestination(val title: String) {
     CONVERSATION("Conversation"),
     STORY("Story"),
     REVIEW("복습함"),
+    REVIEW_QUIZ("복습 연습"),
     LIBRARY("지난 이야기"),
     LIBRARY_SESSION("다시 읽기"),
     BADGES("배지"),
@@ -56,6 +58,8 @@ internal fun LearningHome(
     val goHome = { destinationName = HomeDestination.HOME.name }
     // The library passage chosen for a re-read, as "<learningDate>|<mode>" so it survives recreation.
     var libraryPick by rememberSaveable { mutableStateOf<String?>(null) }
+    // The rows the review box was showing when "퀴즈 풀기" was tapped (백로그 052), as "id,id,…".
+    var reviewQuizIds by rememberSaveable { mutableStateOf("") }
 
     when (destination) {
         HomeDestination.HOME -> LearningHomeSummary(
@@ -65,7 +69,15 @@ internal fun LearningHome(
             onLevelChange = onLevelChange,
             onSuggestionAnswer = onSuggestionAnswer,
         ) { destinationName = it.name }
-        HomeDestination.REVIEW -> ReviewRoute(repository, goHome)
+        HomeDestination.REVIEW -> ReviewRoute(repository, goHome) { ids ->
+            reviewQuizIds = ids.joinToString(",")
+            destinationName = HomeDestination.REVIEW_QUIZ.name
+        }
+        HomeDestination.REVIEW_QUIZ -> ReviewQuizRoute(
+            repository = repository,
+            expressionIds = reviewQuizIds.split(",").mapNotNull { it.toLongOrNull() }.toSet(),
+            onDone = { destinationName = HomeDestination.REVIEW.name },
+        )
         HomeDestination.BADGES -> if (gameRepository != null) {
             BadgeRoute(repository, gameRepository, goHome, ::todayIso)
         } else {

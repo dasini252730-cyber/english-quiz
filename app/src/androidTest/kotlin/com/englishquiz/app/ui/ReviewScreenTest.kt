@@ -129,6 +129,31 @@ class ReviewScreenTest {
     }
 
     @Test
+    fun theQuizButtonSendsTheShownRowsAndHidesOnAnEmptyList() {
+        val asked = mutableListOf<List<Long>>()
+        compose.setContent {
+            EnglishQuizTheme {
+                ReviewScreen(
+                    ReviewUiState.Ready(listOf(newlySaved, inProgress.copy(incorrectCount = 1)), filter = ReviewFilter.OFTEN_WRONG),
+                    SpeechState(ready = true), {}, {}, {}, {},
+                    onQuiz = { asked += it },
+                )
+            }
+        }
+
+        // 백로그 052: only the filtered rows go to the practice quiz.
+        compose.onNodeWithText("이 목록으로 퀴즈 풀기 (최대 1문제)").performClick()
+        assertEquals(listOf(listOf(2L)), asked)
+    }
+
+    @Test
+    fun theQuizButtonIsAbsentWhenNothingIsShown() {
+        show(ReviewUiState.Ready(listOf(mastered), filter = ReviewFilter.OFTEN_WRONG))
+
+        assertTrue(compose.onAllNodesWithText("퀴즈 풀기", substring = true).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
     fun tappingAChipReportsTheFilter() {
         val chosen = mutableListOf<ReviewFilter>()
         compose.setContent {

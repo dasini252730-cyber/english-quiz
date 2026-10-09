@@ -4,6 +4,7 @@ import com.englishquiz.app.domain.game.GrowthStage
 import com.englishquiz.app.domain.game.QuizScore
 import com.englishquiz.app.domain.quiz.QuizOption
 import com.englishquiz.app.domain.quiz.QuizQuestion
+import com.englishquiz.app.domain.session.LearningSessionSummary
 
 /** UI-facing quiz state. [QuizScreen] renders each variant; see that file for the layout. */
 sealed interface QuizUiState {
@@ -26,6 +27,10 @@ sealed interface QuizUiState {
         val growth: GrowthChange? = null,
         /** The first-letter hint of a typed blank once asked for (백로그 043). */
         val hint: String? = null,
+        /** False for a practice quiz from the review box (백로그 052): no points, no score row. */
+        val scoring: Boolean = true,
+        /** True when missed questions will follow the last one (백로그 047), so the button says so. */
+        val retryPending: Boolean = false,
     ) : QuizUiState
 }
 
@@ -50,6 +55,8 @@ internal fun quizUiState(
     score: QuizScore,
     growth: GrowthChange?,
     hint: String? = null,
+    scoring: Boolean = true,
+    retryPending: Boolean = false,
 ): QuizUiState = when (loadState) {
     QuizLoadState.Loading -> QuizUiState.Loading
     QuizLoadState.Error -> QuizUiState.Error
@@ -71,7 +78,30 @@ internal fun quizUiState(
                 score = score,
                 growth = growth,
                 hint = hint,
+                scoring = scoring,
+                retryPending = retryPending,
             )
         }
     }
 }
+
+/**
+ * This quiz's result written into the session line [QuizRoute] hands back. Cards (백로그 045) and
+ * the retry round (백로그 047) are shown but not counted as questions; cards still count as
+ * expressions met today.
+ */
+internal fun LearningSessionSummary.withQuizResult(
+    totalQuestions: Int,
+    retries: Int,
+    uncounted: Int,
+    correctCount: Int,
+    masteredCount: Int,
+    score: QuizScore,
+): LearningSessionSummary = copy(
+    learnedExpressionCount = (totalQuestions - retries).coerceAtLeast(0),
+    quizCorrectCount = correctCount,
+    quizQuestionCount = (totalQuestions - uncounted).coerceAtLeast(0),
+    masteredExpressionCount = masteredCount,
+    score = score.points,
+    maxCombo = score.maxCombo,
+)

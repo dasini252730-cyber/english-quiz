@@ -2,7 +2,7 @@
   "schema_version": 1,
   "title": "개인용 영어 학습 앱 MVP backlog",
   "source": "요구사항/요구사항.md",
-  "updated_at": "2026-10-08",
+  "updated_at": "2026-10-09",
   "statuses": {
     "todo": "할 일",
     "in_progress": "작업 중",
@@ -838,6 +838,55 @@
         "server",
         "app",
         "bug"
+      ]
+    },
+    {
+      "id": "052",
+      "title": "복습함 목록으로 바로 퀴즈 풀기 (필터 포함)",
+      "description": "2026-10-08 사용자 요청. 복습함의 현재 목록(전체/자주 틀리는/탭했는데 아직 씨앗)에서 '퀴즈 풀기' 버튼으로 연습 퀴즈를 연다. 정답·오답은 표현의 복습 상태(성장 단계)에 기록하지만 점수·콤보·학습 세션(스트릭·미션·레벨)에는 넣지 않는다(연습으로 점수 쌓기 방지). 끝나면 간단한 결과(맞힌 수)와 복습함으로 돌아가기. 최대 20문제, 기존 사다리·카드·되묻기 그대로.",
+      "details": "backlog/052.md",
+      "status": "review_needed",
+      "priority": "P1",
+      "estimate": "M",
+      "depends_on": [
+        "044",
+        "045"
+      ],
+      "labels": [
+        "app",
+        "review",
+        "quiz"
+      ]
+    },
+    {
+      "id": "053",
+      "title": "스토리·대화 취향 지침 반영 (프롬프트 전면 교체)",
+      "description": "2026-10-08 사용자 지침: 독자 설정(심리·관계 관찰, 미스터리·여행·역사, 드라이한 유머와 반전, 신파·잔인함 배제, 입체적 인물), 소재 30개 목록, 전 세계 여행 배경과 현지 문화, 대화는 실제 여행 상황 목록과 상황별 표현 선택, 최상위 원칙 '영어 공부라는 사실을 잊게 하라'. Edge Function 프롬프트를 이 지침으로 교체.",
+      "details": "backlog/053.md",
+      "status": "review_needed",
+      "priority": "P0",
+      "estimate": "M",
+      "depends_on": [],
+      "labels": [
+        "server",
+        "content"
+      ]
+    },
+    {
+      "id": "054",
+      "title": "Story와 Conversation 연결 + 다음 편이 궁금한 연속성",
+      "description": "2026-10-08 사용자 지침. 지문마다 영어 줄거리(synopsis)를 받아 저장하고, 대화 생성 시 같은 날 스토리의 줄거리·인물·장소를 넘겨 그 상황을 연습하게 하며, 스토리 생성 시 직전 스토리 줄거리를 넘겨 이어지거나 참조하게 한다(인물 반복 가능). 선생성도 같은 순서(스토리→대화).",
+      "details": "backlog/054.md",
+      "status": "review_needed",
+      "priority": "P0",
+      "estimate": "M",
+      "depends_on": [
+        "053"
+      ],
+      "labels": [
+        "server",
+        "app",
+        "content"
       ]
     }
   ]

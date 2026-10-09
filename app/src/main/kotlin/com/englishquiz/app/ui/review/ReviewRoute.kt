@@ -38,7 +38,12 @@ sealed interface ReviewUiState {
 }
 
 @Composable
-fun ReviewRoute(repository: LearningRepository, onBack: () -> Unit) {
+fun ReviewRoute(
+    repository: LearningRepository,
+    onBack: () -> Unit,
+    /** Opens a practice quiz over the shown rows (백로그 052). */
+    onQuiz: (List<Long>) -> Unit = {},
+) {
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
     var retry by remember { mutableIntStateOf(0) }
@@ -79,5 +84,6 @@ fun ReviewRoute(repository: LearningRepository, onBack: () -> Unit) {
         onRetry = { retry++ },
         onBack = leave,
         onFilter = { filterName = it.name },
+        onQuiz = { ids -> speech.stop(); onQuiz(ids) },
     )
 }

@@ -97,7 +97,7 @@ private fun QuizHeader(state: QuizUiState, onBack: () -> Unit) {
             )
         }
     }
-    if (progress != null) QuizScoreRow(progress.score)
+    if (progress != null && progress.scoring) QuizScoreRow(progress.score)
 }
 
 /** Points so far and the current combo (백로그 035); the combo chip only shows during a run. */

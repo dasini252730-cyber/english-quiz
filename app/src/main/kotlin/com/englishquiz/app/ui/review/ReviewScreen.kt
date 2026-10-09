@@ -40,6 +40,8 @@ fun ReviewScreen(
     onRetry: () -> Unit,
     onBack: () -> Unit,
     onFilter: (ReviewFilter) -> Unit = {},
+    /** Practice the shown list (백로그 052); receives the ids of the rows on screen. */
+    onQuiz: (List<Long>) -> Unit = {},
 ) {
     val ready = state as? ReviewUiState.Ready
     Column(Modifier.fillMaxSize().background(MongleColor.Cream).mongleScreenInsets()) {
@@ -65,6 +67,14 @@ fun ReviewScreen(
         // 백로그 044: the weak-spot views. Shown once the list is known, so an empty filter result
         // can still be switched away from.
         ready?.let { ReviewFilterChips(it.filter, onFilter) }
+        ready?.shown?.takeIf { it.isNotEmpty() }?.let { shown ->
+            MongleButton(
+                text = "이 목록으로 퀴즈 풀기 (최대 ${minOf(shown.size, PRACTICE_MAX_QUESTIONS)}문제)",
+                onClick = { onQuiz(shown.map { it.id }) },
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
+                height = 48.dp,
+            )
+        }
         speechState.error?.let {
             Text(
                 it,

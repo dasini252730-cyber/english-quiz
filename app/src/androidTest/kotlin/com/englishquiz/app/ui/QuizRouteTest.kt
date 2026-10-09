@@ -26,6 +26,7 @@ import com.englishquiz.app.ui.theme.EnglishQuizTheme
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -82,7 +83,10 @@ class QuizRouteTest {
 
         awaitText("2 / 2").assertIsDisplayed()
         awaitText("수상한").performScrollTo().performClick()
-        // The final question offers the result screen rather than another question.
+        // One answer was wrong, so the missed question comes back once (백로그 047) before the result.
+        awaitText("틀린 문제 다시 풀기").performScrollTo().performClick()
+        awaitText("3 / 3").assertIsDisplayed()
+        awaitText("놀다").performScrollTo().performClick()
         awaitText("결과 보기").performScrollTo().performClick()
 
         compose.waitUntil(TIMEOUT_MILLIS) { summary != null }
@@ -191,7 +195,7 @@ class QuizRouteTest {
         compose.waitUntil(TIMEOUT_MILLIS) { summary != null }
         assertEquals(2, checkNotNull(summary).quizCorrectCount)
         compose.waitUntil(TIMEOUT_MILLIS) {
-            runBlocking { db.learningDao().findSavedExpression("hang out")?.consecutiveCorrectCount == 2 }
+            runBlocking { db.learningDao().findSavedExpression("hang out")?.consecutiveCorrectCount == 4 }
         }
     }
 
@@ -296,7 +300,7 @@ class QuizRouteTest {
             val askingSketchy = compose.onAllNodesWithText("sketchy").fetchSemanticsNodes().isNotEmpty()
             compose.onNodeWithText(if (askingSketchy) "놀다" else "수상한").performScrollTo().performClick()
             awaitText("아쉬워요, 오답이에요.")
-            compose.onNodeWithText("다음 문제").performScrollTo().performClick()
+            compose.onNodeWithText(if (number == 0) "다음 문제" else "틀린 문제 다시 풀기").performScrollTo().performClick()
         }
 
         // 백로그 047: the retry round — the counter grew, the questions say so, and a right answer
@@ -380,6 +384,87 @@ class QuizRouteTest {
     }
 
     @Test
+    fun practiceRecordsOnlyWrongAnswersAndEndsOnRecreation() = runBlocking {
+        val db = LearningDatabase.create(context, DATABASE_NAME)
+        database = db
+        val repository = LearningRepository(db)
+        repository.saveExpression("sketchy", "수상한", NOW - 1_000)
+        repository.saveExpression("hang out", "놀다", NOW - 900)
+        // Not due at all, but asked before: practice still asks them.
+        listOf("sketchy", "hang out").forEach { repository.saveReviewProgress(it, NOW - DAY, NOW + 5 * DAY, 2, 0, false) }
+        val restoration = StateRestorationTester(compose)
+        var summary: LearningSessionSummary? = null
+        restoration.setContent {
+            EnglishQuizTheme {
+                QuizRoute(
+                    repository = repository,
+                    todayContent = null,
+                    onFinished = { summary = it },
+                    now = { NOW },
+                    seed = { SEED },
+                    enrolExpressions = false,
+                    questionSource = { repo, _ -> repo.listSavedExpressions() },
+                    practice = true,
+                )
+            }
+        }
+
+        // 백로그 052: "놀다" is wrong for sketchy and right for hang out — one of each, whichever first.
+        awaitText("1 / 2").assertIsDisplayed()
+        assertTrue(compose.onAllNodesWithText("알아요").fetchSemanticsNodes().isEmpty())
+        awaitText("놀다").performScrollTo().performClick()
+        awaitText("다음 문제").performScrollTo().performClick()
+        awaitText("2 / 2").assertIsDisplayed()
+        awaitText("놀다").performScrollTo().performClick()
+        compose.waitUntil(TIMEOUT_MILLIS) {
+            runBlocking { db.learningDao().findSavedExpression("sketchy")?.incorrectCount == 1 }
+        }
+        // The right answer left its row alone: run, schedule and date exactly as they were.
+        val hangOut = checkNotNull(db.learningDao().findSavedExpression("hang out"))
+        assertEquals(2, hangOut.consecutiveCorrectCount)
+        assertEquals(NOW - DAY, hangOut.lastReviewedAtEpochMillis)
+
+        // Nothing dropped out of the list, so a recreation ends the practice instead of re-asking.
+        restoration.emulateSavedInstanceStateRestore()
+        compose.waitUntil(TIMEOUT_MILLIS) { summary != null }
+        assertEquals(1, checkNotNull(summary).quizCorrectCount)
+        assertEquals(0, checkNotNull(summary).score)
+    }
+
+    @Test
+    fun practiceMeetsANeverAskedExpressionWithItsCardInsteadOfFailingIt() = runBlocking {
+        val db = LearningDatabase.create(context, DATABASE_NAME)
+        database = db
+        val repository = LearningRepository(db)
+        repository.saveExpression("sketchy", "수상한", NOW - 1_000, "That sounds sketchy.", shortMeaning = "수상한")
+        var summary: LearningSessionSummary? = null
+        compose.setContent {
+            EnglishQuizTheme {
+                QuizRoute(
+                    repository = repository,
+                    todayContent = null,
+                    onFinished = { summary = it },
+                    now = { NOW },
+                    seed = { SEED },
+                    enrolExpressions = false,
+                    questionSource = { repo, _ -> repo.listSavedExpressions() },
+                    practice = true,
+                )
+            }
+        }
+
+        // 백로그 052: a first meeting is shown as its card, never asked as a question it cannot know,
+        // and the card is only read: the row stays untouched for the daily quiz to meet first.
+        awaitText("처음 보는 표현이에요. 읽어 보고 아는지 골라 주세요.")
+        compose.onNodeWithText("모르겠어요, 내일 다시").performScrollTo().performClick()
+        compose.waitUntil(TIMEOUT_MILLIS) { summary != null }
+        assertEquals(0, checkNotNull(summary).quizQuestionCount)
+        val untouched = checkNotNull(db.learningDao().findSavedExpression("sketchy"))
+        assertEquals(0, untouched.incorrectCount)
+        assertNull(untouched.lastReviewedAtEpochMillis)
+    }
+
+    @Test
     fun quizWithNothingDueFinishesWithAnEmptySummaryInsteadOfAnError() = runBlocking {
         val db = LearningDatabase.create(context, DATABASE_NAME)
         database = db
@@ -415,7 +500,8 @@ class QuizRouteTest {
         // "hang out" was tapped while reading and saved with the meaning the Reader found, and
         // has been asked once since; "sketchy" is met for the first time today.
         repository.saveExpression("hang out", "놀다", NOW - 900, "Let's hang out.")
-        repository.markReviewed("hang out")
+        // At the 잎 stage its sentence becomes a blank to fill by choice (백로그 045).
+        repository.markReviewed("hang out", correctRun = 2)
         val content = LearningContent(
             title = "A cafe",
             mode = ContentMode.CONVERSATION,

@@ -91,8 +91,12 @@ internal fun QuizFeedback(state: QuizUiState.InProgress, onNext: () -> Unit, onR
             MongleButton("답변 다시 기록", onRetryRecord, height = 48.dp)
         }
         MongleButton(
-            // The last question hands the session over to the result screen, so it says so.
-            text = if (state.questionNumber == state.totalQuestions) "결과 보기" else "다음 문제",
+            // The last question hands over to the result screen, or to the missed ones first.
+            text = when {
+                state.questionNumber != state.totalQuestions -> "다음 문제"
+                state.retryPending -> "틀린 문제 다시 풀기"
+                else -> "결과 보기"
+            },
             onClick = onNext,
             colors = if (correct) MongleButtonColors.Positive else MongleButtonColors.Primary,
         )

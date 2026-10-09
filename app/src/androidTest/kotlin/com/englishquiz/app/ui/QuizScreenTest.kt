@@ -146,6 +146,36 @@ class QuizScreenTest {
     }
 
     @Test
+    fun aPracticeQuizShowsNoScore() {
+        compose.setContent {
+            EnglishQuizTheme {
+                QuizScreen(
+                    state = QuizUiState.InProgress(
+                        questionNumber = 1,
+                        totalQuestions = 2,
+                        question = meaningQuestion,
+                        selectedOption = null,
+                        isCorrect = null,
+                        score = QuizScore(points = 30, combo = 2, maxCombo = 2),
+                        scoring = false,
+                    ),
+                    onSelectOption = {},
+                    onNext = {},
+                    onRetryRecord = {},
+                    onEmptyContinue = {},
+                    onRetry = {},
+                    onBack = {},
+                )
+            }
+        }
+
+        // 백로그 052: the review box's practice quiz has no points to show.
+        compose.onAllNodesWithText("30점").assertCountEquals(0)
+        compose.onAllNodesWithText("2 콤보").assertCountEquals(0)
+        compose.onNodeWithText("1 / 2").assertIsDisplayed()
+    }
+
+    @Test
     fun aRetryQuestionSaysSo() {
         showQuestion(meaningQuestion.copy(isRetry = true), questionNumber = 3, selected = null)
 

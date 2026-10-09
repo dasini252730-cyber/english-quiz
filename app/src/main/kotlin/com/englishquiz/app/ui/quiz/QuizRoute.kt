@@ -33,14 +33,12 @@ private const val UNKNOWN_TOTAL = -1
 
 /**
  * Drives today's quiz (백로그 010). [todayContent] is what was just read, or null outside a
- * reading session; [baseSummary] carries the counts the caller knows, and the merged summary goes
- * to [onFinished], the empty quiz included.
- *
- * The list is built once per entry; after recreation it is rebuilt from the same saved seed, and
- * answers already recorded have dropped out, so the learner resumes. Passage questions (백로그
- * 042) are counted and skipped instead, and a recreation in the retry round (백로그 047) ends the
- * quiz. [now]/[seed] are providers so a test can fix them. [questionSource], [maxQuestions],
- * [pointsMultiplier] and [askCards] are the weekend boss's knobs (백로그 041/045).
+ * reading session; the merged summary goes to [onFinished], the empty quiz included. The list is
+ * built once per entry; after recreation it is rebuilt from the same saved seed, and answers
+ * already recorded have dropped out, so the learner resumes. Passage questions (백로그 042) are
+ * counted and skipped instead; a recreation in the retry round (백로그 047) ends the quiz.
+ * [questionSource], [maxQuestions], [pointsMultiplier] and [askCards] are the weekend boss's
+ * knobs (백로그 041/045); [scoring] false is the review box's practice quiz (백로그 052).
  */
 @Composable
 fun QuizRoute(
@@ -60,6 +58,14 @@ fun QuizRoute(
     skipComprehension: suspend () -> Boolean = { false },
     /** False for the boss (백로그 041): first meetings are asked, not shown as cards. */
     askCards: Boolean = true,
+    /**
+     * The review box's practice (백로그 052): no points, only a wrong answer is recorded (a right
+     * one must not advance a schedule that is not due), and a recreation ends it rather than
+     * asking the same questions again, since nothing dropped out of the list. A never-asked
+     * expression still gets its card instead of a question it cannot know, but the card is only
+     * read: nothing is written, so the daily quiz still meets it first (백로그 048 budget intact).
+     */
+    practice: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
     var retry by rememberSaveable { mutableIntStateOf(0) }
@@ -89,21 +95,12 @@ fun QuizRoute(
     fun finish() {
         if (finished) return
         finished = true
-        onFinished(
-            baseSummary.copy(
-                // Cards are expressions met today even though they are not questions.
-                learnedExpressionCount = (totalQuestions - retries).coerceAtLeast(0),
-                quizCorrectCount = correctCount,
-                quizQuestionCount = (totalQuestions - uncounted).coerceAtLeast(0),
-                masteredExpressionCount = masteredCount,
-                score = score.points,
-                maxCombo = score.maxCombo,
-            ),
-        )
+        onFinished(baseSummary.withQuizResult(totalQuestions, retries, uncounted, correctCount, masteredCount, score))
     }
 
     LaunchedEffect(repository, retry) {
         loadState = QuizLoadState.Loading
+        val resumed = totalQuestions != UNKNOWN_TOTAL
         try {
             val questions = loadQuizQuestions(
                 repository, todayContent, nowEpochMillis, shuffleSeed, enrolExpressions, onExpressionsEnrolled,
@@ -117,7 +114,7 @@ fun QuizRoute(
             selectedOption = null
             recordFailed = false
             loadState = QuizLoadState.Loaded(questions)
-            if (retryRound) finish()
+            if (retryRound || (practice && resumed)) finish()
         } catch (error: CancellationException) {
             throw error
         } catch (_: Exception) {
@@ -130,7 +127,7 @@ fun QuizRoute(
     fun record(question: QuizQuestion, option: QuizOption) {
         // A passage question belongs to no expression (백로그 042) and a retry was recorded the
         // first time (백로그 047): nothing to write for either.
-        if (question.type == QuizQuestionType.COMPREHENSION || question.isRetry) return
+        if (question.type == QuizQuestionType.COMPREHENSION || question.isRetry || (practice && option.isCorrect)) return
         scope.launch {
             // A slow write may land after the learner moved on: its growth line and failure
             // notice apply only while that question is still the current one.
@@ -161,13 +158,12 @@ fun QuizRoute(
 
     fun next() {
         val list = questions ?: return
-        if (index + 1 < list.size) {
-            index += 1
-            selectedOption = null
-            recordFailed = false
-            growth = null
-            hint = null
-        } else if (!retryRound && wrong.isNotEmpty()) {
+        val atLast = index + 1 >= list.size
+        if (atLast && (retryRound || wrong.isEmpty())) {
+            finish()
+            return
+        }
+        if (atLast) {
             // Once through, the missed ones come back for one more go (백로그 047): no points,
             // nothing recorded, just the chance to get it right while it is fresh.
             val again = wrong.map { it.copy(isRetry = true) }
@@ -177,14 +173,12 @@ fun QuizRoute(
             retries += again.size
             totalQuestions += again.size
             loadState = QuizLoadState.Loaded(list + again)
-            index += 1
-            selectedOption = null
-            recordFailed = false
-            growth = null
-            hint = null
-        } else {
-            finish()
         }
+        index += 1
+        selectedOption = null
+        recordFailed = false
+        growth = null
+        hint = null
     }
 
     fun answer(option: QuizOption) {
@@ -199,7 +193,7 @@ fun QuizRoute(
             return
         }
         if (option.isCorrect) correctCount += 1 else wrong += question
-        score = ScorePolicy.answer(score, option.isCorrect, pointsMultiplier)
+        if (!practice) score = ScorePolicy.answer(score, option.isCorrect, pointsMultiplier)
         // Counted at answer time, so a recreation before "next" cannot re-ask it for points.
         if (question.type == QuizQuestionType.COMPREHENSION) comprehensionDone += 1
         record(question, option)
@@ -212,9 +206,11 @@ fun QuizRoute(
      */
     fun card() {
         val question = questions?.getOrNull(index) ?: return
-        scope.launch {
-            // The tap that answers the last card also leaves the screen; the write must land.
-            withContext(NonCancellable) { runCatching { repository.markSeen(question.expression, nowEpochMillis) } }
+        if (!practice) {
+            scope.launch {
+                // The tap that answers the last card also leaves the screen; the write must land.
+                withContext(NonCancellable) { runCatching { repository.markSeen(question.expression, nowEpochMillis) } }
+            }
         }
         next()
     }
@@ -222,9 +218,11 @@ fun QuizRoute(
     BackHandler { speech.stop(); onBack() }
 
     QuizScreen(
-        state = quizUiState(loadState, questions, index, totalQuestions, selectedOption, recordFailed, score, growth, hint),
+        state = quizUiState(
+            loadState, questions, index, totalQuestions, selectedOption, recordFailed, score, growth, hint, !practice,
+            retryPending = wrong.isNotEmpty() && !retryRound,
+        ),
         onSelectOption = ::answer,
-        // The typed text becomes an option of its own (백로그 043); an empty submission is "I don't know".
         onSubmitTyped = { typed ->
             val question = questions?.getOrNull(index)
             if (question != null) answer(QuizOption(typed.trim(), typedAnswerMatches(typed, question.expression)))
