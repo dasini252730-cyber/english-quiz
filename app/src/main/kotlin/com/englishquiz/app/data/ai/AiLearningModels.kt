@@ -4,7 +4,14 @@ data class ContentGenerationRequest(
     val mode: ContentMode,
     val difficulty: Int,
     val reviewExpressions: List<String> = emptyList(),
+    /** The latest earlier story (백로그 054), so today's can go on from it. */
+    val previousStory: PassageSummary? = null,
+    /** The same day's other passage, so a conversation practises the story's situation. */
+    val companion: PassageSummary? = null,
 )
+
+/** What one passage tells the next about itself (백로그 054). */
+data class PassageSummary(val mode: ContentMode, val title: String, val synopsis: String)
 
 enum class ContentMode(val wireValue: String) {
     CONVERSATION("conversation"),
@@ -27,7 +34,12 @@ data class LearningContent(
     val comprehension: List<ComprehensionQuestion> = emptyList(),
     /** Who each speaker is (백로그 050), keyed by the segment speaker name; empty before it or when the model gave none. */
     val speakers: Map<String, SpeakerGender> = emptyMap(),
-)
+    /** Two English sentences on the passage (백로그 054), handed to the next generation; "" before it. */
+    val synopsis: String = "",
+) {
+    /** This passage as the next one hears about it, or null when it has nothing to say. */
+    fun summary(): PassageSummary? = synopsis.takeIf { it.isNotBlank() }?.let { PassageSummary(mode, title, it) }
+}
 
 /** What the model says about a speaker, so a voice can be chosen to match (백로그 050). */
 enum class SpeakerGender(val wireValue: String) {

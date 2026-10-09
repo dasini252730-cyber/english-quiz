@@ -91,6 +91,13 @@ interface LearningDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertDailyContent(content: DailyContentEntity)
 
+    /** The newest passage of [mode] from before [learningDate] (백로그 054): the previous episode. */
+    @Query(
+        "SELECT * FROM daily_content WHERE mode = :mode AND learningDate < :learningDate " +
+            "ORDER BY learningDate DESC LIMIT 1",
+    )
+    suspend fun findLatestDailyContentBefore(mode: String, learningDate: String): DailyContentEntity?
+
     /** The library (백로그 026): every passage ever generated, newest day first. */
     @Query(
         "SELECT learningDate, mode, title, createdAtEpochMillis FROM daily_content " +

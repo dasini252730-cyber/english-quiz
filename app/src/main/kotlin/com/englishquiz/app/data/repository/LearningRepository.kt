@@ -3,8 +3,7 @@ package com.englishquiz.app.data.repository
 import androidx.room.withTransaction
 import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.data.ai.LearningContent
-import com.englishquiz.app.data.ai.isKoreanPassage
-import com.englishquiz.app.data.ai.parseContentResponse
+import com.englishquiz.app.data.ai.PassageSummary
 import com.englishquiz.app.data.ai.toResponseJson
 import com.englishquiz.app.data.local.DailyContentEntity
 import com.englishquiz.app.data.local.LearningDatabase
@@ -15,7 +14,6 @@ import com.englishquiz.app.domain.review.ReviewPolicy
 import com.englishquiz.app.domain.review.ReviewProgress
 import com.englishquiz.app.domain.session.LearningSessionSummary
 import kotlinx.coroutines.flow.Flow
-import org.json.JSONObject
 
 class LearningRepository(
     private val database: LearningDatabase,
@@ -56,15 +54,12 @@ class LearningRepository(
      * is none. A stored row this build can no longer read also counts as none: a fresh generation
      * is worth more than a crash, and the next save replaces the row.
      */
-    suspend fun findDailyContent(learningDate: String, mode: ContentMode): LearningContent? {
-        val row = learningDao.findDailyContent(learningDate, mode.wireValue) ?: return null
-        return try {
-            // A passage stored in Korean (백로그 051) is as good as none: the next save replaces it.
-            parseContentResponse(JSONObject(row.contentJson), mode).takeIf { !it.isKoreanPassage }
-        } catch (_: Exception) {
-            null
-        }
-    }
+    suspend fun findDailyContent(learningDate: String, mode: ContentMode): LearningContent? =
+        learningDao.findDailyContent(learningDate, mode.wireValue)?.toContentOrNull(mode)
+
+    /** The latest passage of [mode] before [learningDate] as the next one hears of it (백로그 054), or null. */
+    suspend fun findPreviousSummary(mode: ContentMode, learningDate: String): PassageSummary? =
+        learningDao.findLatestDailyContentBefore(mode.wireValue, learningDate)?.toContentOrNull(mode)?.summary()
 
     /**
      * Keeps [content] as the day's passage for its mode. Earlier days stay: they are the library
@@ -98,16 +93,7 @@ class LearningRepository(
      * Room row shape. Sessions from before 백로그 034 carry no mode and are not part of any window.
      */
     suspend fun listRecentSessionSummaries(mode: ContentMode, limit: Int): List<LearningSessionSummary> =
-        learningDao.listRecentSessions(mode.wireValue, limit).map { session ->
-            LearningSessionSummary(
-                learnedExpressionCount = session.learnedExpressionCount,
-                newlySavedExpressionCount = session.newlySavedExpressionCount,
-                quizCorrectCount = session.quizCorrectCount,
-                quizQuestionCount = session.quizQuestionCount,
-                score = session.score,
-                maxCombo = session.maxCombo,
-            )
-        }
+        learningDao.listRecentSessions(mode.wireValue, limit).map { it.toSummary() }
 
     /**
      * Saves the expression the first time it is looked up. A repeat lookup keeps the stored row,
@@ -196,15 +182,10 @@ class LearningRepository(
         database.withTransaction {
             val normalizedExpression = normalizeExpression(displayExpression)
             val existing = checkNotNull(learningDao.findSavedExpression(normalizedExpression))
-            learningDao.updateExpression(
-                existing.copy(
-                    lastReviewedAtEpochMillis = lastReviewedAtEpochMillis,
-                    nextReviewAtEpochMillis = nextReviewAtEpochMillis,
-                    consecutiveCorrectCount = consecutiveCorrectCount,
-                    incorrectCount = incorrectCount,
-                    isMastered = isMastered,
-                ),
+            val progress = ReviewProgress(
+                lastReviewedAtEpochMillis, nextReviewAtEpochMillis, consecutiveCorrectCount, incorrectCount, isMastered,
             )
+            learningDao.updateExpression(existing.withProgress(progress))
         }
     }
 
@@ -230,24 +211,8 @@ class LearningRepository(
     ): SavedExpressionEntity = database.withTransaction {
         val normalizedExpression = normalizeExpression(displayExpression)
         val existing = checkNotNull(learningDao.findSavedExpression(normalizedExpression))
-        val progress = ReviewPolicy.recordAnswer(
-            current = ReviewProgress(
-                lastReviewedAtEpochMillis = existing.lastReviewedAtEpochMillis,
-                nextReviewAtEpochMillis = existing.nextReviewAtEpochMillis,
-                consecutiveCorrectCount = existing.consecutiveCorrectCount,
-                incorrectCount = existing.incorrectCount,
-                isMastered = existing.isMastered,
-            ),
-            wasCorrect = wasCorrect,
-            evaluatedAtEpochMillis = evaluatedAtEpochMillis,
-        )
-        val updated = existing.copy(
-            lastReviewedAtEpochMillis = progress.lastReviewedAtEpochMillis,
-            nextReviewAtEpochMillis = progress.nextReviewAtEpochMillis,
-            consecutiveCorrectCount = progress.consecutiveCorrectCount,
-            incorrectCount = progress.incorrectCount,
-            isMastered = progress.isMastered,
-        )
+        val progress = ReviewPolicy.recordAnswer(existing.toReviewProgress(), wasCorrect, evaluatedAtEpochMillis)
+        val updated = existing.withProgress(progress)
         learningDao.updateExpression(updated)
         updated
     }

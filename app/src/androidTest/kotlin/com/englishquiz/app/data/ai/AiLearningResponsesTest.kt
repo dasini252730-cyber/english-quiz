@@ -139,6 +139,24 @@ class AiLearningResponsesTest {
     }
 
     @Test
+    fun theSynopsisSurvivesTheRoundTripAndBecomesTheNextPassagesSummary() {
+        // 백로그 054: what tomorrow's story and today's conversation hear about this passage.
+        val body = """
+            {"data":{"title":"The Night Train","mode":"story","synopsis":"  Mina shared a cabin with a stranger. He lied about his stop.  ",
+             "segments":[{"speaker":"Narrator","text":"That sounds sketchy."}],
+             "expressions":[{"text":"sketchy","meaning":"수상한","segmentIndex":0}]}}
+        """.trimIndent()
+
+        val parsed = parseContentResponse(JSONObject(body), ContentMode.STORY)
+        val restored = parseContentResponse(parsed.toResponseJson(), ContentMode.STORY)
+
+        assertEquals("Mina shared a cabin with a stranger. He lied about his stop.", parsed.synopsis)
+        assertEquals(parsed, restored)
+        assertEquals(PassageSummary(ContentMode.STORY, "The Night Train", parsed.synopsis), parsed.summary())
+        assertEquals(null, parsed.copy(synopsis = "").summary())
+    }
+
+    @Test
     fun speakerGendersRideAlongAndNameOnlyWhoActuallySpeaks() {
         // 백로그 050: "Nobody" is not in the passage and a made-up gender is skipped.
         val body = """

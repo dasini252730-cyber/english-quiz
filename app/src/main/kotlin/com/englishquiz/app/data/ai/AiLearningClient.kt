@@ -98,7 +98,14 @@ class AiLearningClient(
         put("mode", request.mode.wireValue)
         put("difficulty", request.difficulty)
         put("reviewExpressions", JSONArray(request.reviewExpressions))
+        request.previousStory?.let { put("previousStory", it.toJson()) }
+        request.companion?.let { put("companion", it.toJson()) }
     }
+
+    private fun PassageSummary.toJson() = JSONObject()
+        .put("mode", mode.wireValue)
+        .put("title", title)
+        .put("synopsis", synopsis)
 
     private fun meaningJson(request: MeaningRequest) = JSONObject().apply {
         put("action", "meaning")

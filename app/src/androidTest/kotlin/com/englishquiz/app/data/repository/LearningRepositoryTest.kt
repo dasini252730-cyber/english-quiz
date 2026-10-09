@@ -8,6 +8,7 @@ import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.data.ai.ContentSegment
 import com.englishquiz.app.data.ai.GlossaryEntry
 import com.englishquiz.app.data.ai.LearningContent
+import com.englishquiz.app.data.ai.PassageSummary
 import com.englishquiz.app.data.local.LIBRARY_SESSION_MODE
 import com.englishquiz.app.data.local.LearningDatabase
 import com.englishquiz.app.data.local.LearningSessionEntity
@@ -202,6 +203,27 @@ class LearningRepositoryTest {
         val recent = repository.listRecentSessionSummaries(ContentMode.CONVERSATION, 3)
         assertEquals(listOf(5, 4), recent.map { it.quizQuestionCount })
         assertEquals(listOf(2), repository.listRecentSessionSummaries(ContentMode.STORY, 3).map { it.quizQuestionCount })
+    }
+
+    @Test
+    fun thePreviousEpisodeIsTheNewestStoryBeforeTheDayWithASynopsis() = runBlocking {
+        val db = LearningDatabase.create(context, DATABASE_NAME)
+        database = db
+        val first = LearningRepository(db)
+        val episode = LearningContent(
+            title = "Ep. 1",
+            mode = ContentMode.STORY,
+            segments = listOf(ContentSegment("Narrator", "Alex planned a Saturday.")),
+            expressions = listOf(ContentExpression("planned", "계획했다", 0, 5, 12)),
+            synopsis = "Alex planned a Saturday.",
+        )
+        // 백로그 054: the previous episode is the newest story strictly before the day, with a synopsis.
+        assertNull(first.findPreviousSummary(ContentMode.STORY, "2026-09-27"))
+        first.saveDailyContent("2026-09-24", content = episode, nowEpochMillis = 90)
+        first.saveDailyContent("2026-09-25", content = episode.copy(title = "Ep. 2", synopsis = ""), nowEpochMillis = 95)
+        assertEquals(null, first.findPreviousSummary(ContentMode.STORY, "2026-09-26")?.takeIf { it.title == "Ep. 1" })
+        assertEquals(PassageSummary(ContentMode.STORY, "Ep. 1", "Alex planned a Saturday."), first.findPreviousSummary(ContentMode.STORY, "2026-09-25"))
+        assertNull(first.findPreviousSummary(ContentMode.STORY, "2026-09-24"))
     }
 
     @Test
