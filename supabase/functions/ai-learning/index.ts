@@ -24,9 +24,12 @@ const DEFAULT_MODEL = "claude-sonnet-5";
 const CORS_HEADERS = {
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "POST, OPTIONS",
-  "access-control-allow-headers": "authorization, apikey, content-type, x-client-info",
+  "access-control-allow-headers": "authorization, apikey, content-type, x-client-info, x-app-token",
   "cache-control": "no-store",
 };
+
+/** Provider attempts allowed per Seoul day (백로그 062) unless `AI_DAILY_LIMIT` says otherwise. */
+const DEFAULT_DAILY_LIMIT = 40;
 
 type ContentMode = "conversation" | "story";
 type Difficulty = 1 | 2 | 3 | 4 | 5;
@@ -48,8 +51,7 @@ type MeaningRequest = {
   context: string;
 };
 type LearningRequest = ContentRequest | MeaningRequest;
-type Environment = (name: string) => string | undefined;
-type Fetcher = typeof fetch;
+import { createUsageStore, type Environment, type Fetcher, seoulDay, tokenMatches, usageOf, type UsageStore } from "./usage.ts";
 
 const CONTENT_SCHEMA = {
   type: "object",
@@ -780,12 +782,13 @@ async function callAnthropic(
   apiKey: string,
   model: string,
   fetcher: Fetcher,
+  accounting: Accounting | null = null,
 ): Promise<unknown> {
   const deadline = Date.now() + TOTAL_BUDGET_MS;
   for (let attempt = 1; ; attempt++) {
     const remaining = deadline - Date.now();
     try {
-      return await callAnthropicOnce(request, apiKey, model, fetcher, Math.min(REQUEST_TIMEOUT_MS, remaining));
+      return await callAnthropicOnce(request, apiKey, model, fetcher, Math.min(REQUEST_TIMEOUT_MS, remaining), accounting);
     } catch (error) {
       // Only our own output checks are worth a second call: a provider refusal, a timeout or a
       // network failure would fail the same way again, and a retry that cannot finish inside
@@ -798,12 +801,47 @@ async function callAnthropic(
   }
 }
 
+/** Where one attempt's row goes (백로그 062): the store and the Seoul day it counts against. */
+type Accounting = { store: UsageStore; day: string };
+
+/**
+ * One provider call, accounted for whatever happens: the row carries the token counts when the
+ * provider answered, zeros when it did not, and the error code when the attempt failed.
+ */
 async function callAnthropicOnce(
   request: LearningRequest,
   apiKey: string,
   model: string,
   fetcher: Fetcher,
   timeoutMillis: number,
+  accounting: Accounting | null,
+): Promise<unknown> {
+  const startedAt = Date.now();
+  let tokens = usageOf(null);
+  const account = async (ok: boolean, errorCode: string | null) => {
+    if (!accounting) return;
+    await accounting.store.record({
+      day: accounting.day, action: request.action, model, ...tokens,
+      durationMs: Date.now() - startedAt, ok, errorCode,
+    });
+  };
+  try {
+    const result = await callProvider(request, apiKey, model, fetcher, timeoutMillis, (payload) => { tokens = usageOf(payload); });
+    await account(true, null);
+    return result;
+  } catch (error) {
+    await account(false, error instanceof RequestError ? error.code : error instanceof Error ? error.message.split("(")[0] : "unknown");
+    throw error;
+  }
+}
+
+async function callProvider(
+  request: LearningRequest,
+  apiKey: string,
+  model: string,
+  fetcher: Fetcher,
+  timeoutMillis: number,
+  onPayload: (payload: unknown) => void,
 ): Promise<unknown> {
   const prompt = prompts(request);
   const response = await fetcher("https://api.anthropic.com/v1/messages", {
@@ -829,7 +867,9 @@ async function callAnthropicOnce(
     console.error(`provider http ${response.status}: ${(await response.text()).slice(0, 300)}`);
     throw providerHttpError(response.status);
   }
-  const text = responseText(await response.json());
+  const payload = await response.json();
+  onPayload(payload);
+  const text = responseText(payload);
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
@@ -846,13 +886,29 @@ export function createHandler(
   return async (request) => {
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS_HEADERS });
     if (request.method !== "POST") return failure("method_not_allowed", 405);
+    // The app token (백로그 062): a secret the APK carries, checked before the body is even read.
+    // A function without one configured refuses everything rather than running open.
+    const appToken = getEnvironment("AI_APP_TOKEN")?.trim();
+    if (!appToken) return failure("service_not_configured", 503);
+    if (!tokenMatches(request.headers.get("x-app-token"), appToken)) return failure("unauthorized", 401);
 
     try {
       const input = validateRequest(await readJsonLimited(request));
       const apiKey = getEnvironment("ANTHROPIC_API_KEY");
       if (!apiKey) return failure("service_not_configured", 503);
       const model = getEnvironment("ANTHROPIC_MODEL")?.trim() || DEFAULT_MODEL;
-      return jsonResponse({ data: await callAnthropic(input, apiKey, model, fetcher) });
+      // The daily limit (백로그 062) counts provider attempts, so a retried passage uses two.
+      const store = createUsageStore(getEnvironment, fetcher);
+      const accounting = store ? { store, day: seoulDay(Date.now()) } : null;
+      if (accounting) {
+        // 0 is a valid setting: it is how spending is switched off.
+        const configured = getEnvironment("AI_DAILY_LIMIT")?.trim();
+        const parsed = Number(configured);
+        const limit = configured && Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_DAILY_LIMIT;
+        const used = await accounting.store.countForDay(accounting.day);
+        if (used !== null && used >= limit) return failure("daily_limit_reached", 429);
+      }
+      return jsonResponse({ data: await callAnthropic(input, apiKey, model, fetcher, accounting) });
     } catch (error) {
       if (error instanceof RequestError) return failure(error.code, error.status);
       if (error instanceof DOMException && error.name === "TimeoutError") return failure("provider_timeout", 504);

@@ -1006,7 +1006,7 @@
       "title": "Edge Function 접근 제한(앱 토큰)과 일일 상한, 호출 사용량 기록",
       "description": "2026-10-10 사용자 요청. ai-learning에 고정 앱 토큰 헤더를 요구(없거나 틀리면 401, 토큰은 Supabase secrets, 앱은 BuildConfig 주입, 소스에 값 없음). 하루 호출 상한(기본 40회) 초과 시 429와 기존 오류 코드 체계의 코드. 호출마다 action·모델·input/output 토큰·소요 시간·성공 여부를 Supabase 테이블에 남겨 월간 비용 계산이 가능하게. 앱은 401/429를 구분된 메시지로 표시. node 테스트에 토큰 거부·상한 초과·사용량 기록 추가, 기존 24개 유지. README에 배포 명령과 secrets 설정 순서.",
       "details": "backlog/062.md",
-      "status": "in_progress",
+      "status": "review_needed",
       "priority": "P0",
       "estimate": "M",
       "depends_on": [],

@@ -32,15 +32,48 @@ function providerResponse(value, httpStatus = 200, stopReason = "end_turn") {
   return new Response(JSON.stringify({
     stop_reason: stopReason,
     content: [{ type: "text", text: JSON.stringify(value) }],
+    usage: { input_tokens: 1234, output_tokens: 567, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
   }), { status: httpStatus, headers: { "content-type": "application/json" } });
 }
 
+// The handler's test environment answers "key" for every name, so "key" is also the app token.
 function post(body, headers = {}) {
   return new Request("https://local.test/ai-learning", {
     method: "POST",
-    headers: { "content-type": "application/json", ...headers },
+    headers: { "content-type": "application/json", "x-app-token": "key", ...headers },
     body: typeof body === "string" ? body : JSON.stringify(body),
   });
+}
+
+/** An environment with a usage store configured (백로그 062), as a deployed function has. */
+function accountedEnvironment(overrides = {}) {
+  const values = {
+    ANTHROPIC_API_KEY: "key", AI_APP_TOKEN: "key", SUPABASE_URL: "https://proj.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role", ...overrides,
+  };
+  return (name) => values[name];
+}
+
+/** Routes the usage table's count and insert to a fake PostgREST; everything else to the provider. */
+function accountedFetcher({ used = 0, provider = async () => providerResponse(validContent), countFails = false } = {}) {
+  const calls = { counts: 0, inserts: [], provider: 0 };
+  const fetcher = async (url, options) => {
+    if (String(url).includes("/rest/v1/ai_usage")) {
+      // Accounting is bounded: a stuck PostgREST must not hold the learner's call.
+      assert.ok(options.signal instanceof AbortSignal);
+      if (options.method === "GET") {
+        calls.counts++;
+        if (countFails) throw new Error("postgrest down");
+        assert.equal(options.headers.prefer, "count=exact");
+        return new Response("[]", { status: 206, headers: { "content-range": `0-0/${used}` } });
+      }
+      calls.inserts.push(JSON.parse(options.body));
+      return new Response(null, { status: 201 });
+    }
+    calls.provider++;
+    return provider(url, options);
+  };
+  return { fetcher, calls };
 }
 
 /**
@@ -94,6 +127,7 @@ test("content request uses configured model, schema-constrained JSON, and return
   const handler = createHandler((name) => ({
     ANTHROPIC_API_KEY: "server-only-key",
     ANTHROPIC_MODEL: "claude-sonnet-5",
+    AI_APP_TOKEN: "key",
   })[name], async (url, options) => {
     assert.equal(url, "https://api.anthropic.com/v1/messages");
     assert.equal(options.headers["x-api-key"], "server-only-key");
@@ -735,3 +769,91 @@ test("each difficulty puts its own rubric in front of the model, not a bare numb
   // Six is outside the scale (백로그 034: five levels per mode).
   assert.equal((await handler(post({ action: "content", mode: "conversation", difficulty: 6 }))).status, 400);
 });
+
+test("a request without the app token is refused before the provider is called; preflight still passes", async () => {
+  let providerCalls = 0;
+  const handler = createHandler(() => "key", async () => { providerCalls++; return providerResponse({ expression: "pull it off", meaning: "해내다" }); });
+  const body = { action: "meaning", expression: "pull it off", context: "I knew you could pull it off." };
+
+  const missing = await handler(post(body, { "x-app-token": "" }));
+  assert.equal(missing.status, 401);
+  assert.equal((await missing.json()).error.code, "unauthorized");
+  const wrong = await handler(post(body, { "x-app-token": "keY" }));
+  assert.equal(wrong.status, 401);
+  const longer = await handler(post(body, { "x-app-token": "key-and-more" }));
+  assert.equal(longer.status, 401);
+  assert.equal(providerCalls, 0);
+
+  const ok = await handler(post(body));
+  assert.equal(ok.status, 200);
+  assert.equal(providerCalls, 1);
+  const preflight = await handler(new Request("https://local.test/ai-learning", { method: "OPTIONS" }));
+  assert.equal(preflight.status, 204);
+  assert.match(preflight.headers.get("access-control-allow-headers"), /x-app-token/);
+
+  // A function with no token configured runs closed, not open.
+  const unconfigured = createHandler((name) => (name === "AI_APP_TOKEN" ? undefined : "key"), async () => providerResponse({ expression: "pull it off", meaning: "해내다" }));
+  const closed = await unconfigured(post(body));
+  assert.equal(closed.status, 503);
+  assert.equal((await closed.json()).error.code, "service_not_configured");
+});
+
+test("the daily limit refuses the call with 429 once the day's attempts are used up", async () => {
+  const atLimit = accountedFetcher({ used: 40 });
+  const handler = createHandler(accountedEnvironment(), atLimit.fetcher);
+  const response = await handler(post({ action: "content", mode: "conversation", difficulty: 2 }));
+  assert.equal(response.status, 429);
+  assert.equal((await response.json()).error.code, "daily_limit_reached");
+  assert.equal(atLimit.calls.provider, 0);
+  assert.equal(atLimit.calls.inserts.length, 0);
+
+  // One below the limit still goes through; the configured limit is what counts.
+  const below = accountedFetcher({ used: 39 });
+  assert.equal((await createHandler(accountedEnvironment(), below.fetcher)(post({ action: "content", mode: "conversation", difficulty: 2 }))).status, 200);
+  assert.equal(below.calls.provider, 1);
+  const custom = accountedFetcher({ used: 2 });
+  const limited = await createHandler(accountedEnvironment({ AI_DAILY_LIMIT: "2" }), custom.fetcher)(post({ action: "content", mode: "conversation", difficulty: 2 }));
+  assert.equal(limited.status, 429);
+  // A limit of 0 switches spending off; it is not "unset".
+  const off = accountedFetcher({ used: 0 });
+  assert.equal((await createHandler(accountedEnvironment({ AI_DAILY_LIMIT: "0" }), off.fetcher)(post({ action: "content", mode: "conversation", difficulty: 2 }))).status, 429);
+  assert.equal(off.calls.provider, 0);
+
+  // A count the store cannot give lets the call through: accounting never costs a passage.
+  const down = accountedFetcher({ used: 99, countFails: true });
+  assert.equal((await createHandler(accountedEnvironment(), down.fetcher)(post({ action: "content", mode: "conversation", difficulty: 2 }))).status, 200);
+  assert.equal(down.calls.provider, 1);
+});
+
+test("every provider attempt leaves a usage row with its tokens, duration and outcome", async () => {
+  const good = accountedFetcher();
+  const handler = createHandler(accountedEnvironment({ ANTHROPIC_MODEL: "claude-sonnet-5" }), good.fetcher);
+  assert.equal((await handler(post({ action: "content", mode: "conversation", difficulty: 3 }))).status, 200);
+  assert.equal(good.calls.inserts.length, 1);
+  const row = good.calls.inserts[0];
+  assert.equal(row.action, "content");
+  assert.equal(row.model, "claude-sonnet-5");
+  assert.equal(row.input_tokens, 1234);
+  assert.equal(row.output_tokens, 567);
+  assert.equal(row.ok, true);
+  assert.equal(row.error_code, null);
+  assert.match(row.day, /^\d{4}-\d{2}-\d{2}$/);
+  assert.ok(Number.isInteger(row.duration_ms) && row.duration_ms >= 0);
+
+  // A provider failure is a row too, with zero tokens and the code the app will see.
+  const failing = accountedFetcher({ provider: async () => new Response("overloaded", { status: 529 }) });
+  const failed = await createHandler(accountedEnvironment(), failing.fetcher)(post({ action: "meaning", expression: "pull it off", context: "I knew you could pull it off." }));
+  assert.equal(failed.status, 503);
+  assert.deepEqual(
+    failing.calls.inserts.map((r) => [r.action, r.ok, r.error_code, r.input_tokens]),
+    [["meaning", false, "provider_busy", 0]],
+  );
+
+  // A contract failure that is retried is two attempts and two rows.
+  let attempt = 0;
+  const retried = accountedFetcher({ provider: async () => providerResponse(++attempt === 1 ? { ...validContent, expressions: [] } : validContent) });
+  assert.equal((await createHandler(accountedEnvironment(), retried.fetcher)(post({ action: "content", mode: "conversation", difficulty: 2 }))).status, 200);
+  assert.deepEqual(retried.calls.inserts.map((r) => r.ok), [false, true]);
+  assert.equal(retried.calls.counts, 1);
+});
+
