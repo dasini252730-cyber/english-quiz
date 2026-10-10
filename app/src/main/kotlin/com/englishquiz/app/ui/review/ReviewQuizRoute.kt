@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.englishquiz.app.data.repository.LearningRepository
+import com.englishquiz.app.domain.quiz.QuizMode
 import com.englishquiz.app.ui.quiz.QuizRoute
 import com.englishquiz.app.ui.theme.MongleButton
 import com.englishquiz.app.ui.theme.MongleColor
@@ -27,9 +28,9 @@ import com.englishquiz.app.ui.theme.mongleScreenInsets
 const val PRACTICE_MAX_QUESTIONS = 20
 
 /**
- * A practice quiz over the review box's current list (백로그 052). A wrong answer is recorded, so
- * a missed expression comes back sooner and shows under "자주 틀리는"; a right one changes nothing,
- * so no schedule, mastery or badge can be farmed by practising. No points, no learning session;
+ * A practice quiz over the review box's current list (백로그 052). Every answer is logged (백로그 056)
+ * so a missed expression shows under "자주 틀리는", but no schedule, stage, mastery or badge moves:
+ * nothing can be farmed by practising. No points, no learning session;
  * a never-asked expression shows its card, which is read but not recorded, so the daily quiz
  * still meets it first. [expressionIds] are the rows the list showed; [onDone] returns to the
  * review box.
@@ -51,7 +52,7 @@ fun ReviewQuizRoute(
             enrolExpressions = false,
             questionSource = { repo, _ -> repo.listSavedExpressions().filter { it.id in expressionIds } },
             maxQuestions = PRACTICE_MAX_QUESTIONS,
-            practice = true,
+            mode = QuizMode.PRACTICE,
         )
     } else {
         val (correct, total) = finished.split("/").map { it.toIntOrNull() ?: 0 }

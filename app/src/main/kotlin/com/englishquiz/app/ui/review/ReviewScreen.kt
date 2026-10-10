@@ -122,7 +122,7 @@ fun ReviewScreen(
                         }
                     }
                     items(state.shown, key = { it.id }) { expression ->
-                        ReviewExpressionCard(expression, speechState.ready, onPlay)
+                        ReviewExpressionCard(expression, speechState.ready, onPlay, askable = expression.id !in state.unaskable)
                     }
                 }
             }
@@ -135,6 +135,7 @@ private fun ReviewExpressionCard(
     expression: SavedExpressionEntity,
     speechReady: Boolean,
     onPlay: (String) -> Unit,
+    askable: Boolean = true,
 ) {
     MongleCard(corner = 18.dp, contentPadding = 10.dp) {
         Row(
@@ -151,7 +152,7 @@ private fun ReviewExpressionCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(expression.displayExpression, style = MaterialTheme.typography.titleMedium)
-                    val (chip, face, ink) = reviewChip(expression)
+                    val (chip, face, ink) = reviewChip(expression, askable)
                     MongleChip(chip, face, ink)
                 }
                 Text(
@@ -190,10 +191,12 @@ private fun emptyMessage(state: ReviewUiState.Ready): String = when {
 
 /**
  * The short pill beside the expression: its growth stage (백로그 036) plus the fill and ink it is
- * drawn in. The fruit keeps the "암기 완료" wording the rest of the app uses for mastery.
+ * drawn in. The fruit keeps the "암기 완료" wording the rest of the app uses for mastery. A row no
+ * question can be built for (백로그 057) says so instead: it is not hidden, and it cannot grow.
  */
-internal fun reviewChip(expression: SavedExpressionEntity): Triple<String, Color, Color> {
+internal fun reviewChip(expression: SavedExpressionEntity, askable: Boolean = true): Triple<String, Color, Color> {
     val stage = GrowthStage.of(expression.consecutiveCorrectCount, expression.isMastered)
+    if (!askable && stage != GrowthStage.FRUIT) return Triple("출제 불가", MongleColor.AmberSoft, MongleColor.Danger)
     return when (stage) {
         GrowthStage.FRUIT -> Triple("${stage.emoji} 암기 완료", MongleColor.GreenSoft, MongleColor.GreenInk)
         GrowthStage.SEED -> Triple(stage.title, MongleColor.PurpleSoft, MongleColor.PurpleDeep)

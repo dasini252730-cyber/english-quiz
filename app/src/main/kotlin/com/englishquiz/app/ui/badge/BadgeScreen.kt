@@ -30,6 +30,7 @@ import com.englishquiz.app.ui.theme.mongleScreenInsets
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import com.englishquiz.app.data.repository.listAllSessions
 
 /**
  * The badge list (백로그 039). Opening it is what marks the earned badges as seen, so the "새

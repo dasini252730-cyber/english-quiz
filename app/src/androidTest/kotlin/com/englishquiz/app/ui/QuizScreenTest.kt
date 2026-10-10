@@ -109,7 +109,35 @@ class QuizScreenTest {
     }
 
     @Test
-    fun aLearnCardShowsTheExpressionAndTakesKnownOrUnknown() {
+    fun theExpressionIsTypedFromItsMeaningWhenThereIsNoSentenceToBlank() {
+        // 백로그 057: the Korean meaning is the prompt; the English answer is nowhere on screen.
+        val fromMeaning = blankQuestion.copy(type = QuizQuestionType.TYPED_MEANING, questionText = "수상한", options = listOf(QuizOption("sketchy", true)))
+        val submitted = mutableListOf<String>()
+        compose.setContent {
+            EnglishQuizTheme {
+                QuizScreen(
+                    state = QuizUiState.InProgress(questionNumber = 1, totalQuestions = 1, question = fromMeaning, selectedOption = null, isCorrect = null),
+                    onSelectOption = {},
+                    onNext = {},
+                    onRetryRecord = {},
+                    onEmptyContinue = {},
+                    onRetry = {},
+                    onBack = {},
+                    onSubmitTyped = { submitted += it },
+                )
+            }
+        }
+
+        compose.onNodeWithText("이 뜻의 영어 표현을 직접 입력하세요.").assertIsDisplayed()
+        compose.onNodeWithText("수상한").assertIsDisplayed()
+        compose.onAllNodesWithText("sketchy").assertCountEquals(0)
+        compose.onNode(hasSetTextAction()).performTextInput("sketchy")
+        compose.onNodeWithText("제출").performScrollTo().performClick()
+        assertEquals(listOf("sketchy"), submitted)
+    }
+
+    @Test
+    fun aLearnCardShowsTheExpressionAndMovesOnWithOneButton() {
         val card = QuizQuestion(
             expression = "sketchy",
             type = QuizQuestionType.LEARN_CARD,
@@ -129,20 +157,18 @@ class QuizScreenTest {
                     onEmptyContinue = {},
                     onRetry = {},
                     onBack = {},
-                    onKnown = { answers += "known" },
-                    onUnknown = { answers += "unknown" },
+                    onSeen = { answers += "seen" },
                 )
             }
         }
 
-        // 백로그 045: read, not tested — gloss, full meaning, sentence, and two ways out.
+        // 백로그 045/055: read, not tested — gloss, full meaning, sentence, and one way on.
         compose.onNodeWithText("sketchy").assertIsDisplayed()
         compose.onNodeWithText("수상한").assertIsDisplayed()
         compose.onNodeWithText("수상해 보인다는 뜻입니다.").assertIsDisplayed()
         compose.onNodeWithText("That sounds sketchy.").assertIsDisplayed()
-        compose.onNodeWithText("알아요").performScrollTo().performClick()
-        compose.onNodeWithText("모르겠어요, 내일 다시").performScrollTo().performClick()
-        assertEquals(listOf("known", "unknown"), answers)
+        compose.onNodeWithText("뜻 확인 완료").performScrollTo().performClick()
+        assertEquals(listOf("seen"), answers)
     }
 
     @Test

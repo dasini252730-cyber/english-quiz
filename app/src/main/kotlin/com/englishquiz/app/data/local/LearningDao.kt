@@ -84,6 +84,19 @@ interface LearningDao {
     @Insert
     suspend fun insertLearningSession(session: LearningSessionEntity)
 
+    @Insert
+    suspend fun insertQuizAnswer(answer: QuizAnswerEntity)
+
+    @Query("SELECT * FROM quiz_answers WHERE expressionId = :expressionId ORDER BY answeredAtEpochMillis, id")
+    suspend fun listQuizAnswers(expressionId: Long): List<QuizAnswerEntity>
+
+    /**
+     * Wrong answers per expression in the boss and the practice (백로그 056), for the "자주 틀리는"
+     * view. A daily miss is already in the row's `incorrectCount`, so it is not counted twice.
+     */
+    @Query("SELECT expressionId, COUNT(*) AS wrong FROM quiz_answers WHERE isCorrect = 0 AND mode <> 'daily' GROUP BY expressionId")
+    fun observeWrongAnswerCounts(): Flow<List<WrongAnswerCount>>
+
     @Query("SELECT * FROM daily_content WHERE learningDate = :learningDate AND mode = :mode")
     suspend fun findDailyContent(learningDate: String, mode: String): DailyContentEntity?
 

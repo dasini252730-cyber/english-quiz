@@ -5,9 +5,21 @@ import com.englishquiz.app.domain.game.GrowthStage
 /**
  * Quiz question types (요구사항 14.2): the first-meeting card (백로그 045), meaning multiple
  * choice, fill-in-the-blank by choice, the typed blank for an expression at the 꽃 stage
- * (백로그 043/045), and a question about the passage itself (백로그 042).
+ * (백로그 043/045), the expression typed from its Korean meaning when there is no sentence to
+ * blank (백로그 057), and a question about the passage itself (백로그 042).
  */
-enum class QuizQuestionType { LEARN_CARD, MULTIPLE_CHOICE, FILL_IN_BLANK, TYPED_BLANK, COMPREHENSION }
+enum class QuizQuestionType { LEARN_CARD, MULTIPLE_CHOICE, FILL_IN_BLANK, TYPED_BLANK, TYPED_MEANING, COMPREHENSION }
+
+/**
+ * Which quiz an answer was given in (백로그 056). Only [DAILY] moves an expression's growth stage
+ * and review schedule. [BOSS] pays double points and [PRACTICE] pays none; both only log the
+ * answer, so the same expression cannot be promoted twice in a day or by practising.
+ */
+enum class QuizMode(val wireValue: String) {
+    DAILY("daily"),
+    BOSS("boss"),
+    PRACTICE("practice"),
+}
 
 data class QuizOption(
     val text: String,

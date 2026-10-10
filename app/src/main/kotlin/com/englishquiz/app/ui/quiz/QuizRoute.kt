@@ -14,10 +14,10 @@ import androidx.compose.runtime.setValue
 import com.englishquiz.app.data.ai.LearningContent
 import com.englishquiz.app.data.local.SavedExpressionEntity
 import com.englishquiz.app.data.repository.LearningRepository
-import com.englishquiz.app.domain.game.GrowthStage
 import com.englishquiz.app.domain.game.QuizScore
 import com.englishquiz.app.domain.game.ScorePolicy
 import com.englishquiz.app.domain.quiz.QuizBuilder
+import com.englishquiz.app.domain.quiz.QuizMode
 import com.englishquiz.app.domain.quiz.QuizOption
 import com.englishquiz.app.domain.quiz.QuizQuestion
 import com.englishquiz.app.domain.quiz.QuizQuestionType
@@ -38,7 +38,8 @@ private const val UNKNOWN_TOTAL = -1
  * already recorded have dropped out, so the learner resumes. Passage questions (백로그 042) are
  * counted and skipped instead; a recreation in the retry round (백로그 047) ends the quiz.
  * [questionSource], [maxQuestions], [pointsMultiplier] and [askCards] are the weekend boss's
- * knobs (백로그 041/045); [scoring] false is the review box's practice quiz (백로그 052).
+ * knobs (백로그 041/045); [mode] says which quiz this is (백로그 052/056): only the daily quiz moves
+ * a review schedule, the boss and the practice only log their answers.
  */
 @Composable
 fun QuizRoute(
@@ -59,14 +60,15 @@ fun QuizRoute(
     /** False for the boss (백로그 041): first meetings are asked, not shown as cards. */
     askCards: Boolean = true,
     /**
-     * The review box's practice (백로그 052): no points, only a wrong answer is recorded (a right
-     * one must not advance a schedule that is not due), and a recreation ends it rather than
-     * asking the same questions again, since nothing dropped out of the list. A never-asked
-     * expression still gets its card instead of a question it cannot know, but the card is only
-     * read: nothing is written, so the daily quiz still meets it first (백로그 048 budget intact).
+     * [QuizMode.PRACTICE] is the review box's practice (백로그 052): no points, no schedule change,
+     * and a recreation ends it rather than asking the same questions again, since nothing dropped
+     * out of the list. A never-asked expression still gets its card instead of a question it
+     * cannot know, but the card is only read: nothing is written, so the daily quiz still meets
+     * it first (백로그 048 budget intact).
      */
-    practice: Boolean = false,
+    mode: QuizMode = QuizMode.DAILY,
 ) {
+    val practice = mode == QuizMode.PRACTICE
     val scope = rememberCoroutineScope()
     var retry by rememberSaveable { mutableIntStateOf(0) }
     val nowEpochMillis = rememberSaveable { now() }
@@ -102,7 +104,7 @@ fun QuizRoute(
         loadState = QuizLoadState.Loading
         val resumed = totalQuestions != UNKNOWN_TOTAL
         try {
-            val questions = loadQuizQuestions(
+            val (questions, notice) = loadQuizQuestions(
                 repository, todayContent, nowEpochMillis, shuffleSeed, enrolExpressions, onExpressionsEnrolled,
                 questionSource, maxQuestions, skipComprehension, comprehensionDone, askCards,
             )
@@ -113,7 +115,7 @@ fun QuizRoute(
             index = 0
             selectedOption = null
             recordFailed = false
-            loadState = QuizLoadState.Loaded(questions)
+            loadState = QuizLoadState.Loaded(questions, notice)
             if (retryRound || (practice && resumed)) finish()
         } catch (error: CancellationException) {
             throw error
@@ -124,10 +126,10 @@ fun QuizRoute(
 
     val questions = (loadState as? QuizLoadState.Loaded)?.questions
 
-    fun record(question: QuizQuestion, option: QuizOption) {
+    fun record(question: QuizQuestion, option: QuizOption, hintUsed: Boolean) {
         // A passage question belongs to no expression (백로그 042) and a retry was recorded the
         // first time (백로그 047): nothing to write for either.
-        if (question.type == QuizQuestionType.COMPREHENSION || question.isRetry || (practice && option.isCorrect)) return
+        if (question.type == QuizQuestionType.COMPREHENSION || question.isRetry) return
         scope.launch {
             // A slow write may land after the learner moved on: its growth line and failure
             // notice apply only while that question is still the current one.
@@ -135,16 +137,10 @@ fun QuizRoute(
             try {
                 // The last answer's write must outlive the screen: "결과 보기" leaves at once.
                 val updated = withContext(NonCancellable) {
-                    repository.recordAnswer(question.expression, option.isCorrect, nowEpochMillis)
-                }
+                    repository.recordQuizAnswerFor(question, option.isCorrect, mode, hintUsed, nowEpochMillis)
+                } ?: return@launch
                 if (option.isCorrect && updated.isMastered) masteredCount += 1
-                if (current()) {
-                    growth = GrowthChange(
-                        expression = question.expression,
-                        before = question.growthBefore,
-                        after = GrowthStage.of(updated.consecutiveCorrectCount, updated.isMastered),
-                    )
-                }
+                if (current()) growth = growthChange(question, updated)
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {
@@ -196,13 +192,13 @@ fun QuizRoute(
         if (!practice) score = ScorePolicy.answer(score, option.isCorrect, pointsMultiplier)
         // Counted at answer time, so a recreation before "next" cannot re-ask it for points.
         if (question.type == QuizQuestionType.COMPREHENSION) comprehensionDone += 1
-        record(question, option)
+        record(question, option, hintUsed = hint != null)
     }
 
     /**
-     * The card's two answers (백로그 045) move straight on. Neither scores and neither is judged:
-     * both bring the expression back tomorrow, where the ladder starts at 씨앗. ("알아요" is the
-     * learner's word, not the quiz's — the two-option question tomorrow is the quick check.)
+     * The card's one button (백로그 045/055) moves straight on. Nothing is scored or judged: the
+     * expression comes back tomorrow, where the ladder starts at 씨앗 with the quick two-option
+     * check. A self-assessment never moves a stage, so the card does not ask for one.
      */
     fun card() {
         val question = questions?.getOrNull(index) ?: return
@@ -221,6 +217,7 @@ fun QuizRoute(
         state = quizUiState(
             loadState, questions, index, totalQuestions, selectedOption, recordFailed, score, growth, hint, !practice,
             retryPending = wrong.isNotEmpty() && !retryRound,
+            notice = (loadState as? QuizLoadState.Loaded)?.notice,
         ),
         onSelectOption = ::answer,
         onSubmitTyped = { typed ->
@@ -234,14 +231,13 @@ fun QuizRoute(
             val option = selectedOption
             if (question != null && option != null && recordFailed) {
                 recordFailed = false
-                record(question, option)
+                record(question, option, hintUsed = hint != null)
             }
         },
         onEmptyContinue = ::finish,
         onRetry = { retry++ },
         onBack = { speech.stop(); onBack() },
-        onKnown = ::card,
-        onUnknown = ::card,
+        onSeen = ::card,
         speechReady = speechState.ready,
         onPlay = { speech.play(listOf(it)) },
     )

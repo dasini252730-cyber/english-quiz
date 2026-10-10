@@ -14,6 +14,9 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.atomic.AtomicBoolean
+import com.englishquiz.app.data.repository.findDailyContent
+import com.englishquiz.app.data.repository.findPreviousSummary
+import com.englishquiz.app.data.repository.saveDailyContent
 
 /**
  * Makes tomorrow's passages tonight (백로그 025), so the first tap of the day opens at once.

@@ -50,6 +50,26 @@ data class LibraryItem(
     val createdAtEpochMillis: Long,
 )
 
+/**
+ * One answer given in any quiz (백로그 056): the daily quiz, the weekend boss or the review box's
+ * practice. Only the daily quiz moves an expression's review schedule; every mode leaves this
+ * row, so a weak spot shows up wherever it was missed and hint use (백로그 058) can be studied
+ * later. Retries at the end of a quiz (백로그 047) and passage questions are not answers here.
+ */
+@Entity(tableName = "quiz_answers", indices = [Index(value = ["expressionId"])])
+data class QuizAnswerEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val expressionId: Long,
+    /** `daily`, `boss` or `practice`: `QuizMode.wireValue`. */
+    val mode: String,
+    val isCorrect: Boolean,
+    val hintUsed: Boolean,
+    val answeredAtEpochMillis: Long,
+)
+
+/** How many logged answers an expression got wrong, across every quiz mode. */
+data class WrongAnswerCount(val expressionId: Long, val wrong: Int)
+
 @Entity(tableName = "learning_sessions", indices = [Index(value = ["learningDate"])])
 data class LearningSessionEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

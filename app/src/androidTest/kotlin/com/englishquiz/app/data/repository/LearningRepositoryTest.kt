@@ -24,6 +24,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import com.englishquiz.app.domain.quiz.QuizMode
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -273,6 +274,30 @@ class LearningRepositoryTest {
             listOf("2026-09-27" to "Sunday", "2026-09-26" to "A Saturday Plan"),
             reopened.listLibrary().map { it.learningDate to it.title },
         )
+    }
+
+    @Test
+    fun aLoggedAnswerLeavesTheReviewScheduleAloneAndCountsTowardsWrongAnswers() = runBlocking {
+        val freshDatabase = LearningDatabase.create(context, DATABASE_NAME)
+        database = freshDatabase
+        val repository = LearningRepository(freshDatabase)
+        repository.saveExpression("sketchy", "수상한", 1_000L)
+        repository.saveReviewProgress("sketchy", 2_000L, 3_000L, consecutiveCorrectCount = 2, incorrectCount = 0, isMastered = false)
+
+        // 백로그 056: the boss and the practice only log; the row is exactly as it was.
+        repository.recordQuizAnswer("sketchy", QuizMode.BOSS, wasCorrect = false, hintUsed = false, answeredAtEpochMillis = 4_000L)
+        repository.recordQuizAnswer("Sketchy ", QuizMode.PRACTICE, wasCorrect = true, hintUsed = true, answeredAtEpochMillis = 5_000L)
+        repository.recordQuizAnswer("unknown phrase", QuizMode.DAILY, wasCorrect = false, hintUsed = false, answeredAtEpochMillis = 6_000L)
+        val row = repository.listSavedExpressions().single()
+        assertEquals(2, row.consecutiveCorrectCount)
+        assertEquals(0, row.incorrectCount)
+        assertEquals(3_000L, row.nextReviewAtEpochMillis)
+        assertEquals(
+            listOf(Triple("boss", false, false), Triple("practice", true, true)),
+            repository.listQuizAnswers("sketchy").map { Triple(it.mode, it.isCorrect, it.hintUsed) },
+        )
+        assertEquals(mapOf(row.id to 1), repository.listWrongAnswerCounts())
+        assertEquals(emptyList<Any>(), repository.listQuizAnswers("unknown phrase"))
     }
 
     private companion object {

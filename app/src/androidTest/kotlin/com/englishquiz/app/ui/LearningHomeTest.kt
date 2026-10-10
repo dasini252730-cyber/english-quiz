@@ -34,6 +34,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import com.englishquiz.app.data.repository.listAllSessions
+import com.englishquiz.app.data.repository.recordCompletedSession
 
 /**
  * App-level navigation for 백로그 004: the home destinations really switch, the back arrow returns
@@ -161,12 +163,15 @@ class LearningHomeTest {
         compose.onNodeWithText("복습함으로").performClick()
         awaitText("2개 · 최근 저장순")
 
+        // 백로그 056: the miss is logged for the weak-spot view, but no row's schedule or stage moved.
         compose.waitUntil(TIMEOUT_MILLIS) {
-            runBlocking { repository.listSavedExpressions().single { it.displayExpression == "hang out" }.incorrectCount == 1 }
+            runBlocking { repository.listWrongAnswerCounts().values.sum() == 1 }
         }
-        val sketchy = runBlocking { repository.listSavedExpressions() }.single { it.displayExpression == "sketchy" }
-        assertEquals(0, sketchy.consecutiveCorrectCount)
-        assertEquals(2_000L, sketchy.lastReviewedAtEpochMillis)
+        runBlocking { repository.listSavedExpressions() }.forEach {
+            assertEquals(0, it.incorrectCount)
+            assertEquals(0, it.consecutiveCorrectCount)
+            assertEquals(2_000L, it.lastReviewedAtEpochMillis)
+        }
         assertTrue(runBlocking { repository.listAllSessions() }.isEmpty())
     }
 
@@ -207,6 +212,15 @@ class LearningHomeTest {
         assertEquals("boss", session.mode)
         assertEquals(50, session.score)
         assertEquals(2, session.quizQuestionCount)
+        // 백로그 056: the boss logs its answers and moves no schedule: the rows are as they were saved.
+        compose.waitUntil(TIMEOUT_MILLIS) {
+            runBlocking { listOf("sketchy", "hang out").sumOf { repository.listQuizAnswers(it).size } == 2 }
+        }
+        runBlocking { repository.listSavedExpressions() }.forEach {
+            assertEquals(listOf("boss" to true), runBlocking { repository.listQuizAnswers(it.displayExpression) }.map { a -> a.mode to a.isCorrect })
+            assertEquals(null, it.lastReviewedAtEpochMillis)
+            assertEquals(0, it.consecutiveCorrectCount)
+        }
     }
 
     @Test

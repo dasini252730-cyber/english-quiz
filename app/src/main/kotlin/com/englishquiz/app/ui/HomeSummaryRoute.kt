@@ -27,10 +27,12 @@ import com.englishquiz.app.ui.theme.mongleScreenInsets
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import com.englishquiz.app.domain.review.ReviewQueue
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
+import com.englishquiz.app.data.repository.listAllSessions
 
 /**
  * Loads what home shows: the saved expressions, the streak and — with a [gameRepository] — the
@@ -68,6 +70,7 @@ internal fun LearningHomeSummary(
                             streakDays = stats.streakDays,
                             savedExpressionCount = expressions.size,
                             masteredExpressionCount = expressions.count { it.isMastered },
+                            queue = ReviewQueue.of(expressions, System.currentTimeMillis()),
                             game = stats.takeIf { gameRepository != null },
                         ),
                     )

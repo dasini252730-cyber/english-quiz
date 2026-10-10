@@ -3,6 +3,7 @@ package com.englishquiz.app.ui
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -72,6 +73,15 @@ class ReviewScreenTest {
                 ReviewScreen(state, speechState, onPlay, onStop, onRetry, onBack)
             }
         }
+    }
+
+    @Test
+    fun aRowNoQuestionCanBeBuiltForIsMarkedNotHidden() {
+        // 백로그 057: the chip says why the row never comes up; a mastered row keeps its own chip.
+        show(ReviewUiState.Ready(listOf(newlySaved, inProgress, mastered), unaskable = setOf(inProgress.id, mastered.id)))
+
+        compose.onNodeWithText(inProgress.displayExpression).assertIsDisplayed()
+        compose.onAllNodesWithText("출제 불가").assertCountEquals(1)
     }
 
     @Test

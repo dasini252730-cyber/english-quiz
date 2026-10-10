@@ -34,6 +34,8 @@ import java.time.ZonedDateTime
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import com.englishquiz.app.data.repository.findDailyContent
+import com.englishquiz.app.data.repository.listLibrary
 
 /** 백로그 025: tomorrow's passages are made once, for both modes, at tomorrow's level and due list. */
 @RunWith(AndroidJUnit4::class)

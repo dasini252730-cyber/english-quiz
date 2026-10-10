@@ -21,6 +21,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import com.englishquiz.app.data.repository.listAllSessions
+import com.englishquiz.app.data.repository.listLearningDates
+import com.englishquiz.app.data.repository.recordCompletedSession
 
 sealed interface StreakUiState {
     data object Loading : StreakUiState

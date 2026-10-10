@@ -18,11 +18,15 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import com.englishquiz.app.data.local.SavedExpressionEntity
 import com.englishquiz.app.data.repository.LearningRepository
+import com.englishquiz.app.domain.quiz.QuizBuilder
 import com.englishquiz.app.domain.review.ReviewFilter
 import com.englishquiz.app.domain.review.WeakSpotPolicy
 import com.englishquiz.app.ui.reader.ReaderSpeech
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.withContext
 
 sealed interface ReviewUiState {
     data object Loading : ReviewUiState
@@ -32,8 +36,12 @@ sealed interface ReviewUiState {
     data class Ready(
         val expressions: List<SavedExpressionEntity>,
         val filter: ReviewFilter = ReviewFilter.ALL,
+        /** Wrong answers logged by the boss and practice modes (백로그 056), by expression id. */
+        val loggedWrong: Map<Long, Int> = emptyMap(),
+        /** Ids no question can be built for from the box (백로그 057), shown as "출제 불가" rather than hidden. */
+        val unaskable: Set<Long> = emptySet(),
     ) : ReviewUiState {
-        val shown: List<SavedExpressionEntity> get() = WeakSpotPolicy.apply(filter, expressions)
+        val shown: List<SavedExpressionEntity> get() = WeakSpotPolicy.apply(filter, expressions, loggedWrong)
     }
 }
 
@@ -53,7 +61,14 @@ fun ReviewRoute(
         value = ReviewUiState.Loading
         owner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             try {
-                repository.observeSavedExpressions().collect { value = ReviewUiState.Ready(it) }
+                combine(repository.observeSavedExpressions(), repository.observeWrongAnswerCounts()) { rows, wrong -> rows to wrong }
+                    .collect { (rows, wrong) ->
+                        // Askability tries a question per row against the whole box: off the main thread.
+                        val unaskable = withContext(Dispatchers.Default) {
+                            rows.filterNot { QuizBuilder.isAskable(it, rows) }.mapTo(HashSet()) { it.id }
+                        }
+                        value = ReviewUiState.Ready(rows, loggedWrong = wrong, unaskable = unaskable)
+                    }
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {

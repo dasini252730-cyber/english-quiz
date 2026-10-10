@@ -20,6 +20,7 @@ import com.englishquiz.app.data.ai.LearningContent
 import com.englishquiz.app.data.local.LearningDatabase
 import com.englishquiz.app.data.local.SavedExpressionEntity
 import com.englishquiz.app.data.repository.LearningRepository
+import com.englishquiz.app.domain.quiz.QuizMode
 import com.englishquiz.app.domain.session.LearningSessionSummary
 import com.englishquiz.app.ui.quiz.QuizRoute
 import com.englishquiz.app.ui.theme.EnglishQuizTheme
@@ -119,6 +120,10 @@ class QuizRouteTest {
         assertEquals(1, answered.count { it.incorrectCount == 1 })
         assertEquals(1, answered.count { it.incorrectCount == 0 })
         answered.forEach { assertReviewScheduled(it) }
+        // 백로그 056: the daily quiz also leaves its answers in the log, as "daily".
+        val logged = EXPRESSIONS.flatMap { repository.listQuizAnswers(it) }
+        assertEquals(listOf("daily", "daily"), logged.map { it.mode })
+        assertEquals(1, logged.count { it.isCorrect })
     }
 
     @Test
@@ -337,15 +342,15 @@ class QuizRouteTest {
             }
         }
 
-        // 백로그 045: two cards. "알아요" on one, "모르겠어요" on the other, whichever order; both only
+        // 백로그 045/055: two cards, each read and moved past with the one button; both only
         // bring the expression back tomorrow, judged by nobody.
-        awaitText("처음 보는 표현이에요. 읽어 보고 아는지 골라 주세요.")
+        awaitText("처음 보는 표현이에요. 뜻과 문장을 읽어 보세요.")
         if (compose.onAllNodesWithText("sketchy").fetchSemanticsNodes().isNotEmpty()) {
             compose.onNodeWithText("That sounds sketchy.").assertIsDisplayed()
         }
-        compose.onNodeWithText("알아요").performScrollTo().performClick()
+        compose.onNodeWithText("뜻 확인 완료").performScrollTo().performClick()
         awaitText("2 / 2")
-        compose.onNodeWithText("모르겠어요, 내일 다시").performScrollTo().performClick()
+        compose.onNodeWithText("뜻 확인 완료").performScrollTo().performClick()
 
         compose.waitUntil(TIMEOUT_MILLIS) { summary != null }
         val finished = checkNotNull(summary)
@@ -379,12 +384,12 @@ class QuizRouteTest {
         }
 
         awaitText("1 / 1")
-        compose.onNodeWithText("알아요").assertIsDisplayed()
+        compose.onNodeWithText("뜻 확인 완료").assertIsDisplayed()
         Unit
     }
 
     @Test
-    fun practiceRecordsOnlyWrongAnswersAndEndsOnRecreation() = runBlocking {
+    fun practiceLogsEveryAnswerMovesNoScheduleAndEndsOnRecreation() = runBlocking {
         val db = LearningDatabase.create(context, DATABASE_NAME)
         database = db
         val repository = LearningRepository(db)
@@ -404,25 +409,31 @@ class QuizRouteTest {
                     seed = { SEED },
                     enrolExpressions = false,
                     questionSource = { repo, _ -> repo.listSavedExpressions() },
-                    practice = true,
+                    mode = QuizMode.PRACTICE,
                 )
             }
         }
 
         // 백로그 052: "놀다" is wrong for sketchy and right for hang out — one of each, whichever first.
         awaitText("1 / 2").assertIsDisplayed()
-        assertTrue(compose.onAllNodesWithText("알아요").fetchSemanticsNodes().isEmpty())
+        assertTrue(compose.onAllNodesWithText("뜻 확인 완료").fetchSemanticsNodes().isEmpty())
         awaitText("놀다").performScrollTo().performClick()
         awaitText("다음 문제").performScrollTo().performClick()
         awaitText("2 / 2").assertIsDisplayed()
         awaitText("놀다").performScrollTo().performClick()
+        // 백로그 056: both answers are logged as practice, and neither row's schedule moved.
         compose.waitUntil(TIMEOUT_MILLIS) {
-            runBlocking { db.learningDao().findSavedExpression("sketchy")?.incorrectCount == 1 }
+            runBlocking { repository.listQuizAnswers("sketchy").size == 1 && repository.listQuizAnswers("hang out").size == 1 }
         }
-        // The right answer left its row alone: run, schedule and date exactly as they were.
-        val hangOut = checkNotNull(db.learningDao().findSavedExpression("hang out"))
-        assertEquals(2, hangOut.consecutiveCorrectCount)
-        assertEquals(NOW - DAY, hangOut.lastReviewedAtEpochMillis)
+        assertEquals(listOf("practice" to false), repository.listQuizAnswers("sketchy").map { it.mode to it.isCorrect })
+        assertEquals(listOf("practice" to true), repository.listQuizAnswers("hang out").map { it.mode to it.isCorrect })
+        listOf("sketchy", "hang out").forEach {
+            val row = checkNotNull(db.learningDao().findSavedExpression(it))
+            assertEquals(0, row.incorrectCount)
+            assertEquals(2, row.consecutiveCorrectCount)
+            assertEquals(NOW - DAY, row.lastReviewedAtEpochMillis)
+            assertEquals(NOW + 5 * DAY, row.nextReviewAtEpochMillis)
+        }
 
         // Nothing dropped out of the list, so a recreation ends the practice instead of re-asking.
         restoration.emulateSavedInstanceStateRestore()
@@ -448,15 +459,15 @@ class QuizRouteTest {
                     seed = { SEED },
                     enrolExpressions = false,
                     questionSource = { repo, _ -> repo.listSavedExpressions() },
-                    practice = true,
+                    mode = QuizMode.PRACTICE,
                 )
             }
         }
 
         // 백로그 052: a first meeting is shown as its card, never asked as a question it cannot know,
         // and the card is only read: the row stays untouched for the daily quiz to meet first.
-        awaitText("처음 보는 표현이에요. 읽어 보고 아는지 골라 주세요.")
-        compose.onNodeWithText("모르겠어요, 내일 다시").performScrollTo().performClick()
+        awaitText("처음 보는 표현이에요. 뜻과 문장을 읽어 보세요.")
+        compose.onNodeWithText("뜻 확인 완료").performScrollTo().performClick()
         compose.waitUntil(TIMEOUT_MILLIS) { summary != null }
         assertEquals(0, checkNotNull(summary).quizQuestionCount)
         val untouched = checkNotNull(db.learningDao().findSavedExpression("sketchy"))
@@ -547,8 +558,8 @@ class QuizRouteTest {
         val expectedLearned = 2
         repeat(2) { number ->
             awaitText("${number + 1} / 2")
-            if (compose.onAllNodesWithText("알아요").fetchSemanticsNodes().isNotEmpty()) {
-                compose.onNodeWithText("알아요").performScrollTo().performClick()
+            if (compose.onAllNodesWithText("뜻 확인 완료").fetchSemanticsNodes().isNotEmpty()) {
+                compose.onNodeWithText("뜻 확인 완료").performScrollTo().performClick()
             } else {
                 compose.onNodeWithText("hang out").performScrollTo().performClick()
                 awaitText("정답이에요!")
