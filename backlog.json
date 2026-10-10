@@ -2,7 +2,7 @@
   "schema_version": 1,
   "title": "개인용 영어 학습 앱 MVP backlog",
   "source": "요구사항/요구사항.md",
-  "updated_at": "2026-10-08",
+  "updated_at": "2026-10-10",
   "statuses": {
     "todo": "할 일",
     "in_progress": "작업 중",
@@ -384,7 +384,7 @@
       "title": "ReaderScreenTest 라인 한도 초과 정리",
       "description": "app/src/androidTest/.../ui/ReaderScreenTest.kt 가 251줄로 .codex/line-limits.json 의 .kt 한도 250 을 넘는다. 020 작업 전부터 초과 상태였고 020 은 두 줄만 고쳤다. Reader 화면 테스트와 Reader 라우트(저장/뜻 조회) 테스트로 나누어 각 파일을 한도 아래로 내린다. 동작 변경 없음.",
       "details": "backlog/023.md",
-      "status": "todo",
+      "status": "done",
       "priority": "P2",
       "estimate": "S",
       "depends_on": [],
@@ -823,6 +823,197 @@
         "app",
         "server",
         "tts"
+      ]
+    },
+    {
+      "id": "051",
+      "title": "지문이 한국어로 생성되던 회귀 수정 (영어 계약 명시 + Hangul 거부)",
+      "description": "2026-10-08 사용자 보고: 학습 내용 불러오기 실패, 지문이 한국어. 원인: 046/042/050 프롬프트에 '한국어 뜻/질문'을 더하면서 모델이 지문까지 한국어로 작성 → 영어 복습 표현을 못 끼워 거부. 수정: 계약 첫 줄에 '지문은 영어' 명시, 한글 20% 초과 지문은 passage_not_english로 거부 후 1회 재시도, 문단 상한 40→60(프롬프트는 40 유지), 앱은 저장된 한국어 지문을 버리고 다시 생성.",
+      "details": "backlog/051.md",
+      "status": "review_needed",
+      "priority": "P0",
+      "estimate": "S",
+      "depends_on": [],
+      "labels": [
+        "server",
+        "app",
+        "bug"
+      ]
+    },
+    {
+      "id": "052",
+      "title": "복습함 목록으로 바로 퀴즈 풀기 (필터 포함)",
+      "description": "2026-10-08 사용자 요청. 복습함의 현재 목록(전체/자주 틀리는/탭했는데 아직 씨앗)에서 '퀴즈 풀기' 버튼으로 연습 퀴즈를 연다. 정답·오답은 표현의 복습 상태(성장 단계)에 기록하지만 점수·콤보·학습 세션(스트릭·미션·레벨)에는 넣지 않는다(연습으로 점수 쌓기 방지). 끝나면 간단한 결과(맞힌 수)와 복습함으로 돌아가기. 최대 20문제, 기존 사다리·카드·되묻기 그대로.",
+      "details": "backlog/052.md",
+      "status": "review_needed",
+      "priority": "P1",
+      "estimate": "M",
+      "depends_on": [
+        "044",
+        "045"
+      ],
+      "labels": [
+        "app",
+        "review",
+        "quiz"
+      ]
+    },
+    {
+      "id": "053",
+      "title": "스토리·대화 취향 지침 반영 (프롬프트 전면 교체)",
+      "description": "2026-10-08 사용자 지침: 독자 설정(심리·관계 관찰, 미스터리·여행·역사, 드라이한 유머와 반전, 신파·잔인함 배제, 입체적 인물), 소재 30개 목록, 전 세계 여행 배경과 현지 문화, 대화는 실제 여행 상황 목록과 상황별 표현 선택, 최상위 원칙 '영어 공부라는 사실을 잊게 하라'. Edge Function 프롬프트를 이 지침으로 교체.",
+      "details": "backlog/053.md",
+      "status": "review_needed",
+      "priority": "P0",
+      "estimate": "M",
+      "depends_on": [],
+      "labels": [
+        "server",
+        "content"
+      ]
+    },
+    {
+      "id": "054",
+      "title": "Story와 Conversation 연결 + 다음 편이 궁금한 연속성",
+      "description": "2026-10-08 사용자 지침. 지문마다 영어 줄거리(synopsis)를 받아 저장하고, 대화 생성 시 같은 날 스토리의 줄거리·인물·장소를 넘겨 그 상황을 연습하게 하며, 스토리 생성 시 직전 스토리 줄거리를 넘겨 이어지거나 참조하게 한다(인물 반복 가능). 선생성도 같은 순서(스토리→대화).",
+      "details": "backlog/054.md",
+      "status": "review_needed",
+      "priority": "P0",
+      "estimate": "M",
+      "depends_on": [
+        "053"
+      ],
+      "labels": [
+        "server",
+        "app",
+        "content"
+      ]
+    },
+    {
+      "id": "055",
+      "title": "표현 학습 상태 4단계 분리 (새 표현 대기열 · 첫 복습 대기 · 복습 예정 · 숙달)",
+      "description": "2026-10-10 사용자 지침. 저장됨 ≠ 첫 학습 완료 ≠ 복습 시점 도래를 코드로 명시한다. ① 새 표현 대기열(카드도 못 본 표현, 하루 5개만 첫 학습 투입) ② 첫 학습 완료·첫 복습 대기(카드 본 표현, 다음 날 첫 채점) ③ 복습 예정(날짜 도래, 가장 밀린 것부터) ④ 숙달(열매, 30일 주기 유지). 지문에서 12개가 등록되면 그날 카드는 5개, 나머지는 대기열에 남아 차례로. 학습 카드 버튼은 '뜻 확인 완료' 하나로 바꾼다(자기평가로 승급하지 않음).",
+      "details": "backlog/055.md",
+      "status": "review_needed",
+      "priority": "P0",
+      "estimate": "M",
+      "depends_on": [],
+      "labels": [
+        "app",
+        "quiz",
+        "review"
+      ]
+    },
+    {
+      "id": "056",
+      "title": "퀴즈 모드별 복습 기록 규칙 확정 (일반만 일정 변경, 보스·연습은 기록만)",
+      "description": "2026-10-10 사용자 지침. 일반 지문 퀴즈만 성장 단계·복습 일정을 바꾼다. 주말 보스전은 2배 점수와 도전 기록만, 복습함 연습은 약점 확인만. 두 모드 모두 정답·오답을 별도 답변 기록(표현, 모드, 정오답, 힌트 사용, 시각)에 남기되 정식 복습 단계·날짜는 건드리지 않는다. 되묻기 정답은 정식 정답으로 계산하지 않는 현재 규칙 유지. '자주 틀리는' 필터는 이 기록도 함께 본다.",
+      "details": "backlog/056.md",
+      "status": "review_needed",
+      "priority": "P0",
+      "estimate": "M",
+      "depends_on": [],
+      "labels": [
+        "app",
+        "quiz",
+        "review",
+        "data"
+      ]
+    },
+    {
+      "id": "057",
+      "title": "문맥 없는 표현의 숙달 판정 보완 (뜻→영어 입력, 출제 불가 분리)",
+      "description": "2026-10-10 사용자 지침. 꽃 단계인데 빈칸 문장을 못 만드는 표현은 뜻 고르기로 대체하지 말고 한국어 뜻을 보여주고 영어 표현을 직접 입력하게 한다(회상 없이 열매에 오르는 일 방지). 예문은 지문 문장을 그대로 보관한다(현행). 보기를 2개도 못 만들거나 정답 판별이 어려운 표현은 숙달로 승급시키지 않고 '출제 불가' 상태로 복습함에서 구분해 보여준다.",
+      "details": "backlog/057.md",
+      "status": "review_needed",
+      "priority": "P0",
+      "estimate": "M",
+      "depends_on": [],
+      "labels": [
+        "app",
+        "quiz"
+      ]
+    },
+    {
+      "id": "058",
+      "title": "입력 채점 관대화와 힌트 사용 기록",
+      "description": "2026-10-10 사용자 지침. 직접 입력 채점에서 대소문자·앞뒤 공백·불필요한 문장부호·허용 축약형(I'm/I am 등)·사전 정의 동사형 차이를 정답으로 인정한다. 비슷해 보이지만 뜻이 달라지는 표현은 자동 정답 처리하지 않는다. 첫 글자 힌트를 보고 맞힌 답은 '힌트 사용 정답'으로 기록한다(MVP는 기록까지; 승급 차등은 데이터 보고 결정).",
+      "details": "backlog/058.md",
+      "status": "review_needed",
+      "priority": "P1",
+      "estimate": "S",
+      "depends_on": [
+        "056"
+      ],
+      "labels": [
+        "app",
+        "quiz"
+      ]
+    },
+    {
+      "id": "059",
+      "title": "보기 품질 향상과 출제 불가 표현 처리",
+      "description": "2026-10-10 사용자 지침. 오답 보기는 같은 품사·비슷한 문법 역할로 맞춘다(생성 응답에 표현 종류 추가). 정답 기준은 그 지문에서 쓰인 뜻(현행 유지). 정답 위치가 특정 번호에 몰리지 않게 한다. 보기를 못 만드는 표현은 방치하지 않고 대체 보기(짧은 뜻끼리 지문 표현 활용)를 쓰거나 출제 불가로 분리한다.",
+      "details": "backlog/059.md",
+      "status": "todo",
+      "priority": "P1",
+      "estimate": "M",
+      "depends_on": [
+        "057"
+      ],
+      "labels": [
+        "app",
+        "server",
+        "quiz"
+      ]
+    },
+    {
+      "id": "060",
+      "title": "오늘의 복습량과 대기량 표시",
+      "description": "2026-10-10 사용자 지침. 밀린 복습이 많을 때 왜 새 표현이 안 나오는지 보이게 한다. 홈과 퀴즈 진입에 '오늘의 학습 N/10 · 밀린 복습 X개 · 새 표현 대기 Y개'와 '오늘은 오래된 복습을 먼저 진행해요. 남은 복습은 다음 세션에서 이어집니다.' 안내를 보여준다. 출제 우선순위는 바꾸지 않는다.",
+      "details": "backlog/060.md",
+      "status": "review_needed",
+      "priority": "P1",
+      "estimate": "S",
+      "depends_on": [
+        "055"
+      ],
+      "labels": [
+        "app",
+        "home",
+        "quiz"
+      ]
+    },
+    {
+      "id": "061",
+      "title": "학습 기록 일관성 시나리오 계측 테스트 (세션 중복·스트릭·복습 일정·답변 기록·점수 합)",
+      "description": "2026-10-10 사용자 요청. 시나리오 하나를 순서대로 돌린다: 오늘 지문 읽기 → 일일 퀴즈 완료 → 결과 화면에서 프로세스 종료 후 재시작 → 같은 날 다른 모드 완료 → 다음 날로 시계 이동 → 복습 퀴즈에서 한 표현을 오답→정답→오답→정답. 단계마다 learning_sessions가 모드별 한 건(재시작 후 중복 없음), 스트릭은 하루에 1만 오름, saved_expressions의 연속 정답 1·다음 복습 오늘+1일, quiz_answers에 되묻기 미기록·일정 변경과 기록이 한 트랜잭션, 누적 점수·레벨이 세션 점수 합과 일치함을 검증. 시계는 주입하고 시스템 시간에 의존하지 않는다. 함께 ResultScreenTest 간헐 크래시(018)를 재현·원인 조사.",
+      "details": "backlog/061.md",
+      "status": "review_needed",
+      "priority": "P1",
+      "estimate": "M",
+      "depends_on": [
+        "056"
+      ],
+      "labels": [
+        "test",
+        "qa",
+        "data"
+      ]
+    },
+    {
+      "id": "062",
+      "title": "Edge Function 접근 제한(앱 토큰)과 일일 상한, 호출 사용량 기록",
+      "description": "2026-10-10 사용자 요청. ai-learning에 고정 앱 토큰 헤더를 요구(없거나 틀리면 401, 토큰은 Supabase secrets, 앱은 BuildConfig 주입, 소스에 값 없음). 하루 호출 상한(기본 40회) 초과 시 429와 기존 오류 코드 체계의 코드. 호출마다 action·모델·input/output 토큰·소요 시간·성공 여부를 Supabase 테이블에 남겨 월간 비용 계산이 가능하게. 앱은 401/429를 구분된 메시지로 표시. node 테스트에 토큰 거부·상한 초과·사용량 기록 추가, 기존 24개 유지. README에 배포 명령과 secrets 설정 순서.",
+      "details": "backlog/062.md",
+      "status": "review_needed",
+      "priority": "P0",
+      "estimate": "M",
+      "depends_on": [],
+      "labels": [
+        "server",
+        "security",
+        "cost"
       ]
     }
   ]

@@ -14,6 +14,9 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.atomic.AtomicBoolean
+import com.englishquiz.app.data.repository.findDailyContent
+import com.englishquiz.app.data.repository.findPreviousSummary
+import com.englishquiz.app.data.repository.saveDailyContent
 
 /**
  * Makes tomorrow's passages tonight (백로그 025), so the first tap of the day opens at once.
@@ -63,15 +66,19 @@ class ContentPrefetcher(
         val dueBy = tomorrowStart.plusDays(1).toInstant().toEpochMilli() - 1
         val levels = settings.settings.first()
         val made = mutableListOf<ContentMode>()
-        for (mode in ContentMode.entries) {
+        // The story first (백로그 054): the conversation that follows is set in its world.
+        for (mode in listOf(ContentMode.STORY, ContentMode.CONVERSATION)) {
             try {
                 if (repository.findDailyContent(tomorrowIso, mode) != null) continue
                 val due = repository.findDueExpressions(dueBy)
+                val other = if (mode == ContentMode.STORY) ContentMode.CONVERSATION else ContentMode.STORY
                 val content = generate(
                     ContentGenerationRequest(
                         mode = mode,
                         difficulty = levels.level(mode) ?: DEFAULT_DIFFICULTY,
                         reviewExpressions = due.take(MAX_REVIEW_EXPRESSIONS).map { it.displayExpression },
+                        previousStory = repository.findPreviousSummary(ContentMode.STORY, tomorrowIso),
+                        companion = repository.findDailyContent(tomorrowIso, other)?.summary(),
                     ),
                 )
                 repository.saveDailyContent(tomorrowIso, content, now)

@@ -73,6 +73,23 @@ internal val MIGRATION_7_8 = object : Migration(7, 8) {
     }
 }
 
+/** 백로그 056: every quiz answer in its own table, so boss and practice can be studied without moving a schedule. */
+internal val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `quiz_answers` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `expressionId` INTEGER NOT NULL,
+                `mode` TEXT NOT NULL,
+                `isCorrect` INTEGER NOT NULL,
+                `hintUsed` INTEGER NOT NULL,
+                `answeredAtEpochMillis` INTEGER NOT NULL
+            )""",
+        )
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_quiz_answers_expressionId` ON `quiz_answers` (`expressionId`)")
+    }
+}
+
 /** 백로그 021: one generated passage per day and mode, so re-entry stops paying for a new one. */
 internal val MIGRATION_3_4 = object : Migration(3, 4) {
     override fun migrate(database: SupportSQLiteDatabase) {

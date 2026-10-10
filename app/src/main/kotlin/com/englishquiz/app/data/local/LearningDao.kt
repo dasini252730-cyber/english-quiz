@@ -84,12 +84,32 @@ interface LearningDao {
     @Insert
     suspend fun insertLearningSession(session: LearningSessionEntity)
 
+    @Insert
+    suspend fun insertQuizAnswer(answer: QuizAnswerEntity)
+
+    @Query("SELECT * FROM quiz_answers WHERE expressionId = :expressionId ORDER BY answeredAtEpochMillis, id")
+    suspend fun listQuizAnswers(expressionId: Long): List<QuizAnswerEntity>
+
+    /**
+     * Wrong answers per expression in the boss and the practice (백로그 056), for the "자주 틀리는"
+     * view. A daily miss is already in the row's `incorrectCount`, so it is not counted twice.
+     */
+    @Query("SELECT expressionId, COUNT(*) AS wrong FROM quiz_answers WHERE isCorrect = 0 AND mode <> 'daily' GROUP BY expressionId")
+    fun observeWrongAnswerCounts(): Flow<List<WrongAnswerCount>>
+
     @Query("SELECT * FROM daily_content WHERE learningDate = :learningDate AND mode = :mode")
     suspend fun findDailyContent(learningDate: String, mode: String): DailyContentEntity?
 
     /** Replaces, because a retry after a failed save must not be refused as a duplicate. */
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertDailyContent(content: DailyContentEntity)
+
+    /** The newest passage of [mode] from before [learningDate] (백로그 054): the previous episode. */
+    @Query(
+        "SELECT * FROM daily_content WHERE mode = :mode AND learningDate < :learningDate " +
+            "ORDER BY learningDate DESC LIMIT 1",
+    )
+    suspend fun findLatestDailyContentBefore(mode: String, learningDate: String): DailyContentEntity?
 
     /** The library (백로그 026): every passage ever generated, newest day first. */
     @Query(

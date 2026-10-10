@@ -8,6 +8,7 @@ import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.data.ai.ContentSegment
 import com.englishquiz.app.data.ai.GlossaryEntry
 import com.englishquiz.app.data.ai.LearningContent
+import com.englishquiz.app.data.ai.PassageSummary
 import com.englishquiz.app.data.local.LIBRARY_SESSION_MODE
 import com.englishquiz.app.data.local.LearningDatabase
 import com.englishquiz.app.data.local.LearningSessionEntity
@@ -23,6 +24,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import com.englishquiz.app.domain.quiz.QuizMode
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -205,6 +207,27 @@ class LearningRepositoryTest {
     }
 
     @Test
+    fun thePreviousEpisodeIsTheNewestStoryBeforeTheDayWithASynopsis() = runBlocking {
+        val db = LearningDatabase.create(context, DATABASE_NAME)
+        database = db
+        val first = LearningRepository(db)
+        val episode = LearningContent(
+            title = "Ep. 1",
+            mode = ContentMode.STORY,
+            segments = listOf(ContentSegment("Narrator", "Alex planned a Saturday.")),
+            expressions = listOf(ContentExpression("planned", "계획했다", 0, 5, 12)),
+            synopsis = "Alex planned a Saturday.",
+        )
+        // 백로그 054: the previous episode is the newest story strictly before the day, with a synopsis.
+        assertNull(first.findPreviousSummary(ContentMode.STORY, "2026-09-27"))
+        first.saveDailyContent("2026-09-24", content = episode, nowEpochMillis = 90)
+        first.saveDailyContent("2026-09-25", content = episode.copy(title = "Ep. 2", synopsis = ""), nowEpochMillis = 95)
+        assertEquals(null, first.findPreviousSummary(ContentMode.STORY, "2026-09-26")?.takeIf { it.title == "Ep. 1" })
+        assertEquals(PassageSummary(ContentMode.STORY, "Ep. 1", "Alex planned a Saturday."), first.findPreviousSummary(ContentMode.STORY, "2026-09-25"))
+        assertNull(first.findPreviousSummary(ContentMode.STORY, "2026-09-24"))
+    }
+
+    @Test
     fun dailyContentIsKeyedByDateAndModeAndSurvivesReopen() = runBlocking {
         val firstDatabase = LearningDatabase.create(context, DATABASE_NAME)
         database = firstDatabase
@@ -225,6 +248,15 @@ class LearningRepositoryTest {
         assertEquals(conversation, first.findDailyContent("2026-09-26", ContentMode.CONVERSATION))
         assertNull(first.findDailyContent("2026-09-26", ContentMode.STORY))
         assertNull(first.findDailyContent("2026-09-27", ContentMode.CONVERSATION))
+        // A passage stored in Korean (백로그 051) reads as none, so the session generates again.
+        val korean = conversation.copy(
+            segments = listOf(ContentSegment("지은", "어? 민지? 정말 오랜만이다! 요즘 어떻게 지내?")),
+            expressions = listOf(ContentExpression("오랜만이다", "오래간만", 0, 10, 15)),
+            glossary = emptyList(),
+        )
+        first.saveDailyContent("2026-09-26", content = korean, nowEpochMillis = 150)
+        assertNull(first.findDailyContent("2026-09-26", ContentMode.CONVERSATION))
+        first.saveDailyContent("2026-09-26", content = conversation, nowEpochMillis = 200)
         firstDatabase.close()
 
         // The whole point: a fresh process the same day must not generate again.
@@ -242,6 +274,30 @@ class LearningRepositoryTest {
             listOf("2026-09-27" to "Sunday", "2026-09-26" to "A Saturday Plan"),
             reopened.listLibrary().map { it.learningDate to it.title },
         )
+    }
+
+    @Test
+    fun aLoggedAnswerLeavesTheReviewScheduleAloneAndCountsTowardsWrongAnswers() = runBlocking {
+        val freshDatabase = LearningDatabase.create(context, DATABASE_NAME)
+        database = freshDatabase
+        val repository = LearningRepository(freshDatabase)
+        repository.saveExpression("sketchy", "수상한", 1_000L)
+        repository.saveReviewProgress("sketchy", 2_000L, 3_000L, consecutiveCorrectCount = 2, incorrectCount = 0, isMastered = false)
+
+        // 백로그 056: the boss and the practice only log; the row is exactly as it was.
+        repository.recordQuizAnswer("sketchy", QuizMode.BOSS, wasCorrect = false, hintUsed = false, answeredAtEpochMillis = 4_000L)
+        repository.recordQuizAnswer("Sketchy ", QuizMode.PRACTICE, wasCorrect = true, hintUsed = true, answeredAtEpochMillis = 5_000L)
+        repository.recordQuizAnswer("unknown phrase", QuizMode.DAILY, wasCorrect = false, hintUsed = false, answeredAtEpochMillis = 6_000L)
+        val row = repository.listSavedExpressions().single()
+        assertEquals(2, row.consecutiveCorrectCount)
+        assertEquals(0, row.incorrectCount)
+        assertEquals(3_000L, row.nextReviewAtEpochMillis)
+        assertEquals(
+            listOf(Triple("boss", false, false), Triple("practice", true, true)),
+            repository.listQuizAnswers("sketchy").map { Triple(it.mode, it.isCorrect, it.hintUsed) },
+        )
+        assertEquals(mapOf(row.id to 1), repository.listWrongAnswerCounts())
+        assertEquals(emptyList<Any>(), repository.listQuizAnswers("unknown phrase"))
     }
 
     private companion object {

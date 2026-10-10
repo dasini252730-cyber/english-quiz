@@ -42,8 +42,7 @@ fun QuizScreen(
     onSubmitTyped: (String) -> Unit = {},
     onHint: () -> Unit = {},
     /** The learn card's answers and pronunciation (백로그 045). */
-    onKnown: () -> Unit = {},
-    onUnknown: () -> Unit = {},
+    onSeen: () -> Unit = {},
     speechReady: Boolean = false,
     onPlay: (String) -> Unit = {},
 ) {
@@ -64,8 +63,8 @@ fun QuizScreen(
                 QuizUiState.Error -> QuizErrorContent(onRetry)
                 QuizUiState.Empty -> QuizEmptyContent(onEmptyContinue)
                 is QuizUiState.InProgress -> if (state.question.type == QuizQuestionType.LEARN_CARD) {
-                    Text("처음 보는 표현이에요. 읽어 보고 아는지 골라 주세요.", style = MaterialTheme.typography.headlineSmall)
-                    QuizLearnCard(state.question, speechReady, onPlay, onKnown, onUnknown)
+                    Text("처음 보는 표현이에요. 뜻과 문장을 읽어 보세요.", style = MaterialTheme.typography.headlineSmall)
+                    QuizLearnCard(state.question, speechReady, onPlay, onSeen)
                 } else {
                     QuizQuestionContent(state, onSelectOption, onNext, onRetryRecord, onSubmitTyped, onHint)
                 }
@@ -97,7 +96,7 @@ private fun QuizHeader(state: QuizUiState, onBack: () -> Unit) {
             )
         }
     }
-    if (progress != null) QuizScoreRow(progress.score)
+    if (progress != null && progress.scoring) QuizScoreRow(progress.score)
 }
 
 /** Points so far and the current combo (백로그 035); the combo chip only shows during a run. */
@@ -143,9 +142,10 @@ private fun QuizQuestionContent(
 ) {
     val answered = state.selectedOption != null
     val instruction = questionInstruction(state.question.type)
+    state.notice?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MongleColor.InkMuted) }
     Text(if (state.question.isRetry) "다시 풀기 · $instruction" else instruction, style = MaterialTheme.typography.headlineSmall)
     QuizPrompt(state)
-    if (state.question.type == QuizQuestionType.TYPED_BLANK) {
+    if (state.question.type == QuizQuestionType.TYPED_BLANK || state.question.type == QuizQuestionType.TYPED_MEANING) {
         QuizTypedAnswer(state, onSubmitTyped, onHint)
     } else {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -170,7 +170,7 @@ private fun QuizPrompt(state: QuizUiState.InProgress) {
             state.question.questionText,
             style = MaterialTheme.typography.displayLarge,
         )
-        QuizQuestionType.FILL_IN_BLANK, QuizQuestionType.TYPED_BLANK, QuizQuestionType.COMPREHENSION ->
+        QuizQuestionType.FILL_IN_BLANK, QuizQuestionType.TYPED_BLANK, QuizQuestionType.TYPED_MEANING, QuizQuestionType.COMPREHENSION ->
             MongleCard(contentPadding = 20.dp) {
                 Text(state.question.questionText, style = MaterialTheme.typography.titleMedium)
             }
@@ -190,6 +190,7 @@ private fun questionInstruction(type: QuizQuestionType): String = when (type) {
     QuizQuestionType.MULTIPLE_CHOICE -> "다음 표현의 뜻으로 알맞은 것을 고르세요."
     QuizQuestionType.FILL_IN_BLANK -> "빈칸에 들어갈 표현을 고르세요."
     QuizQuestionType.TYPED_BLANK -> "빈칸에 들어갈 표현을 직접 입력하세요."
+    QuizQuestionType.TYPED_MEANING -> "이 뜻의 영어 표현을 직접 입력하세요."
     QuizQuestionType.COMPREHENSION -> "오늘 읽은 내용을 떠올려 답하세요."
     QuizQuestionType.LEARN_CARD -> "처음 보는 표현이에요."
 }

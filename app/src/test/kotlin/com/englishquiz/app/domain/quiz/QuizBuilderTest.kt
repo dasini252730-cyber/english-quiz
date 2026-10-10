@@ -10,6 +10,7 @@ import com.englishquiz.app.domain.quiz.QuizFixtures.DISTRACTORS
 import com.englishquiz.app.domain.quiz.QuizFixtures.NOW
 import com.englishquiz.app.domain.quiz.QuizFixtures.SEED
 import com.englishquiz.app.domain.quiz.QuizFixtures.expression
+import com.englishquiz.app.domain.review.ReviewQueue
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -81,13 +82,49 @@ class QuizBuilderTest {
     }
 
     @Test
-    fun withoutASentenceTheBlankStepsFallBackToFourMeanings() {
+    fun withoutASentenceTheLeafFallsBackToMeaningsAndTheFlowerTypesTheExpressionFromItsMeaning() {
         val leaf = expression("sketchy", "수상한", consecutiveCorrect = 2)
-        val flower = expression("hang out", "놀다", consecutiveCorrect = 3)
+        val flower = expression("hang out", "놀다", consecutiveCorrect = 3, shortMeaning = "놀다 (짧은 뜻)")
 
         val questions = QuizBuilder.build(null, listOf(leaf, flower), listOf(leaf, flower) + DISTRACTORS, SEED).questions
+            .associateBy { it.expression }
 
-        assertTrue(questions.all { it.type == QuizQuestionType.MULTIPLE_CHOICE && it.options.size == 4 })
+        val leafQuestion = checkNotNull(questions["sketchy"])
+        assertEquals(QuizQuestionType.MULTIPLE_CHOICE, leafQuestion.type)
+        assertEquals(4, leafQuestion.options.size)
+        // 백로그 057: mastery is reached by recalling the words, so the 꽃 step is typed from the gloss.
+        val flowerQuestion = checkNotNull(questions["hang out"])
+        assertEquals(QuizQuestionType.TYPED_MEANING, flowerQuestion.type)
+        assertEquals("놀다 (짧은 뜻)", flowerQuestion.questionText)
+        assertEquals(listOf(QuizOption("hang out", true)), flowerQuestion.options)
+    }
+
+    @Test
+    fun anExpressionWithNothingToChooseAgainstIsNotAskableAndIsLeftOut() {
+        // 백로그 057: alone in the box, a meaning question has no wrong option; a blank meaning has no answer.
+        val alone = expression("sketchy", "수상한", consecutiveCorrect = 0)
+        assertTrue(!QuizBuilder.isAskable(alone, listOf(alone)))
+        assertTrue(QuizBuilder.build(null, listOf(alone), listOf(alone), SEED).questions.isEmpty())
+        assertTrue(QuizBuilder.isAskable(alone, listOf(alone) + DISTRACTORS))
+        val blankMeaning = expression("hang out", "   ", consecutiveCorrect = 3)
+        assertTrue(!QuizBuilder.isAskable(blankMeaning, listOf(blankMeaning) + DISTRACTORS))
+        // From 꽃 the typed form needs no pool at all; a card is always possible for a new row.
+        val flowerAlone = expression("call it a day", "그만하다", consecutiveCorrect = 3)
+        assertTrue(QuizBuilder.isAskable(flowerAlone, listOf(flowerAlone)))
+        assertTrue(QuizBuilder.isAskable(expression("brand new", "새것", reviewed = false), emptyList()))
+    }
+
+    @Test
+    fun aMeaningThatQuotesTheExpressionIsMaskedBeforeItIsTyped() {
+        // 백로그 057: a tap-saved meaning often reads '"call it a day"는 …': the answer is blanked out.
+        val quoting = expression("call it a day", "\"Call it a day\"는 오늘은 그만하자는 뜻이에요.", consecutiveCorrect = 3)
+        val onlyTheExpression = expression("hang out", "hang out", consecutiveCorrect = 3)
+
+        val question = QuizBuilder.build(null, listOf(quoting), listOf(quoting) + DISTRACTORS, SEED).questions.single()
+        assertEquals(QuizQuestionType.TYPED_MEANING, question.type)
+        assertEquals("\"____\"는 오늘은 그만하자는 뜻이에요.", question.questionText)
+        assertTrue(QuizBuilder.build(null, listOf(onlyTheExpression), listOf(onlyTheExpression) + DISTRACTORS, SEED).questions.isEmpty())
+        assertTrue(!QuizBuilder.isAskable(onlyTheExpression, listOf(onlyTheExpression) + DISTRACTORS))
     }
 
     @Test
@@ -122,9 +159,9 @@ class QuizBuilderTest {
         assertEquals(2, questions.count { it.type == QuizQuestionType.LEARN_CARD })
         // A row a card left behind today is recognised as such; a judged row is not.
         val seen = expression("seen", "뜻", consecutiveCorrect = 0).copy(lastReviewedAtEpochMillis = NOW)
-        assertTrue(QuizBuilder.isFirstMeetingShown(seen, NOW - 1, NOW + 1))
-        assertTrue(!QuizBuilder.isFirstMeetingShown(seen.copy(consecutiveCorrectCount = 1), NOW - 1, NOW + 1))
-        assertTrue(!QuizBuilder.isFirstMeetingShown(seen, NOW + 1, NOW + 2))
+        assertTrue(ReviewQueue.isFirstMeetingShown(seen, NOW - 1, NOW + 1))
+        assertTrue(!ReviewQueue.isFirstMeetingShown(seen.copy(consecutiveCorrectCount = 1), NOW - 1, NOW + 1))
+        assertTrue(!ReviewQueue.isFirstMeetingShown(seen, NOW + 1, NOW + 2))
     }
 
     @Test

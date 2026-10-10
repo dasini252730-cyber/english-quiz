@@ -54,8 +54,11 @@ internal fun parseContentResponse(response: JSONObject, expectedMode: ContentMod
         glossary = data.glossary(),
         comprehension = data.comprehension(),
         speakers = data.speakers(segments),
+        synopsis = data.optString("synopsis").trim().take(MAX_SYNOPSIS_CHARS),
     )
 }
+
+private const val MAX_SYNOPSIS_CHARS = 600
 
 /** Speaker genders (백로그 050): a courtesy like the glossary; an entry naming nobody is skipped. */
 private fun JSONObject.speakers(segments: List<ContentSegment>): Map<String, SpeakerGender> {
@@ -213,5 +216,6 @@ internal fun LearningContent.toResponseJson(): JSONObject {
         .put("glossary", glossaryArray)
         .put("comprehension", comprehensionArray)
         .put("speakers", speakerArray)
+        .put("synopsis", synopsis)
     return JSONObject().put("data", data)
 }

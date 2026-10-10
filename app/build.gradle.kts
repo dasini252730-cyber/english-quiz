@@ -26,6 +26,15 @@ android {
                 "ship inside the APK. Secrets belong in the Edge Function, never in the app."
         }
         buildConfigField("String", "AI_ENDPOINT", "\"$aiEndpoint\"")
+
+        // The app token the Edge Function requires on every call (백로그 062). It is a secret the
+        // APK carries: pass -PaiAppToken=... (CI reads it from a repository secret); never put the
+        // value in source. An empty value builds an APK the function will answer with 401.
+        val aiAppToken = providers.gradleProperty("aiAppToken").getOrElse("")
+        require(aiAppToken.none { it == '"' || it == '\\' || it.isWhitespace() }) {
+            "aiAppToken must be one token without quotes, backslashes or spaces."
+        }
+        buildConfigField("String", "AI_APP_TOKEN", "\"$aiAppToken\"")
     }
 
     // CI signs the debug APK with the PC's own debug keystore (passed as -PdebugKeystore=...) so a

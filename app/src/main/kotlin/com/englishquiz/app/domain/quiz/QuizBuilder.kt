@@ -4,6 +4,7 @@ import com.englishquiz.app.data.ai.ComprehensionQuestion
 import com.englishquiz.app.data.ai.LearningContent
 import com.englishquiz.app.data.local.SavedExpressionEntity
 import com.englishquiz.app.domain.game.GrowthStage
+import com.englishquiz.app.domain.review.ExpressionState
 import kotlin.random.Random
 
 /**
@@ -22,7 +23,8 @@ import kotlin.random.Random
  * The shape of a question follows the expression's growth stage (백로그 045), one step harder per
  * stage: never quizzed → a card to read; 씨앗 → two meanings; 새싹 → four; 잎 → the sentence with
  * a blank and expressions to choose from; 꽃 → the blank typed. Without a context sentence the
- * blank steps fall back to four meanings.
+ * 잎 step falls back to four meanings, and from 꽃 the expression is typed from its Korean meaning
+ * (백로그 057): mastery must be reached by recalling the words, never by recognising a meaning.
  *
  * Wrong options come from the learner's other saved expressions and, when those run out, from the
  * remaining phrases of [todayContent] (요구사항 22: their meanings are already in hand, so this
@@ -66,11 +68,11 @@ object QuizBuilder {
         val candidates = todayExpressions.distinctBy { normalizeQuizText(it.displayExpression) }
         if (candidates.isEmpty()) return QuizSet(comprehension)
 
-        // Reviews first, the most overdue at the front so a backlog drains; then at most a few
-        // expressions never asked before (백로그 048), the rest waiting for another day. Only then
-        // shuffle, so the order within one session still varies.
+        // Two queues (백로그 055): reviews first, the most overdue at the front so a backlog drains;
+        // then at most a few expressions from the new-expression queue (백로그 048), the rest
+        // waiting for another day. Only then shuffle, so the order within one session still varies.
         val byDue = compareBy<SavedExpressionEntity>({ it.nextReviewAtEpochMillis ?: it.firstSavedAtEpochMillis }, { it.id })
-        val (fresh, reviews) = candidates.partition { askCards && it.lastReviewedAtEpochMillis == null }
+        val (fresh, reviews) = candidates.partition { askCards && ExpressionState.isNew(it) }
         val newToday = (NEW_PER_DAY - firstMeetingsShownToday).coerceAtLeast(0)
         val selected = (reviews.sortedWith(byDue) + fresh.sortedWith(byDue).take(newToday))
             .take(maxQuestions)
@@ -86,12 +88,16 @@ object QuizBuilder {
         explanation = item.explanation.ifBlank { "지문의 흐름을 떠올려 보세요." },
     )
 
-    /** True for a row a card left behind today: seen, but neither right nor wrong yet (백로그 045). */
-    fun isFirstMeetingShown(expression: SavedExpressionEntity, dayStartEpochMillis: Long, dayEndEpochMillis: Long): Boolean {
-        val seenAt = expression.lastReviewedAtEpochMillis ?: return false
-        return seenAt in dayStartEpochMillis until dayEndEpochMillis &&
-            expression.consecutiveCorrectCount == 0 && expression.incorrectCount == 0 && !expression.isMastered
-    }
+    /**
+     * Whether an honest question can be built for [expression] from the review box alone
+     * (백로그 057): false when its meaning is blank, hides nothing but the expression itself, or
+     * the box offers no other meaning to choose against. A card is always possible, so a new row
+     * is askable. The review box marks the rest "출제 불가"; such a row is not asked from the box,
+     * so it cannot be promoted by it (today's passage may still lend a blank its options).
+     */
+    fun isAskable(expression: SavedExpressionEntity, pool: List<SavedExpressionEntity>): Boolean =
+        ExpressionState.isNew(expression) ||
+            buildQuestion(expression, distractorCandidates(null, pool), Random(0), askCards = false) != null
 
     private fun buildQuestion(
         expression: SavedExpressionEntity,
@@ -110,7 +116,7 @@ object QuizBuilder {
             growthBefore = stage,
             shortMeaning = expression.shortMeaning,
         )
-        if (askCards && expression.lastReviewedAtEpochMillis == null) {
+        if (askCards && ExpressionState.isNew(expression)) {
             // Seen for the first time: read, not tested (백로그 045).
             return question.copy(type = QuizQuestionType.LEARN_CARD, questionText = expression.contextSentence)
         }
@@ -119,10 +125,15 @@ object QuizBuilder {
             val options = buildOptions(answer, distractors, random, MANY_OPTIONS, Distractor::expression) ?: return null
             return question.copy(type = QuizQuestionType.FILL_IN_BLANK, questionText = blanked, options = options)
         }
-        if (blanked != null && stage.ordinal >= GrowthStage.FLOWER.ordinal) {
+        if (stage.ordinal >= GrowthStage.FLOWER.ordinal) {
+            // Typed either way: the blank in its sentence, or the expression from its meaning. A
+            // meaning that quotes the expression ("call it a day"는 …) has it masked first, or the
+            // answer would be on screen; one that is nothing but the expression asks nothing.
+            val meaning = maskExpression(expression.shortMeaning.ifBlank { expression.contextMeaning }, expression.displayExpression)
+            if (blanked == null && meaning.replace("____", "").isBlank()) return null
             return question.copy(
-                type = QuizQuestionType.TYPED_BLANK,
-                questionText = blanked,
+                type = if (blanked != null) QuizQuestionType.TYPED_BLANK else QuizQuestionType.TYPED_MEANING,
+                questionText = blanked ?: meaning,
                 options = listOf(QuizOption(expression.displayExpression, true)),
             )
         }
@@ -180,6 +191,10 @@ object QuizBuilder {
         if (!regex.containsMatchIn(sentence)) return null
         return regex.replace(sentence, "____")
     }
+
+    /** [text] with every occurrence of [expression] blanked, case-insensitively, and trimmed. */
+    private fun maskExpression(text: String, expression: String): String =
+        Regex(Regex.escape(expression.trim()), RegexOption.IGNORE_CASE).replace(text, "____").trim()
 
     /**
      * The meaning comes back from the model as a finished sentence, so wrapping it in another one

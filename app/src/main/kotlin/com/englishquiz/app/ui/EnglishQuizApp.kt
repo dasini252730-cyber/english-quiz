@@ -31,6 +31,7 @@ import com.englishquiz.app.ui.theme.mongleScreenInsets
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+import com.englishquiz.app.data.repository.listRecentSessionSummaries
 
 private sealed interface SettingsLoadState {
     data object Loading : SettingsLoadState

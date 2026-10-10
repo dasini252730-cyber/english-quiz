@@ -26,15 +26,15 @@ import com.englishquiz.app.ui.theme.MongleIcons
 
 /**
  * The first meeting with an expression (백로그 045): shown, not tested. The learner reads it
- * with its gloss and sentence, can hear it, and says whether they know it. Nothing is scored.
+ * with its gloss and sentence, can hear it, and moves on with one button (백로그 055): whether
+ * they know it is what tomorrow's first graded question finds out, not a self-assessment here.
  */
 @Composable
 internal fun QuizLearnCard(
     question: com.englishquiz.app.domain.quiz.QuizQuestion,
     speechReady: Boolean,
     onPlay: (String) -> Unit,
-    onKnown: () -> Unit,
-    onUnknown: () -> Unit,
+    onSeen: () -> Unit,
 ) {
     MongleCard(contentPadding = 20.dp, face = MongleColor.MeaningPanel, border = MongleColor.HighlightBorder) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -60,8 +60,7 @@ internal fun QuizLearnCard(
         }
     }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-        MongleButton("알아요", onKnown, colors = MongleButtonColors.Positive)
-        MongleButton("모르겠어요, 내일 다시", onUnknown, colors = MongleButtonColors.Accent)
+        MongleButton("뜻 확인 완료", onSeen, colors = MongleButtonColors.Positive)
     }
 }
 

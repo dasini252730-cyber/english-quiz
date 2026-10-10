@@ -22,6 +22,9 @@ import com.englishquiz.app.ui.reader.ReaderRoute
 import com.englishquiz.app.ui.result.ResultRoute
 import kotlinx.coroutines.CancellationException
 import java.time.ZoneId
+import com.englishquiz.app.data.repository.findDailyContent
+import com.englishquiz.app.data.repository.findLearningSessions
+import com.englishquiz.app.data.repository.findPreviousSummary
 
 private const val MAX_REVIEW_EXPRESSIONS = 12
 
@@ -96,11 +99,15 @@ fun LearningSessionRoute(
                 return@LaunchedEffect
             }
             val due = repository.findDueExpressions(now)
+            // 백로그 054: a story goes on from the last one; a conversation practises today's story.
+            val other = if (mode == ContentMode.STORY) ContentMode.CONVERSATION else ContentMode.STORY
             val content = generateContent(
                 ContentGenerationRequest(
                     mode = mode,
                     difficulty = difficulty,
                     reviewExpressions = due.take(MAX_REVIEW_EXPRESSIONS).map { it.displayExpression },
+                    previousStory = repository.findPreviousSummary(ContentMode.STORY, learningDate),
+                    companion = repository.findDailyContent(learningDate, other)?.summary(),
                 ),
             )
             keepForToday(repository, learningDate, content, now)

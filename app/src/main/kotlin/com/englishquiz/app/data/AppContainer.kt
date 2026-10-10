@@ -15,6 +15,7 @@ import kotlinx.coroutines.SupervisorJob
 class AppContainer(
     context: Context,
     aiEndpoint: String = BuildConfig.AI_ENDPOINT,
+    aiAppToken: String = BuildConfig.AI_APP_TOKEN,
 ) {
     private val database = LearningDatabase.create(context)
 
@@ -26,7 +27,7 @@ class AppContainer(
 
     /** Null until a build supplies the Edge Function URL, so AI screens can say so instead of failing. */
     val aiLearningClient: AiLearningClient? =
-        aiEndpoint.takeIf { it.isNotBlank() }?.let { AiLearningClient(it) }
+        aiEndpoint.takeIf { it.isNotBlank() }?.let { AiLearningClient(it, appToken = aiAppToken) }
 
     /** Work that must outlive a screen, such as making tomorrow's passages (백로그 025). */
     val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)

@@ -23,6 +23,8 @@ class AiLearningClient(
     // read timeout sits above that. A socket timeout here would hide the function's own
     // error code, which is what tells the learner whether retrying is worth it.
     private val readTimeoutMillis: Int = 75_000,
+    /** Sent as `X-App-Token` (백로그 062); the function answers 401 without it. */
+    private val appToken: String = "",
 ) {
     suspend fun generateContent(request: ContentGenerationRequest): LearningContent =
         parseSafely(post(requestJson(request))) { parseContentResponse(it, request.mode) }
@@ -49,6 +51,7 @@ class AiLearningClient(
                     doOutput = true
                     setRequestProperty("Content-Type", "application/json")
                     setRequestProperty("Accept", "application/json")
+                    if (appToken.isNotEmpty()) setRequestProperty("X-App-Token", appToken)
                 }
                 connectionRef.set(connection)
                 val activeConnection = connection ?: return@launch
@@ -60,10 +63,17 @@ class AiLearningClient(
                 val status = activeConnection.responseCode
                 val stream = if (status in 200..299) activeConnection.inputStream else activeConnection.errorStream
                 val response = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                // The function names its refusals in JSON; a bare or non-JSON status from a proxy
+                // still maps the two the learner must tell apart (백로그 062).
+                val fallback = when (status) {
+                    401 -> "unauthorized"
+                    429 -> "daily_limit_reached"
+                    else -> "request_failed"
+                }
                 val json = runCatching { JSONObject(response) }
-                    .getOrElse { throw AiLearningException("invalid_response", status) }
+                    .getOrElse { throw AiLearningException(if (status in 200..299) "invalid_response" else fallback, status) }
                 if (status !in 200..299) {
-                    throw AiLearningException(json.optJSONObject("error")?.optString("code") ?: "request_failed", status)
+                    throw AiLearningException(json.optJSONObject("error")?.optString("code")?.ifEmpty { null } ?: fallback, status)
                 }
                 if (continuation.isActive) continuation.resume(json)
             } catch (error: AiLearningException) {
@@ -98,7 +108,14 @@ class AiLearningClient(
         put("mode", request.mode.wireValue)
         put("difficulty", request.difficulty)
         put("reviewExpressions", JSONArray(request.reviewExpressions))
+        request.previousStory?.let { put("previousStory", it.toJson()) }
+        request.companion?.let { put("companion", it.toJson()) }
     }
+
+    private fun PassageSummary.toJson() = JSONObject()
+        .put("mode", mode.wireValue)
+        .put("title", title)
+        .put("synopsis", synopsis)
 
     private fun meaningJson(request: MeaningRequest) = JSONObject().apply {
         put("action", "meaning")
