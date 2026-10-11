@@ -32,6 +32,10 @@ class AiLearningClient(
     suspend fun explainMeaning(request: MeaningRequest): ContextualMeaning =
         parseSafely(post(meaningJson(request)), ::parseMeaningResponse)
 
+    /** Designs a season (백로그 063): once per seven episodes. */
+    suspend fun generateSeason(request: SeasonRequest): SeasonBible =
+        parseSafely(post(seasonJson(request)), ::parseSeasonResponse)
+
     private suspend fun post(body: JSONObject): JSONObject {
         val callerContext = currentCoroutineContext()
         return suspendCancellableCoroutine { continuation ->
@@ -110,12 +114,24 @@ class AiLearningClient(
         put("reviewExpressions", JSONArray(request.reviewExpressions))
         request.previousStory?.let { put("previousStory", it.toJson()) }
         request.companion?.let { put("companion", it.toJson()) }
+        request.season?.let { put("season", it.toJson()) }
     }
 
     private fun PassageSummary.toJson() = JSONObject()
         .put("mode", mode.wireValue)
         .put("title", title)
         .put("synopsis", synopsis)
+        .apply {
+            if (people.isNotBlank()) put("people", people)
+            if (place.isNotBlank()) put("place", place)
+        }
+
+    private fun seasonJson(request: SeasonRequest) = JSONObject().apply {
+        put("action", "season")
+        put("difficulty", request.difficulty)
+        put("seasonNumber", request.seasonNumber)
+        put("previousTitles", JSONArray(request.previousTitles))
+    }
 
     private fun meaningJson(request: MeaningRequest) = JSONObject().apply {
         put("action", "meaning")

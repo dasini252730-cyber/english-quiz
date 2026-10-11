@@ -1,12 +1,53 @@
 package com.englishquiz.app.ui.session
 
+import com.englishquiz.app.data.ai.ContentGenerationRequest
+import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.data.ai.LearningContent
 import com.englishquiz.app.data.repository.LearningRepository
+import com.englishquiz.app.data.repository.findDailyContent
+import com.englishquiz.app.data.repository.findPreviousSummary
+import com.englishquiz.app.data.repository.saveDailyContent
+import com.englishquiz.app.data.season.SeasonCoordinator
 import kotlinx.coroutines.CancellationException
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import com.englishquiz.app.data.repository.saveDailyContent
+
+/** Mirrors the Edge Function's MAX_REVIEW_EXPRESSIONS and the prefetcher's cap. */
+internal const val MAX_REVIEW_EXPRESSIONS = 12
+
+/**
+ * The passage for [mode] on [learningDate]: the stored one on a second entry (백로그 021); for a
+ * story inside seasons (백로그 063) the oldest unread episode or the next one; otherwise a fresh
+ * generation linked to the previous story and to today's story (백로그 054), stored for the day.
+ */
+internal suspend fun todaysContent(
+    repository: LearningRepository,
+    seasons: SeasonCoordinator?,
+    mode: ContentMode,
+    difficulty: Int,
+    learningDate: String,
+    nowEpochMillis: Long,
+    generateContent: suspend (ContentGenerationRequest) -> LearningContent,
+): LearningContent {
+    repository.findDailyContent(learningDate, mode)?.let { return it }
+    val review = repository.findDueExpressions(nowEpochMillis).take(MAX_REVIEW_EXPRESSIONS).map { it.displayExpression }
+    if (seasons != null && mode == ContentMode.STORY) return seasons.storyFor(learningDate, difficulty, review, nowEpochMillis)
+    val other = if (mode == ContentMode.STORY) ContentMode.CONVERSATION else ContentMode.STORY
+    val companion = (if (seasons != null && mode == ContentMode.CONVERSATION) seasons.companionFor(learningDate) else null)
+        ?: repository.findDailyContent(learningDate, other)?.summary()
+    val content = generateContent(
+        ContentGenerationRequest(
+            mode = mode,
+            difficulty = difficulty,
+            reviewExpressions = review,
+            previousStory = repository.findPreviousSummary(ContentMode.STORY, learningDate),
+            companion = companion,
+        ),
+    )
+    keepForToday(repository, learningDate, content, nowEpochMillis)
+    return content
+}
 
 /**
  * The day a moment belongs to, in the learner's zone. The same rule keys the stored passage

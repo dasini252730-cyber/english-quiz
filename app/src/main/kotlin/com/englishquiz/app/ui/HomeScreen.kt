@@ -44,6 +44,8 @@ data class HomeSummary(
     val game: GameStats? = null,
     /** What waits in each queue (백로그 055/060); null before the box is known. */
     val queue: ReviewQueue? = null,
+    /** "다음 회차부터 적용돼요" after a story level change while an episode already waits (백로그 063). */
+    val storyLevelNote: String? = null,
 )
 
 @Composable
@@ -112,6 +114,7 @@ fun HomeScreen(
                 onClick = onStoryClick,
                 onLevelChange = { onLevelChange(ContentMode.STORY, it) },
                 onSuggestionAnswer = { onSuggestionAnswer(ContentMode.STORY, it) },
+                note = summary.storyLevelNote,
             )
         }
         summary.game?.let { HomeBossCard(it.boss, onBossClick) }

@@ -8,6 +8,7 @@ import com.englishquiz.app.data.prefetch.ContentPrefetcher
 import com.englishquiz.app.data.preferences.AppSettingsRepository
 import com.englishquiz.app.data.preferences.GameProgressRepository
 import com.englishquiz.app.data.repository.LearningRepository
+import com.englishquiz.app.data.season.SeasonCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -32,7 +33,12 @@ class AppContainer(
     /** Work that must outlive a screen, such as making tomorrow's passages (백로그 025). */
     val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    /** The story as a season of seven episodes (백로그 063). */
+    val seasonCoordinator: SeasonCoordinator? = aiLearningClient?.let { client ->
+        SeasonCoordinator(learningRepository, client::generateContent, client::generateSeason)
+    }
+
     val contentPrefetcher: ContentPrefetcher? = aiLearningClient?.let { client ->
-        ContentPrefetcher(learningRepository, appSettingsRepository, client::generateContent, applicationScope)
+        ContentPrefetcher(learningRepository, appSettingsRepository, client::generateContent, applicationScope, seasons = seasonCoordinator)
     }
 }

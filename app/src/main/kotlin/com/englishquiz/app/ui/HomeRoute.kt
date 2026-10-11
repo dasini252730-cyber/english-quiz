@@ -4,6 +4,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import com.englishquiz.app.data.ai.AiLearningClient
@@ -12,6 +14,7 @@ import com.englishquiz.app.data.ai.LearningContent
 import com.englishquiz.app.data.preferences.AppSettings
 import com.englishquiz.app.data.preferences.GameProgressRepository
 import com.englishquiz.app.data.repository.LearningRepository
+import com.englishquiz.app.data.season.SeasonCoordinator
 import com.englishquiz.app.ui.badge.BadgeRoute
 import com.englishquiz.app.ui.boss.BossRoute
 import com.englishquiz.app.ui.library.LibraryRoute
@@ -20,6 +23,7 @@ import com.englishquiz.app.ui.review.ReviewQuizRoute
 import com.englishquiz.app.ui.review.ReviewRoute
 import com.englishquiz.app.ui.session.LearningSessionRoute
 import com.englishquiz.app.ui.session.SessionStatusScreen
+import kotlinx.coroutines.launch
 
 /** Level used for a mode that has none stored yet (before the diagnosis has written one). */
 private const val DEFAULT_DIFFICULTY = 3
@@ -52,8 +56,19 @@ internal fun LearningHome(
     onSuggestionAnswer: (ContentMode, accepted: Boolean) -> Unit = { _, _ -> },
     /** The game's own store (백로그 037~041); null shows home without the game cards. */
     gameRepository: GameProgressRepository? = null,
+    /** The story as a season (백로그 063); null keeps the loose daily chain. */
+    seasons: SeasonCoordinator? = null,
 ) {
     var destinationName by rememberSaveable { mutableStateOf(HomeDestination.HOME.name) }
+    // 백로그 063: a story level change reaches the episode after the one already made.
+    var storyLevelNote by remember { mutableStateOf<String?>(null) }
+    val noteScope = rememberCoroutineScope()
+    val changeLevel: (ContentMode, Int) -> Unit = { mode, level ->
+        onLevelChange(mode, level)
+        if (mode == ContentMode.STORY && seasons != null) {
+            noteScope.launch { storyLevelNote = if (seasons.hasUnread()) "다음 회차부터 적용돼요" else null }
+        }
+    }
     val destination = HomeDestination.valueOf(destinationName)
     val goHome = { destinationName = HomeDestination.HOME.name }
     // The library passage chosen for a re-read, as "<learningDate>|<mode>" so it survives recreation.
@@ -66,7 +81,8 @@ internal fun LearningHome(
             repository = repository,
             gameRepository = gameRepository,
             levels = settings.levels.mapValues { HomeLevel(it.value.level, it.value.suggestedLevel) },
-            onLevelChange = onLevelChange,
+            onLevelChange = changeLevel,
+            storyLevelNote = storyLevelNote,
             onSuggestionAnswer = onSuggestionAnswer,
         ) { destinationName = it.name }
         HomeDestination.REVIEW -> ReviewRoute(repository, goHome) { ids ->
@@ -121,6 +137,7 @@ internal fun LearningHome(
                 onExit = goHome,
                 onSessionRecorded = { onSessionRecorded(mode, it) },
                 gameRepository = gameRepository,
+                seasons = seasons,
             )
         }
     }
@@ -137,6 +154,7 @@ private fun LearningSession(
     onSessionRecorded: suspend (sessionCompletedAtEpochMillis: Long) -> Unit,
     initialContent: LearningContent? = null,
     gameRepository: GameProgressRepository? = null,
+    seasons: SeasonCoordinator? = null,
 ) {
     if (aiClient == null) {
         // No endpoint was configured for this build, so say so instead of failing a call.
@@ -158,5 +176,6 @@ private fun LearningSession(
         initialContent = initialContent,
         onSessionRecorded = onSessionRecorded,
         gameRepository = gameRepository,
+        seasons = seasons,
     )
 }

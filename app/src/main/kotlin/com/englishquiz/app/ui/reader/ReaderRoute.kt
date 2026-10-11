@@ -28,6 +28,8 @@ fun ReaderRoute(
     onBack: () -> Unit,
     onQuiz: (() -> Unit)? = null,
     nowEpochMillis: () -> Long = System::currentTimeMillis,
+    /** "시즌 2 · 3/7" over an episode (백로그 063); null for any other passage. */
+    subtitle: String? = null,
     explainMeaning: suspend (MeaningRequest) -> ContextualMeaning,
 ) {
     val context = LocalContext.current
@@ -80,6 +82,7 @@ fun ReaderRoute(
 
     ReaderScreen(
         content = content,
+        subtitle = subtitle,
         speechState = state,
         onPlay = { lines -> speech.play(lines) },
         onStop = speech::stop,

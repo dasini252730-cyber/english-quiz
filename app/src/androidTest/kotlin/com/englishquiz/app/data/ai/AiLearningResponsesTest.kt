@@ -154,6 +154,21 @@ class AiLearningResponsesTest {
         assertEquals(parsed, restored)
         assertEquals(PassageSummary(ContentMode.STORY, "The Night Train", parsed.synopsis), parsed.summary())
         assertEquals(null, parsed.copy(synopsis = "").summary())
+        // 백로그 063: an episode's canon rides the same round trip; a passage without one carries null.
+        assertEquals(null, parsed.canon)
+        val canon = CanonState(events = listOf("Mina kept the ticket."), facts = listOf("The stranger lied."), openQuestions = listOf("Why?"))
+        val withCanon = parseContentResponse(parsed.copy(canon = canon).toResponseJson(), ContentMode.STORY)
+        assertEquals(canon, withCanon.canon)
+        assertEquals(canon.merged(CanonState(events = listOf("He came back."))).events, listOf("Mina kept the ticket.", "He came back."))
+        // A season bible parses back into seven numbered plans; six, or no people, is no bible.
+        val bible = SeasonBible(
+            "The Lisbon Tram", "Lisbon", "Who sends the guests away?",
+            listOf(SeasonCharacter("Inês", SpeakerGender.FEMALE, "owner", "keep it", "owes money", "cousin of Rui")),
+            (1..7).map { EpisodePlan(it, "Episode $it", "Plan $it") }, listOf("Who?"),
+        )
+        assertEquals(bible, parseSeasonResponse(JSONObject().put("data", bible.toJson())))
+        assertTrue(runCatching { parseSeasonResponse(JSONObject().put("data", bible.copy(episodes = bible.episodes.take(6)).toJson())) }.isFailure)
+        assertTrue(runCatching { parseSeasonResponse(JSONObject().put("data", bible.copy(characters = emptyList()).toJson())) }.isFailure)
     }
 
     @Test

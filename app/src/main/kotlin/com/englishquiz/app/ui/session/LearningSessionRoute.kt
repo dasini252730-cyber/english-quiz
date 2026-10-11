@@ -23,10 +23,9 @@ import com.englishquiz.app.ui.result.ResultRoute
 import kotlinx.coroutines.CancellationException
 import java.time.ZoneId
 import com.englishquiz.app.data.repository.findDailyContent
+import com.englishquiz.app.data.season.SeasonCoordinator
 import com.englishquiz.app.data.repository.findLearningSessions
-import com.englishquiz.app.data.repository.findPreviousSummary
 
-private const val MAX_REVIEW_EXPRESSIONS = 12
 
 /**
  * Saved across activity recreation by [SessionStepSaver]. A rotation must not throw away a
@@ -69,7 +68,10 @@ fun LearningSessionRoute(
     onSessionRecorded: suspend (sessionCompletedAtEpochMillis: Long) -> Unit = {},
     /** Points, level and badges on the result screen (백로그 038/039); null leaves them out. */
     gameRepository: GameProgressRepository? = null,
+    /** The story as a season of episodes (백로그 063); null keeps the loose daily chain. */
+    seasons: SeasonCoordinator? = null,
 ) {
+    var episodeLabel by rememberSaveable { mutableStateOf<String?>(null) }
     var step by rememberSaveable(stateSaver = SessionStepSaver) {
         mutableStateOf<SessionStep>(SessionStep.Preparing)
     }
@@ -89,28 +91,10 @@ fun LearningSessionRoute(
                 step = SessionStep.Reading(initialContent)
                 return@LaunchedEffect
             }
-            // Today's passage for this mode already exists: read it back rather than pay for, and
-            // wait on, another one. 요구사항 9.1 asks for a new situation each day, not each tap
-            // (백로그 021). The same date rule as the result screen keys it, so "today" here is
-            // the "today" the streak counts.
-            val stored = repository.findDailyContent(learningDate, mode)
-            if (stored != null) {
-                step = SessionStep.Reading(stored)
-                return@LaunchedEffect
-            }
-            val due = repository.findDueExpressions(now)
-            // 백로그 054: a story goes on from the last one; a conversation practises today's story.
-            val other = if (mode == ContentMode.STORY) ContentMode.CONVERSATION else ContentMode.STORY
-            val content = generateContent(
-                ContentGenerationRequest(
-                    mode = mode,
-                    difficulty = difficulty,
-                    reviewExpressions = due.take(MAX_REVIEW_EXPRESSIONS).map { it.displayExpression },
-                    previousStory = repository.findPreviousSummary(ContentMode.STORY, learningDate),
-                    companion = repository.findDailyContent(learningDate, other)?.summary(),
-                ),
-            )
-            keepForToday(repository, learningDate, content, now)
+            // Today's passage for this mode: stored on a second entry (백로그 021), the next episode
+            // for a story in a season (백로그 063), or a fresh generation stored for the day.
+            val content = todaysContent(repository, seasons, mode, difficulty, learningDate, now, generateContent)
+            if (seasons != null && mode == ContentMode.STORY) episodeLabel = seasons.labelFor(learningDate)
             step = SessionStep.Reading(content)
         } catch (error: CancellationException) {
             throw error
@@ -137,6 +121,7 @@ fun LearningSessionRoute(
             content = current.content,
             repository = repository,
             onBack = onExit,
+            subtitle = episodeLabel,
             onQuiz = {
                 step = SessionStep.Quiz(
                     content = current.content,

@@ -90,6 +90,39 @@ internal val MIGRATION_8_9 = object : Migration(8, 9) {
     }
 }
 
+/** 백로그 063: story seasons and their numbered episodes; nothing existing is touched. */
+internal val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `seasons` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `number` INTEGER NOT NULL,
+                `title` TEXT NOT NULL,
+                `bibleJson` TEXT NOT NULL,
+                `canonJson` TEXT NOT NULL,
+                `difficulty` INTEGER NOT NULL,
+                `createdAtEpochMillis` INTEGER NOT NULL
+            )""",
+        )
+        database.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_seasons_number` ON `seasons` (`number`)")
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `season_episodes` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `seasonId` INTEGER NOT NULL,
+                `number` INTEGER NOT NULL,
+                `contentJson` TEXT NOT NULL,
+                `synopsis` TEXT NOT NULL,
+                `canonJson` TEXT NOT NULL,
+                `difficulty` INTEGER NOT NULL,
+                `generatedAtEpochMillis` INTEGER NOT NULL,
+                `readDate` TEXT
+            )""",
+        )
+        database.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_season_episodes_seasonId_number` ON `season_episodes` (`seasonId`, `number`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_season_episodes_readDate` ON `season_episodes` (`readDate`)")
+    }
+}
+
 /** 백로그 021: one generated passage per day and mode, so re-entry stops paying for a new one. */
 internal val MIGRATION_3_4 = object : Migration(3, 4) {
     override fun migrate(database: SupportSQLiteDatabase) {

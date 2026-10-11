@@ -153,7 +153,7 @@ class LearningDatabaseMigrationTest {
 
         val migrated = migrationHelper.runMigrationsAndValidate(
             CHAINED_MIGRATION_DATABASE_NAME,
-            9,
+            10,
             true,
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -163,11 +163,19 @@ class LearningDatabaseMigrationTest {
             MIGRATION_6_7,
             MIGRATION_7_8,
             MIGRATION_8_9,
+            MIGRATION_9_10,
         )
         // 백로그 056: the answer log arrives empty; nothing old is reinterpreted as an answer.
         migrated.query("SELECT COUNT(*) FROM quiz_answers").use { cursor ->
             assertTrue(cursor.moveToFirst())
             assertEquals(0, cursor.getInt(0))
+        }
+        // 백로그 063: seasons arrive empty too; the first story after the upgrade opens season 1.
+        listOf("seasons", "season_episodes").forEach { table ->
+            migrated.query("SELECT COUNT(*) FROM $table").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals(0, cursor.getInt(0))
+            }
         }
         val expressions = migrated.query(
             "SELECT displayExpression, firstSavedAtEpochMillis, consecutiveCorrectCount, " +

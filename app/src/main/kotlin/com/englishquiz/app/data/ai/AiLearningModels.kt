@@ -8,10 +8,18 @@ data class ContentGenerationRequest(
     val previousStory: PassageSummary? = null,
     /** The same day's other passage, so a conversation practises the story's situation. */
     val companion: PassageSummary? = null,
+    /** A story's place in its season (백로그 063); null for a conversation or a season-less story. */
+    val season: SeasonContext? = null,
 )
 
-/** What one passage tells the next about itself (백로그 054). */
-data class PassageSummary(val mode: ContentMode, val title: String, val synopsis: String)
+/** What one passage tells the next about itself (백로그 054); [people] and [place] come from the season (백로그 063). */
+data class PassageSummary(
+    val mode: ContentMode,
+    val title: String,
+    val synopsis: String,
+    val people: String = "",
+    val place: String = "",
+)
 
 enum class ContentMode(val wireValue: String) {
     CONVERSATION("conversation"),
@@ -36,6 +44,8 @@ data class LearningContent(
     val speakers: Map<String, SpeakerGender> = emptyMap(),
     /** Two English sentences on the passage (백로그 054), handed to the next generation; "" before it. */
     val synopsis: String = "",
+    /** What this episode settled (백로그 063); null for a conversation or a story outside a season. */
+    val canon: CanonState? = null,
 ) {
     /** This passage as the next one hears about it, or null when it has nothing to say. */
     fun summary(): PassageSummary? = synopsis.takeIf { it.isNotBlank() }?.let { PassageSummary(mode, title, it) }

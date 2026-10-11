@@ -23,6 +23,7 @@ import com.englishquiz.app.data.preferences.AppSettings
 import com.englishquiz.app.data.preferences.AppSettingsRepository
 import com.englishquiz.app.data.preferences.GameProgressRepository
 import com.englishquiz.app.data.repository.LearningRepository
+import com.englishquiz.app.data.season.SeasonCoordinator
 import com.englishquiz.app.domain.difficulty.DifficultyPolicy
 import com.englishquiz.app.ui.assessment.AssessmentScreen
 import com.englishquiz.app.ui.theme.MongleButton
@@ -53,6 +54,8 @@ fun EnglishQuizApp(
     prefetchTomorrow: () -> Unit = {},
     /** Points spent, shields and badges seen (백로그 037~041); null runs home without the game cards. */
     gameProgressRepository: GameProgressRepository? = null,
+    /** The story as a season of episodes (백로그 063); null keeps the loose daily chain. */
+    seasonCoordinator: SeasonCoordinator? = null,
 ) {
     var retryCount by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
@@ -88,6 +91,7 @@ fun EnglishQuizApp(
                     aiClient = aiLearningClient,
                     settings = state.settings,
                     gameRepository = gameProgressRepository,
+                    seasons = seasonCoordinator,
                     onSessionRecorded = { mode, sessionCompletedAtEpochMillis ->
                         if (mode != null) suggestLevel(learningRepository, settingsRepository, mode, sessionCompletedAtEpochMillis)
                         prefetchTomorrow()

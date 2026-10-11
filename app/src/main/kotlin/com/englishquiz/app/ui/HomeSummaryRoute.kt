@@ -49,6 +49,8 @@ internal fun LearningHomeSummary(
     levels: Map<ContentMode, HomeLevel>,
     onLevelChange: (ContentMode, Int) -> Unit,
     onSuggestionAnswer: (ContentMode, accepted: Boolean) -> Unit,
+    /** One line under the story's level after a change (백로그 063); null shows none. */
+    storyLevelNote: String? = null,
     onNavigate: (HomeDestination) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -97,7 +99,7 @@ internal fun LearningHomeSummary(
             MongleButton("다시 시도", { retry++ })
         }
         else -> HomeScreen(
-            summary = summary.copy(levels = levels),
+            summary = summary.copy(levels = levels, storyLevelNote = storyLevelNote),
             onConversationClick = { onNavigate(HomeDestination.CONVERSATION) },
             onStoryClick = { onNavigate(HomeDestination.STORY) },
             onReviewClick = { onNavigate(HomeDestination.REVIEW) },

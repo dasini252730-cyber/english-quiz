@@ -1,5 +1,6 @@
 package com.englishquiz.app.data.ai
 
+import com.englishquiz.app.domain.season.SeasonPolicy
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -55,7 +56,16 @@ internal fun parseContentResponse(response: JSONObject, expectedMode: ContentMod
         comprehension = data.comprehension(),
         speakers = data.speakers(segments),
         synopsis = data.optString("synopsis").trim().take(MAX_SYNOPSIS_CHARS),
+        canon = data.optJSONObject("canon")?.let(CanonState::fromJson),
     )
+}
+
+/** A season bible (백로그 063): the server has already checked it; here only the shape is read. */
+internal fun parseSeasonResponse(response: JSONObject): SeasonBible {
+    val data = response.optJSONObject("data") ?: invalidResponse()
+    val bible = SeasonBible.fromJson(data)
+    if (bible.title.isBlank() || bible.episodes.size != SeasonPolicy.EPISODES_PER_SEASON || bible.characters.isEmpty()) invalidResponse()
+    return bible
 }
 
 private const val MAX_SYNOPSIS_CHARS = 600
@@ -217,5 +227,6 @@ internal fun LearningContent.toResponseJson(): JSONObject {
         .put("comprehension", comprehensionArray)
         .put("speakers", speakerArray)
         .put("synopsis", synopsis)
+    canon?.let { data.put("canon", it.toJson()) }
     return JSONObject().put("data", data)
 }

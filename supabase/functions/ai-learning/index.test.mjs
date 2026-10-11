@@ -857,3 +857,81 @@ test("every provider attempt leaves a usage row with its tokens, duration and ou
   assert.equal(retried.calls.counts, 1);
 });
 
+const seasonBible = {
+  title: "The Lisbon Tram",
+  setting: "Lisbon in late autumn: steep streets, tram 28, pastelarias and a hostel above a tile shop.",
+  conflict: "A hostel owner must find out who is sending her guests away before the season ends.",
+  characters: [
+    { name: "Inês", gender: "female", role: "hostel owner", motive: "keep the hostel", secret: "she owes the tile shop money", relationships: "cousin of Rui" },
+    { name: "Rui", gender: "male", role: "tram driver", motive: "a quiet life", secret: "he saw who did it", relationships: "cousin of Inês" },
+  ],
+  episodes: Array.from({ length: 7 }, (_, index) => ({ number: index + 1, title: `Episode ${index + 1}`, plan: `Plan for episode ${index + 1}: something happens on the tram.` })),
+  openQuestions: ["Who is sending the guests away?", "Why does Rui keep quiet?"],
+};
+
+test("a season bible is designed once: English, seven numbered episodes, two to six people (백로그 063)", async () => {
+  let sent;
+  const handler = createHandler(() => "key", async (_url, options) => {
+    sent = JSON.parse(options.body);
+    return providerResponse(seasonBible);
+  });
+  const response = await handler(post({ action: "season", difficulty: 2, seasonNumber: 3, previousTitles: ["The Night Train", "Salt and Fog"] }));
+  assert.equal(response.status, 200);
+  const data = (await response.json()).data;
+  assert.equal(data.episodes.length, 7);
+  assert.deepEqual(data.episodes.map((e) => e.number), [1, 2, 3, 4, 5, 6, 7]);
+  assert.equal(data.characters.length, 2);
+  assert.match(sent.system, /Design season 3/);
+  assert.match(sent.system, /exactly 7 episodes/);
+  assert.match(sent.system, /The Night Train; Salt and Fog/);
+  assert.equal(sent.output_config.format.schema.required.includes("episodes"), true);
+
+  // Six episodes, or a Korean bible, is asked for again and then refused.
+  let attempts = 0;
+  const broken = createHandler(() => "key", async () => { attempts++; return providerResponse({ ...seasonBible, episodes: seasonBible.episodes.slice(0, 6) }); });
+  const refused = await broken(post({ action: "season", difficulty: 2, seasonNumber: 1 }));
+  assert.equal(refused.status, 502);
+  assert.equal(attempts, 1);
+  assert.equal((await handler(post({ action: "season", difficulty: 9, seasonNumber: 1 }))).status, 400);
+});
+
+test("a story inside a season gets the bible, the plan and the canon instead of the daily premise, and reports its canon", async () => {
+  let sent;
+  const episodeCanon = { events: ["Inês found a note under the door."], facts: ["The note was typed."], relationships: ["Rui avoids Inês at dinner."], openQuestions: ["Who typed it?"], carryForward: ["The hostel has nine rooms."] };
+  const handler = createHandler(() => "key", async (_url, options) => {
+    sent = JSON.parse(options.body);
+    const mode = sent.messages[0].content.startsWith('{"action":"content","mode":"story"') ? "story" : "conversation";
+    return providerResponse({ ...validContent, mode, canon: { ...episodeCanon, facts: ["The note was typed.", "이것은 한국어 문장입니다 한국어 문장"] } });
+  });
+  const season = {
+    title: seasonBible.title, setting: seasonBible.setting, conflict: seasonBible.conflict,
+    characters: "Inês (hostel owner), Rui (tram driver)", episodeNumber: 3, episodePlan: "Rui finally talks on the night tram.",
+    previousSummary: "Inês confronted the tile shop owner. He laughed.",
+    canon: { events: ["A guest left without paying."], facts: [], relationships: ["Inês trusts nobody."], openQuestions: ["Who is sending the guests away?"], carryForward: ["It is late autumn."] },
+  };
+  const response = await handler(post({ action: "content", mode: "story", difficulty: 2, season, previousStory: { mode: "story", title: "X", synopsis: "Should not be used." } }));
+  assert.equal(response.status, 200);
+  assert.match(sent.system, /episode 3 of 7 of the season <season title="The Lisbon Tram">/);
+  assert.match(sent.system, /<episode_plan>Rui finally talks on the night tram.<\/episode_plan>/);
+  assert.match(sent.system, /<previous_episode>Inês confronted/);
+  assert.match(sent.system, /Established events: - A guest left without paying./);
+  assert.match(sent.system, /do not resolve the central conflict yet/);
+  assert.doesNotMatch(sent.system, /Today's premise/);
+  assert.doesNotMatch(sent.system, /previous_episode title=/);
+  // The episode's canon comes back cleaned: the Korean line is gone.
+  const data = (await response.json()).data;
+  assert.deepEqual(data.canon, episodeCanon);
+
+  // Episode 7 is told to close the season; a conversation never carries a season or a canon.
+  await handler(post({ action: "content", mode: "story", difficulty: 2, season: { ...season, episodeNumber: 7 } }));
+  assert.match(sent.system, /final episode/);
+  const talk = await handler(post({ action: "content", mode: "conversation", difficulty: 2, season, companion: { mode: "story", title: "The Lisbon Tram 3", synopsis: "Rui talked.", people: "Inês, Rui", place: "tram 28 at night" } }));
+  assert.match(sent.system, /Place: tram 28 at night People: Inês, Rui/);
+  assert.doesNotMatch(sent.system, /<season/);
+  assert.equal((await talk.json()).data.canon, undefined);
+
+  // A malformed season (no plan, episode 9) is dropped and the loose chain is used instead.
+  await handler(post({ action: "content", mode: "story", difficulty: 2, season: { title: "T", episodeNumber: 9 } }));
+  assert.match(sent.system, /Today's premise/);
+});
+
