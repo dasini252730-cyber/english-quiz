@@ -449,7 +449,7 @@
       "title": "선생성을 Batch API 로 옮겨 50% 할인",
       "description": "025 의 선생성을 Anthropic Batch API 로 바꾸면 비용이 절반이 되지만, 배치는 비동기(최대 24h)라 서버(Supabase) 쪽에 제출·수거 스케줄과 결과 보관 테이블이 필요하다. 앱 쪽 선생성(025)이 안정된 뒤 검토한다.",
       "details": "backlog/027.md",
-      "status": "todo",
+      "status": "needs_human",
       "priority": "P2",
       "estimate": "L",
       "depends_on": [
@@ -955,7 +955,7 @@
       "title": "보기 품질 향상과 출제 불가 표현 처리",
       "description": "2026-10-10 사용자 지침. 오답 보기는 같은 품사·비슷한 문법 역할로 맞춘다(생성 응답에 표현 종류 추가). 정답 기준은 그 지문에서 쓰인 뜻(현행 유지). 정답 위치가 특정 번호에 몰리지 않게 한다. 보기를 못 만드는 표현은 방치하지 않고 대체 보기(짧은 뜻끼리 지문 표현 활용)를 쓰거나 출제 불가로 분리한다.",
       "details": "backlog/059.md",
-      "status": "todo",
+      "status": "review_needed",
       "priority": "P1",
       "estimate": "M",
       "depends_on": [

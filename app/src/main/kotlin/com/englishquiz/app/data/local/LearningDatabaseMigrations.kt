@@ -123,6 +123,13 @@ internal val MIGRATION_9_10 = object : Migration(9, 10) {
     }
 }
 
+/** 백로그 059: the kind of phrase, for wrong options of the same kind; older rows match by nothing. */
+internal val MIGRATION_10_11 = object : Migration(10, 11) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL("ALTER TABLE `saved_expressions` ADD COLUMN `kind` TEXT NOT NULL DEFAULT ''")
+    }
+}
+
 /** 백로그 021: one generated passage per day and mode, so re-entry stops paying for a new one. */
 internal val MIGRATION_3_4 = object : Migration(3, 4) {
     override fun migrate(database: SupportSQLiteDatabase) {

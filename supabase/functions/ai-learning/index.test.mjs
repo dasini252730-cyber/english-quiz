@@ -18,9 +18,9 @@ const validContent = {
 const expectedContent = {
   ...validContent,
   expressions: [
-    { ...validContent.expressions[0], startIndex: 6, endIndex: 17 },
-    // 백로그 046: a missing short meaning comes back empty, never failing the phrase.
-    { ...validContent.expressions[1], shortMeaning: "", startIndex: 16, endIndex: 25 },
+    { ...validContent.expressions[0], kind: "", startIndex: 6, endIndex: 17 },
+    // 백로그 046/059: a missing short meaning or kind comes back empty, never failing the phrase.
+    { ...validContent.expressions[1], shortMeaning: "", kind: "", startIndex: 16, endIndex: 25 },
   ],
   glossary: [],
   comprehension: [],
@@ -291,7 +291,7 @@ test("a phrase annotated with the wrong segment index is placed where it actuall
   const response = await handler(post({ action: "content", mode: "conversation", difficulty: 1 }));
   assert.equal(response.status, 200);
   assert.deepEqual((await response.json()).data.expressions, [
-    { text: "pull it off", meaning: "해내다", shortMeaning: "", segmentIndex: 0, startIndex: 6, endIndex: 17 },
+    { text: "pull it off", meaning: "해내다", shortMeaning: "", kind: "", segmentIndex: 0, startIndex: 6, endIndex: 17 },
   ]);
 });
 
@@ -600,6 +600,30 @@ test("a short meaning rides with each phrase and an overlong one is dropped on i
   assert.equal(expressions[1].shortMeaning, "");
   assert.equal(expressions[1].meaning, "다음 단계");
   assert.match(sent.system, /`shortMeaning` of at most 12 Korean characters/);
+  assertOnlySupportedKeywords(sent.output_config.format.schema);
+});
+
+test("each phrase names its kind for the quiz's wrong options; an unknown kind is dropped on its own (백로그 059)", async () => {
+  const content = {
+    ...validContent,
+    expressions: [
+      { text: "pull it off", meaning: "성공적으로 해내다", shortMeaning: "해내다", kind: "Verb ", segmentIndex: 0 },
+      { text: "next step", meaning: "다음 단계", shortMeaning: "다음 단계", kind: "gerund", segmentIndex: 1 },
+    ],
+  };
+  let sent;
+  const handler = createHandler(() => "key", async (_url, options) => {
+    sent = JSON.parse(options.body);
+    return providerResponse(content);
+  });
+  const response = await handler(post({ action: "content", mode: "conversation", difficulty: 2 }));
+  assert.equal(response.status, 200);
+  const expressions = (await response.json()).data.expressions;
+  assert.equal(expressions[0].kind, "verb");
+  assert.equal(expressions[1].kind, "");
+  assert.equal(expressions[1].shortMeaning, "다음 단계");
+  assert.match(sent.system, /a `kind` naming the slot the phrase fills/);
+  assert.deepEqual(sent.output_config.format.schema.properties.expressions.items.properties.kind.enum, ["noun", "verb", "adjective", "adverb", "remark"]);
   assertOnlySupportedKeywords(sent.output_config.format.schema);
 });
 

@@ -38,6 +38,10 @@ class QuizTextTest {
         // 백로그 058: the predefined verb forms — 3rd person, -ing, -ed — on the first word only.
         assertTrue(typedAnswerMatches("hanging out", "hang out"))
         assertTrue(typedAnswerMatches("hangs out", "hang out"))
+        // 백로그 059: a common irregular past form is the same words recalled, too.
+        assertTrue(typedAnswerMatches("took off", "take off"))
+        assertTrue(typedAnswerMatches("made up", "make up"))
+        assertTrue(!typedAnswerMatches("take on", "take off"))
         assertTrue(typedAnswerMatches("called it a day", "call it a day"))
         assertTrue(typedAnswerMatches("making do", "make do"))
         assertTrue(typedAnswerMatches("stopped by", "stop by"))

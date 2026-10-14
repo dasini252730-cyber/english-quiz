@@ -67,10 +67,11 @@ private fun sameButForTheHeadWord(a: String, b: String): Boolean {
 
 /**
  * The regular English inflections, undone: -ies → y, -ing/-ed/-es/-s dropped when enough of the
- * word remains, a doubled final consonant and a silent e folded. Irregular verbs stay as typed.
+ * word remains, a doubled final consonant and a silent e folded. A common irregular past form
+ * ("took", "made") is taken to its base first (백로그 059); rarer ones stay as typed.
  */
 internal fun stem(word: String): String {
-    var w = word
+    var w = IRREGULAR_PAST[word] ?: word
     when {
         w.endsWith("ies") && w.length > 4 -> w = w.dropLast(3) + "y"
         w.endsWith("ing") && w.length > 5 -> w = w.dropLast(3)
@@ -81,6 +82,24 @@ internal fun stem(word: String): String {
     if (w.length > 3 && w[w.length - 1] == w[w.length - 2] && w.last() !in "aeiou") w = w.dropLast(1)
     return w.removeSuffix("e")
 }
+
+/** The irregular past and participle forms of the verbs everyday phrases are built on, to their base. */
+private val IRREGULAR_PAST: Map<String, String> = listOf(
+    "be" to "was were been", "do" to "did done", "have" to "had has", "go" to "went gone", "get" to "got gotten",
+    "take" to "took taken", "make" to "made", "give" to "gave given", "come" to "came", "see" to "saw seen",
+    "run" to "ran", "bring" to "brought", "buy" to "bought", "think" to "thought", "catch" to "caught",
+    "teach" to "taught", "find" to "found", "hold" to "held", "keep" to "kept", "leave" to "left",
+    "say" to "said", "tell" to "told", "stand" to "stood", "sit" to "sat", "write" to "wrote written",
+    "speak" to "spoke spoken", "break" to "broke broken", "fall" to "fell fallen", "know" to "knew known",
+    "grow" to "grew grown", "throw" to "threw thrown", "draw" to "drew drawn", "pay" to "paid", "sell" to "sold",
+    "meet" to "met", "lose" to "lost", "feel" to "felt", "build" to "built", "send" to "sent", "spend" to "spent",
+    "lend" to "lent", "mean" to "meant", "lead" to "led", "hear" to "heard", "hang" to "hung", "stick" to "stuck",
+    "strike" to "struck", "win" to "won", "wear" to "wore worn", "tear" to "tore torn", "choose" to "chose chosen",
+    "forget" to "forgot forgotten", "hide" to "hid hidden", "rise" to "rose risen", "shake" to "shook shaken",
+    "wake" to "woke woken", "drive" to "drove driven", "eat" to "ate eaten", "begin" to "began begun",
+    "drink" to "drank drunk", "fly" to "flew flown", "blow" to "blew blown", "fight" to "fought", "shut" to "shut",
+    "put" to "put", "cut" to "cut", "let" to "let", "set" to "set", "hit" to "hit", "quit" to "quit", "cost" to "cost",
+).flatMap { (base, forms) -> forms.split(' ').map { it to base } }.toMap()
 
 /** Contractions whose long form is not a suffix swap, and the suffix swaps themselves. */
 private val CONTRACTIONS = mapOf(

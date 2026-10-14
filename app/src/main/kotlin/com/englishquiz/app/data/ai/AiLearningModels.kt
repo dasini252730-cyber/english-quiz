@@ -105,7 +105,17 @@ data class ContentExpression(
     val endIndex: Int,
     /** A few words for a quiz option (백로그 046); "" for a passage from before it or when the model gave none. */
     val shortMeaning: String = "",
+    /** The slot the phrase fills, one of [ExpressionKinds] (백로그 059); "" when unknown. */
+    val kind: String = "",
 )
+
+/** The kinds of phrase the quiz matches wrong options by (백로그 059); the Edge Function sends no other. */
+object ExpressionKinds {
+    val ALL = setOf("noun", "verb", "adjective", "adverb", "remark")
+
+    /** [value] when it is a known kind (any case, untrimmed), else "". */
+    fun normalize(value: String): String = value.trim().lowercase().takeIf { it in ALL } ?: ""
+}
 
 data class ContextualMeaning(
     val expression: String,

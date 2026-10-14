@@ -153,7 +153,7 @@ class LearningDatabaseMigrationTest {
 
         val migrated = migrationHelper.runMigrationsAndValidate(
             CHAINED_MIGRATION_DATABASE_NAME,
-            10,
+            11,
             true,
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -164,6 +164,7 @@ class LearningDatabaseMigrationTest {
             MIGRATION_7_8,
             MIGRATION_8_9,
             MIGRATION_9_10,
+            MIGRATION_10_11,
         )
         // 백로그 056: the answer log arrives empty; nothing old is reinterpreted as an answer.
         migrated.query("SELECT COUNT(*) FROM quiz_answers").use { cursor ->
@@ -179,7 +180,7 @@ class LearningDatabaseMigrationTest {
         }
         val expressions = migrated.query(
             "SELECT displayExpression, firstSavedAtEpochMillis, consecutiveCorrectCount, " +
-                "contextSentence, tapCount, shortMeaning FROM saved_expressions",
+                "contextSentence, tapCount, shortMeaning, kind FROM saved_expressions",
         )
         // A session from before 백로그 034 keeps its numbers and carries no mode; before 백로그 035
         // it scored nothing.
@@ -197,6 +198,8 @@ class LearningDatabaseMigrationTest {
             assertEquals(0, expressions.getInt(4))
             // 백로그 046: no short gloss before it existed; the quiz falls back to the full meaning.
             assertEquals("", expressions.getString(5))
+            // 백로그 059: no kind before it existed; the quiz matches such a row by nothing.
+            assertEquals("", expressions.getString(6))
             assertTrue(sessions.moveToFirst())
             assertEquals("2026-09-17", sessions.getString(0))
             assertEquals(300L, sessions.getLong(1))

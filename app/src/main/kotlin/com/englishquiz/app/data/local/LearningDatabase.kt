@@ -10,7 +10,7 @@ import androidx.room.RoomDatabase
         SavedExpressionEntity::class, LearningSessionEntity::class, DailyContentEntity::class, QuizAnswerEntity::class,
         SeasonEntity::class, SeasonEpisodeEntity::class,
     ],
-    version = 10,
+    version = 11,
     exportSchema = true,
 )
 abstract class LearningDatabase : RoomDatabase() {
@@ -35,7 +35,7 @@ abstract class LearningDatabase : RoomDatabase() {
                 applicationContext,
                 LearningDatabase::class.java,
                 databaseFile.name,
-            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10).build()
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11).build()
         }
     }
 }

@@ -105,9 +105,11 @@ const CONTENT_SCHEMA = {
           meaning: { type: "string" },
           // 백로그 046: a few words for a quiz option; `meaning` stays the fuller explanation.
           shortMeaning: { type: "string" },
+          // 백로그 059: the slot the phrase fills, so wrong options can be phrases of the same kind.
+          kind: { type: "string", enum: ["noun", "verb", "adjective", "adverb", "remark"] },
           segmentIndex: { type: "integer" },
         },
-        required: ["text", "meaning", "shortMeaning", "segmentIndex"],
+        required: ["text", "meaning", "shortMeaning", "kind", "segmentIndex"],
         additionalProperties: false,
       },
     },
@@ -245,6 +247,12 @@ const MAX_COMPREHENSION_QUESTIONS = 3;
 
 /** The longest `shortMeaning` still usable as a quiz option (백로그 046). */
 const MAX_SHORT_MEANING_CHARS = 20;
+/**
+ * The kinds of phrase the quiz matches wrong options by (백로그 059): the grammatical slot an
+ * expression fills, not its dictionary part of speech. A kind outside this list is dropped to ""
+ * on its own, and the quiz then matches that phrase by nothing.
+ */
+const EXPRESSION_KINDS = ["noun", "verb", "adjective", "adverb", "remark"];
 
 const MEANING_SCHEMA = {
   type: "object",
@@ -600,6 +608,7 @@ function validateModelOutput(value: unknown, request: LearningRequest): unknown 
     // A short meaning too long to be an option, or missing, is dropped on its own: the quiz then
     // falls back to the full meaning for that question, which costs nothing (백로그 046).
     const shortMeaning = boundedString(item.shortMeaning, MAX_SHORT_MEANING_CHARS) ? (item.shortMeaning as string).trim() : "";
+    const kind = typeof item.kind === "string" && EXPRESSION_KINDS.includes(item.kind.trim().toLowerCase()) ? item.kind.trim().toLowerCase() : "";
     // An "expression" that is a whole sentence highlights a whole line and teaches nothing
     // tappable (백로그 028: the story prompt tempted the model into quoting punchlines). Dropped
     // like any other unusable annotation; the glossary and the remaining phrases stay.
@@ -617,7 +626,7 @@ function validateModelOutput(value: unknown, request: LearningRequest): unknown 
     }
     const startIndex = foldedSegment.indexOf(foldedPhrase);
     if (startIndex >= 0) {
-      return [{ text: phrase, meaning: item.meaning, shortMeaning, segmentIndex, startIndex, endIndex: startIndex + phrase.length }];
+      return [{ text: phrase, meaning: item.meaning, shortMeaning, kind, segmentIndex, startIndex, endIndex: startIndex + phrase.length }];
     }
     // The model often points a correct phrase at the wrong line (백로그 032). The phrase itself
     // is what the learner needs, so it is looked for in the other segments before giving up.
@@ -626,7 +635,7 @@ function validateModelOutput(value: unknown, request: LearningRequest): unknown 
       dropped.push(phrase);
       return [];
     }
-    return [{ text: phrase, meaning: item.meaning, shortMeaning, ...found, endIndex: found.startIndex + phrase.length }];
+    return [{ text: phrase, meaning: item.meaning, shortMeaning, kind, ...found, endIndex: found.startIndex + phrase.length }];
   });
   if (dropped.length > 0) {
     // Server log only. If the model starts inflecting most phrases the learner would just
@@ -914,7 +923,7 @@ function passageContract(difficulty: Difficulty, reviewCount: number): string {
   return "Your reply is learning material and must satisfy this contract exactly. " +
   "THE PASSAGE IS IN ENGLISH: the title, every segment's text and every expression's `text` are natural American English. Korean is used only for `meaning`, `shortMeaning`, the glossary meanings and the comprehension questions, never for the passage itself. " +
   expressionsClause(reviewCount) +
-  "Each entry has `text` copied character for character from one segment, that segment's `segmentIndex`, a concise Korean `meaning` for this context (one sentence), and a `shortMeaning` of at most 12 Korean characters — a dictionary-style gloss such as '수상한' or '해내다' that can stand alone as a quiz option. Prefer useful everyday phrases of one to five words over long clauses. A reply with an empty or missing `expressions` list is rejected. " +
+  "Each entry has `text` copied character for character from one segment, that segment's `segmentIndex`, a concise Korean `meaning` for this context (one sentence), and a `shortMeaning` of at most 12 Korean characters — a dictionary-style gloss such as '수상한' or '해내다' that can stand alone as a quiz option, and a `kind` naming the slot the phrase fills in its sentence: `noun` (a thing or person), `verb` (an action, including a phrasal verb or a verb idiom such as 'call it a day'), `adjective` (describes something, including 'under the weather'), `adverb` (when, where, how), or `remark` (a fixed conversational line such as 'no way' or 'fair enough'). Prefer useful everyday phrases of one to five words over long clauses. A reply with an empty or missing `expressions` list is rejected. " +
   "`glossary`: 10 to 20 other single words that appear in the passage and that a Korean adult learner at this difficulty may not know, each with its concise Korean meaning here; it never repeats an annotated expression and never replaces the expressions. " +
   "`speakers`: one entry per distinct segment speaker with its `gender`: `female` or `male` for a character, `narrator` for narration. " +
   "`synopsis`: two English sentences on who, where, what happened and what is left open, for the app to carry into the next passage. " +

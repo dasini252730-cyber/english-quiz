@@ -204,7 +204,9 @@ class QuizBuilderTest {
         assertEquals(QuizQuestionType.COMPREHENSION, questions[0].type)
         assertEquals("Emma는 왜?", questions[0].questionText)
         assertEquals("", questions[0].expression)
-        assertEquals(listOf(QuizOption("의심", true), QuizOption("기쁨", false), QuizOption("졸림", false), QuizOption("배고픔", false)), questions[0].options)
+        // 백로그 059: the options are shuffled, so the model's favourite index is not the answer's.
+        assertEquals(setOf("의심", "기쁨", "졸림", "배고픔"), questions[0].options.map { it.text }.toSet())
+        assertEquals(listOf("의심"), questions[0].options.filter { it.isCorrect }.map { it.text })
         assertEquals("지문의 흐름을 떠올려 보세요.", questions[1].explanation)
         assertTrue(questions.drop(2).none { it.type == QuizQuestionType.COMPREHENSION })
     }

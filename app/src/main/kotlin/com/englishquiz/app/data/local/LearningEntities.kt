@@ -25,6 +25,8 @@ data class SavedExpressionEntity(
     @ColumnInfo(defaultValue = "0") val tapCount: Int = 0,
     /** The gloss used as a quiz option (백로그 046); "" when the passage carried none. */
     @ColumnInfo(defaultValue = "''") val shortMeaning: String = "",
+    /** The slot the phrase fills (백로그 059), so wrong options can be of the same kind; "" when unknown. */
+    @ColumnInfo(defaultValue = "''") val kind: String = "",
 )
 
 /**

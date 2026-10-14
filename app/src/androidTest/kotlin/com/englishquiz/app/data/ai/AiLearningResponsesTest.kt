@@ -195,8 +195,8 @@ class AiLearningResponsesTest {
         val body = """
             {"data":{"title":"A cafe","mode":"conversation","segments":[
               {"speaker":"Emma","text":"That sounds sketchy, so hang out later."}],
-             "expressions":[{"text":"sketchy","meaning":"수상하다는 뜻이에요.","shortMeaning":"수상한","segmentIndex":0},
-                            {"text":"hang out","meaning":"어울려 놀다","shortMeaning":"이건 선택지로 쓰기에는 너무 긴 뜻풀이예요 정말로","segmentIndex":0}]}}
+             "expressions":[{"text":"sketchy","meaning":"수상하다는 뜻이에요.","shortMeaning":"수상한","kind":"Adjective","segmentIndex":0},
+                            {"text":"hang out","meaning":"어울려 놀다","shortMeaning":"이건 선택지로 쓰기에는 너무 긴 뜻풀이예요 정말로","kind":"gerund","segmentIndex":0}]}}
         """.trimIndent()
 
         val parsed = parseContentResponse(JSONObject(body), ContentMode.CONVERSATION)
@@ -204,6 +204,9 @@ class AiLearningResponsesTest {
 
         assertEquals("수상한", parsed.expressions[0].shortMeaning)
         assertEquals("", parsed.expressions[1].shortMeaning)
+        // 백로그 059: a kind is kept in its canonical spelling; one outside the list is dropped on its own.
+        assertEquals("adjective", parsed.expressions[0].kind)
+        assertEquals("", parsed.expressions[1].kind)
         assertEquals(parsed, restored)
     }
 

@@ -44,6 +44,7 @@ internal fun parseContentResponse(response: JSONObject, expectedMode: ContentMod
             startIndex = start,
             endIndex = start + text.length,
             shortMeaning = item.optString("shortMeaning").trim().takeIf { it.length <= MAX_SHORT_MEANING_CHARS } ?: "",
+            kind = ExpressionKinds.normalize(item.optString("kind")),
         )
     } ?: invalidResponse()
     if (segments.isEmpty() || expressions.isEmpty()) invalidResponse()
@@ -197,6 +198,7 @@ internal fun LearningContent.toResponseJson(): JSONObject {
                 .put("text", expression.text)
                 .put("meaning", expression.meaning)
                 .put("shortMeaning", expression.shortMeaning)
+                .put("kind", expression.kind)
                 .put("segmentIndex", expression.segmentIndex),
         )
     }

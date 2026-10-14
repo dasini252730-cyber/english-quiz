@@ -38,6 +38,10 @@ interface LearningDao {
     @Query("UPDATE saved_expressions SET shortMeaning = :shortMeaning WHERE normalizedExpression = :normalizedExpression AND shortMeaning = ''")
     suspend fun fillShortMeaning(normalizedExpression: String, shortMeaning: String)
 
+    /** Gives a row saved before 백로그 059 the kind a later passage names for it; never replaces one. */
+    @Query("UPDATE saved_expressions SET kind = :kind WHERE normalizedExpression = :normalizedExpression AND kind = ''")
+    suspend fun fillKind(normalizedExpression: String, kind: String)
+
     /** One more look-up while reading (백로그 044). */
     @Query("UPDATE saved_expressions SET tapCount = tapCount + 1 WHERE normalizedExpression = :normalizedExpression")
     suspend fun incrementTapCount(normalizedExpression: String)

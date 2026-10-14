@@ -2,6 +2,7 @@ package com.englishquiz.app.data.repository
 
 import androidx.room.withTransaction
 import com.englishquiz.app.data.ai.ContentMode
+import com.englishquiz.app.data.ai.ExpressionKinds
 import com.englishquiz.app.data.local.LearningDatabase
 import com.englishquiz.app.data.local.QuizAnswerEntity
 import com.englishquiz.app.data.local.SavedExpressionEntity
@@ -58,11 +59,12 @@ class LearningRepository(
         /** False for a retry of a save that failed: the learner tapped once. */
         countTap: Boolean = true,
         shortMeaning: String = "",
+        kind: String = "",
     ): SavedExpressionEntity = database.withTransaction {
         val normalizedExpression = normalizeExpression(displayExpression)
-        insertUnlessSaved(normalizedExpression, displayExpression, contextMeaning, savedAtEpochMillis, contextSentence, shortMeaning)
+        insertUnlessSaved(normalizedExpression, displayExpression, contextMeaning, savedAtEpochMillis, contextSentence, shortMeaning, kind)
         if (countTap) learningDao.incrementTapCount(normalizedExpression)
-        if (shortMeaning.isNotBlank()) learningDao.fillShortMeaning(normalizedExpression, shortMeaning.trim())
+        fillWhatIsMissing(normalizedExpression, shortMeaning, kind)
         checkNotNull(learningDao.findSavedExpression(normalizedExpression))
     }
 
@@ -76,11 +78,18 @@ class LearningRepository(
         savedAtEpochMillis: Long,
         contextSentence: String,
         shortMeaning: String = "",
+        kind: String = "",
     ): Boolean = database.withTransaction {
         val normalizedExpression = normalizeExpression(displayExpression)
-        val added = insertUnlessSaved(normalizedExpression, displayExpression, contextMeaning, savedAtEpochMillis, contextSentence, shortMeaning)
-        if (!added && shortMeaning.isNotBlank()) learningDao.fillShortMeaning(normalizedExpression, shortMeaning.trim())
+        val added = insertUnlessSaved(normalizedExpression, displayExpression, contextMeaning, savedAtEpochMillis, contextSentence, shortMeaning, kind)
+        if (!added) fillWhatIsMissing(normalizedExpression, shortMeaning, kind)
         added
+    }
+
+    /** A row from before 백로그 046/059 takes the gloss and the kind a later passage carries; a filled one keeps its own. */
+    private suspend fun fillWhatIsMissing(normalizedExpression: String, shortMeaning: String, kind: String) {
+        if (shortMeaning.isNotBlank()) learningDao.fillShortMeaning(normalizedExpression, shortMeaning.trim())
+        ExpressionKinds.normalize(kind).takeIf { it.isNotEmpty() }?.let { learningDao.fillKind(normalizedExpression, it) }
     }
 
     /** True when the row was inserted; false when the ignored duplicate kept the stored row. */
@@ -91,6 +100,7 @@ class LearningRepository(
         savedAtEpochMillis: Long,
         contextSentence: String,
         shortMeaning: String,
+        kind: String,
     ): Boolean {
         require(normalizedExpression.isNotEmpty()) { "표현은 비어 있을 수 없습니다." }
         val rowId = learningDao.insertExpressionIgnoringDuplicate(
@@ -101,6 +111,7 @@ class LearningRepository(
                 firstSavedAtEpochMillis = savedAtEpochMillis,
                 contextSentence = contextSentence.trim(),
                 shortMeaning = shortMeaning.trim(),
+                kind = ExpressionKinds.normalize(kind),
             ),
         )
         return rowId != IGNORED_ROW_ID
