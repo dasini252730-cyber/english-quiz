@@ -138,7 +138,7 @@ class SeasonCoordinatorTest {
         assertEquals(listOf("Open after S1E2"), third.canon.openQuestions)
         assertEquals("Plan 3", third.episodePlan)
         assertEquals("Season 1 bible", third.title)
-        assertEquals("Mina (owner); Rui (driver)", third.characters)
+        assertEquals("Mina (owner; wants: keep the hostel; hides: owes money; cousin of Rui); Rui (driver; wants: quiet life; hides: saw it; cousin of Mina)", third.characters)
         // The first episode saw the bible's own open questions and no previous summary.
         assertEquals("", storyRequests[0].season!!.previousSummary)
         assertEquals(listOf("Who?"), storyRequests[0].season!!.canon.openQuestions)

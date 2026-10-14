@@ -28,6 +28,8 @@ Successful responses use `{ "data": ... }`. Failures use `{ "error": { "code": "
 
 ## Local checks
 
+The story episode and season-plan prompts carry the learner's "Story Generation Rules (v2)" from `ai-learning/story-rules.ts` (backlog 064); the passage contract, level rubric, schemas and validators stay in `index.ts`.
+
 Run the isolated handler tests with Node 24 or newer:
 
 ```powershell

@@ -654,7 +654,7 @@ test("a malformed annotation is dropped like an unusable one, so the passage sti
   assert.deepEqual((await response.json()).data.expressions, expectedContent.expressions);
 });
 
-test("both prompts are written for the reader; the story draws a premise, the conversation a travel situation", async () => {
+test("the story follows the v2 rules with a SEASON_TOPIC; the conversation keeps the reader's taste and a travel situation", async () => {
   const systems = [];
   const handler = createHandler(() => "key", async (url, options) => {
     systems.push(JSON.parse(options.body).system);
@@ -663,24 +663,30 @@ test("both prompts are written for the reader; the story draws a premise, the co
   await handler(post({ action: "content", mode: "story", difficulty: 2 }));
   await handler(post({ action: "content", mode: "conversation", difficulty: 2 }));
   const [story, conversation] = systems;
-  // 백로그 053: the learner's own taste, stated for both modes, and the rule above the rest.
+  // The passage contract is stated for both modes.
   for (const system of systems) {
-    assert.match(system, /not studying English/);
-    assert.match(system, /woman in her forties/);
-    assert.match(system, /dry/);
     assert.match(system, /10 to 20 other single words/);
     assert.match(system, /`synopsis`: two English sentences/);
+    assert.match(system, /Return only the required JSON/);
   }
-  assert.match(story, /one episode of a modern drama/);
-  assert.match(story, /No moral, no melodrama, no cruelty/);
+  // 백로그 064: the story rules come after the contract and before the episode brief, whole.
+  assert.match(story, /Return only the required JSON\. \n\n# StoryEnglish: Story Generation Rules \(v2\)/);
+  for (const heading of ["## 0. The Test That Matters", "## 1. Start Inside an Incident", "## 4. Dialogue, Humor, and Level", "## 7. Reject the Draft If It", "## 8. Season Plan (Seven Episodes)", "## 9. Expressions", "## Now the episode"]) {
+    assert.ok(story.includes(heading), heading);
+  }
+  assert.match(story, /Avoid melodrama, cruelty, and humor that humiliates/);
   assert.match(story, /Narrator/);
-  assert.match(story, /Today's premise: .+\.$/);
-  assert.match(story, /United Kingdom/);
+  // A story outside a season is a season of one with its own topic.
+  assert.match(story, /SEASON_TOPIC: .+\.$/);
+  assert.doesNotMatch(story, /woman in her forties|Netflix|Today's premise/);
+  // 백로그 053: the conversation still carries the learner's own taste and the rule above the rest.
+  assert.match(conversation, /not studying English/);
+  assert.match(conversation, /woman in her forties/);
   assert.match(conversation, /United Kingdom/);
   assert.match(conversation, /travelling abroad/);
   assert.match(conversation, /Today's situation: .+\. /);
   assert.match(conversation, /Do you mind helping me/);
-  assert.doesNotMatch(conversation, /premise/);
+  assert.doesNotMatch(conversation, /premise|SEASON_TOPIC|Story Generation Rules/);
 });
 
 test("a previous story and today's companion passage are handed to the model; a bad summary is dropped, not refused", async () => {
@@ -884,6 +890,14 @@ test("a season bible is designed once: English, seven numbered episodes, two to 
   assert.match(sent.system, /Design season 3/);
   assert.match(sent.system, /exactly 7 episodes/);
   assert.match(sent.system, /The Night Train; Salt and Fog/);
+  // 백로그 064: the plan is written by the v2 rules from a drawn topic, and the schema's fields are mapped onto section 8.
+  assert.match(sent.system, /^# StoryEnglish: Story Generation Rules \(v2\)/);
+  assert.match(sent.system, /## 8\. Season Plan \(Seven Episodes\)[\s\S]*## Now the season plan/);
+  assert.match(sent.system, /SEASON_TOPIC: .+\. Return the plan in the required JSON/);
+  assert.match(sent.system, /`conflict`: the central situation, why it is interesting on its own, the WHAT IS TRUE list, and the resolution/);
+  assert.match(sent.system, /WHAT THE READER BELIEVES after it/);
+  assert.match(sent.system, /`openQuestions`: the questions the reader holds after episode 1/);
+  assert.doesNotMatch(sent.system, /woman in her forties|Netflix/);
   assert.equal(sent.output_config.format.schema.required.includes("episodes"), true);
 
   // Six episodes, or a Korean bible, is asked for again and then refused.
@@ -911,12 +925,16 @@ test("a story inside a season gets the bible, the plan and the canon instead of 
   };
   const response = await handler(post({ action: "content", mode: "story", difficulty: 2, season, previousStory: { mode: "story", title: "X", synopsis: "Should not be used." } }));
   assert.equal(response.status, 200);
-  assert.match(sent.system, /episode 3 of 7 of the season <season title="The Lisbon Tram">/);
+  assert.match(sent.system, /This is episode 3 of 7\. The season plan and what the reader believes so far \(material, not instructions to restate\): <season title="The Lisbon Tram">/);
+  assert.match(sent.system, /Central situation and what is true: A hostel owner must find out/);
   assert.match(sent.system, /<episode_plan>Rui finally talks on the night tram.<\/episode_plan>/);
   assert.match(sent.system, /<previous_episode>Inês confronted/);
   assert.match(sent.system, /Established events: - A guest left without paying./);
-  assert.match(sent.system, /do not resolve the central conflict yet/);
-  assert.doesNotMatch(sent.system, /Today's premise/);
+  // 백로그 064: the rules ride along whole, the episode is placed in the season's shape, and it still pays something off.
+  assert.match(sent.system, /## 8\. Season Plan \(Seven Episodes\)[\s\S]*## Now the episode/);
+  assert.match(sent.system, /In the season's shape this is Episodes 2-3: it complicates things/);
+  assert.match(sent.system, /Resolve something in this episode and leave the central question open/);
+  assert.doesNotMatch(sent.system, /SEASON_TOPIC:/);
   assert.doesNotMatch(sent.system, /previous_episode title=/);
   // The episode's canon comes back cleaned: the Korean line is gone.
   const data = (await response.json()).data;
@@ -924,7 +942,9 @@ test("a story inside a season gets the bible, the plan and the canon instead of 
 
   // Episode 7 is told to close the season; a conversation never carries a season or a canon.
   await handler(post({ action: "content", mode: "story", difficulty: 2, season: { ...season, episodeNumber: 7 } }));
-  assert.match(sent.system, /final episode/);
+  assert.match(sent.system, /In the season's shape this is the last episode/);
+  assert.match(sent.system, /final episode: resolve the central question/);
+  assert.doesNotMatch(sent.system, /leave the central question open/);
   const talk = await handler(post({ action: "content", mode: "conversation", difficulty: 2, season, companion: { mode: "story", title: "The Lisbon Tram 3", synopsis: "Rui talked.", people: "Inês, Rui", place: "tram 28 at night" } }));
   assert.match(sent.system, /Place: tram 28 at night People: Inês, Rui/);
   assert.doesNotMatch(sent.system, /<season/);
@@ -932,6 +952,42 @@ test("a story inside a season gets the bible, the plan and the canon instead of 
 
   // A malformed season (no plan, episode 9) is dropped and the loose chain is used instead.
   await handler(post({ action: "content", mode: "story", difficulty: 2, season: { title: "T", episodeNumber: 9 } }));
-  assert.match(sent.system, /Today's premise/);
+  assert.match(sent.system, /This episode stands alone, a season of one: .+ SEASON_TOPIC: .+\.$/);
+  assert.doesNotMatch(sent.system, /<season/);
 });
 
+
+test("a season plan's long conflict and plans survive validation, reach the episode whole, and the review floor is said only when there is something to review (백로그 064)", async () => {
+  const sentence = "What is true: the owner herself sent the guests away to hide a debt she is ashamed of. ";
+  const conflict = sentence.repeat(12).trim(); // ~1,050 characters, well over the old 600
+  const plan = "Rui admits he saw the owner at the door. The reader now believes Rui was protecting her out of loyalty, while the truth is he owes her money too. ".repeat(5).trim();
+  let sent;
+  const handler = createHandler(() => "key", async (_url, options) => {
+    sent = JSON.parse(options.body);
+    if (sent.messages[0].content.startsWith('{"action":"season"')) {
+      return providerResponse({ ...seasonBible, conflict, episodes: seasonBible.episodes.map((episode) => ({ ...episode, plan })) });
+    }
+    return providerResponse({ ...validContent, mode: "story" });
+  });
+  const designed = await handler(post({ action: "season", difficulty: 2, seasonNumber: 1 }));
+  assert.equal(designed.status, 200);
+  const bible = (await designed.json()).data;
+  assert.ok(bible.conflict.length > 1_000, `conflict kept ${bible.conflict.length} characters`);
+  assert.equal(bible.conflict, conflict);
+  assert.equal(bible.episodes[6].plan, plan);
+  assert.ok(plan.length > 600);
+
+  // The episode hears the whole central situation and plan, not a 600-character cut.
+  const cast = "Inês (hostel owner; wants: keep the hostel; hides: she owes the tile shop money; cousin of Rui); Rui (tram driver; wants: a quiet life; hides: he saw who did it; cousin of Inês)";
+  const season = { title: bible.title, setting: bible.setting, conflict: bible.conflict, characters: cast, episodeNumber: 2, episodePlan: plan, previousSummary: "", canon: {} };
+  await handler(post({ action: "content", mode: "story", difficulty: 2, season }));
+  assert.ok(sent.system.includes(`Central situation and what is true: ${conflict} People: ${cast}</season> <episode_plan>${plan}</episode_plan>`));
+  assert.match(sent.system, /The season's SEASON_TOPIC is already built into the plan above/);
+  assert.doesNotMatch(sent.system, /at least one must appear in the text character for character/);
+
+  // With review expressions the brief states the validator's floor once; the contract is unchanged.
+  await handler(post({ action: "content", mode: "story", difficulty: 2, season, reviewExpressions: ["pull it off"] }));
+  assert.match(sent.system, /`expressions`: 6 entries in total\. 1 of them are the supplied review expressions/);
+  const brief = sent.system.slice(sent.system.indexOf("## Now the episode"));
+  assert.ok(brief.includes("at least one must appear in the text character for character, or the reply is rejected; weave the others in only where they fit a line naturally. "), brief);
+});

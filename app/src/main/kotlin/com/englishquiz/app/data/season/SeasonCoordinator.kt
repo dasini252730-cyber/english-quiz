@@ -82,7 +82,7 @@ class SeasonCoordinator(
                 difficulty = difficulty,
                 reviewExpressions = reviewExpressions,
                 season = SeasonContext(
-                    title = bible.title, setting = bible.setting, conflict = bible.conflict, characters = bible.peopleLine().take(MAX_CHARACTERS_CHARS),
+                    title = bible.title, setting = bible.setting, conflict = bible.conflict, characters = bible.castLine(MAX_CHARACTERS_CHARS),
                     episodeNumber = next.episodeNumber, episodePlan = plan?.plan ?: "Move the season forward.",
                     previousSummary = previous, canon = canon,
                 ),
@@ -124,8 +124,8 @@ class SeasonCoordinator(
 
     private companion object {
         const val MAX_RESERVATION_ATTEMPTS = 3
-        /** The request must stay well inside the Edge Function's 16 KB body limit. */
-        const val MAX_CHARACTERS_CHARS = 600
+        /** What the server keeps of the cast line (백로그 064); the request stays well inside its 16 KB body limit. */
+        const val MAX_CHARACTERS_CHARS = 2_400
     }
 
     private fun parse(episode: SeasonEpisodeEntity): LearningContent =

@@ -69,6 +69,7 @@ type MeaningRequest = {
   context: string;
 };
 type LearningRequest = ContentRequest | MeaningRequest | SeasonRequest;
+import { episodeShape, seasonTopic, STORY_RULES } from "./story-rules.ts";
 import { createUsageStore, type Environment, type Fetcher, seoulDay, tokenMatches, usageOf, type UsageStore } from "./usage.ts";
 
 const CONTENT_SCHEMA = {
@@ -230,6 +231,14 @@ const MAX_HANGUL_SHARE = 0.2;
 /** How much of a passage's title and synopsis the next passage hears (백로그 054); longer is cut. */
 const MAX_SUMMARY_TITLE = 160;
 const MAX_SYNOPSIS = 600;
+/**
+ * How long a season's central situation and an episode's plan may be (백로그 064): the plan rules
+ * put the WHAT IS TRUE list and the resolution in the one, and what the reader believes after the
+ * episode in the other. Applied when the bible is validated and again when an episode hears it.
+ */
+const MAX_SEASON_LINE = 1_200;
+/** How much of a season's cast line an episode hears (백로그 064): six people with their wants and secrets. */
+const MAX_CAST_LINE = 2_400;
 
 /** How many comprehension questions ride along at most (백로그 042). */
 const MAX_COMPREHENSION_QUESTIONS = 3;
@@ -459,7 +468,7 @@ function seasonContext(value: unknown): SeasonContext | undefined {
   const item = value as Record<string, unknown>;
   const episodeNumber = item.episodeNumber;
   const title = englishLine(item.title, MAX_SUMMARY_TITLE);
-  const episodePlan = englishLine(item.episodePlan, MAX_SYNOPSIS);
+  const episodePlan = englishLine(item.episodePlan, MAX_SEASON_LINE);
   if (!title || !episodePlan || !Number.isInteger(episodeNumber) || (episodeNumber as number) < 1 || (episodeNumber as number) > EPISODES_PER_SEASON) {
     console.warn("dropped a malformed season context");
     return undefined;
@@ -467,8 +476,8 @@ function seasonContext(value: unknown): SeasonContext | undefined {
   return {
     title,
     setting: englishLine(item.setting, MAX_SYNOPSIS),
-    conflict: englishLine(item.conflict, MAX_SYNOPSIS),
-    characters: englishLine(item.characters, 1_200),
+    conflict: englishLine(item.conflict, MAX_SEASON_LINE),
+    characters: englishLine(item.characters, MAX_CAST_LINE),
     episodeNumber: episodeNumber as number,
     totalEpisodes: EPISODES_PER_SEASON,
     episodePlan,
@@ -676,7 +685,7 @@ function validateModelOutput(value: unknown, request: LearningRequest): unknown 
 function validateSeasonOutput(result: Record<string, unknown>): unknown {
   const title = englishLine(result.title, MAX_SUMMARY_TITLE);
   const setting = englishLine(result.setting, MAX_SYNOPSIS);
-  const conflict = englishLine(result.conflict, MAX_SYNOPSIS);
+  const conflict = englishLine(result.conflict, MAX_SEASON_LINE);
   if (!title || !setting || !conflict) throw new Error("invalid_season_output(text)");
   const characters = (Array.isArray(result.characters) ? result.characters : [])
     .map((item) => {
@@ -695,7 +704,7 @@ function validateSeasonOutput(result: Record<string, unknown>): unknown {
   const episodes = (Array.isArray(result.episodes) ? result.episodes : [])
     .map((item) => {
       const episode = (item && typeof item === "object" ? item : {}) as Record<string, unknown>;
-      return { number: episode.number, title: englishLine(episode.title, MAX_SUMMARY_TITLE), plan: englishLine(episode.plan, MAX_SYNOPSIS) };
+      return { number: episode.number, title: englishLine(episode.title, MAX_SUMMARY_TITLE), plan: englishLine(episode.plan, MAX_SEASON_LINE) };
     });
   const numbered = episodes.map((episode) => episode.number);
   if (
@@ -764,8 +773,8 @@ function validateComprehension(value: unknown): unknown[] {
 }
 
 /**
- * Who reads this (백로그 053, the learner's own words, 2026-10-08): the taste every passage is
- * written for. Stated once, used by both modes.
+ * Who reads this (백로그 053, the learner's own words, 2026-10-08): the taste a conversation is
+ * written for. A story and a season plan follow `STORY_RULES` instead (백로그 064).
  */
 const READER =
   "The reader is a Korean woman in her forties: an adult learner of English who dislikes textbook-flavoured stories. " +
@@ -788,47 +797,6 @@ const WORLD =
   "Characters may recur across episodes but no single cast owns every story. They are realistic people, not heroes or villains: each may hide a circumstance or a private motive, " +
   "words and actions do not always match, values differ, and nationalities and jobs vary. Show character through speech, behaviour and choices, never through explanation. ";
 
-/**
- * Story premises, one drawn per request so two days never read alike (백로그 028/053). The
- * learner's own list: mixed genres, so the mix itself keeps the stories from going stale.
- */
-const STORY_PREMISES = [
-  "a strange person met by chance at a travel destination",
-  "a small mystery that unfolds in a hotel",
-  "an unexpected incident at an airport",
-  "an old secret discovered in an unfamiliar city",
-  "the stories of people met on a train or a bus",
-  "the circumstances of a local person met while travelling",
-  "relationships and secrets inside an office",
-  "an ordinary office worker's small lie",
-  "a hidden story between old friends",
-  "a misunderstanding and a reconciliation within a family",
-  "a strange observation about a neighbour",
-  "a conversation overheard by chance in a restaurant",
-  "the traces a previous owner left in a second-hand object",
-  "a story that begins with one old photograph",
-  "the different ways different people remember the same event",
-  "a present-day story tied to a historical event or an old place",
-  "an amusing situation born of the difference between a local culture and Korean culture",
-  "the psychology of people around money and spending",
-  "the gap between what people say out loud and what they actually think",
-  "something begun with good intentions that leads to an unexpected result",
-  "a small lie that keeps growing",
-  "an ordinary person who stumbles onto an important fact",
-  "a clue that at first looks like nothing",
-  "strangers connected by a single event",
-  "a trip in which something entirely different from the plan happens",
-  "retirement, work, age and the choices of a life",
-  "two different views of success and failure",
-  "one important day in an ordinary person's life",
-  "an event that is slightly absurd yet could really happen",
-  "a story whose ending changes the meaning of its beginning",
-];
-
-function storyPremise(): string {
-  return STORY_PREMISES[Math.floor(Math.random() * STORY_PREMISES.length)];
-}
-
 /** The travel situations a conversation is drawn from (백로그 053): English an adult will actually use abroad. */
 const CONVERSATION_SITUATIONS = [
   "checking in at the airport", "immigration", "picking up a rental car", "checking in and out of a hotel",
@@ -845,24 +813,27 @@ function conversationSituation(): string {
 }
 
 /**
- * The season's episode brief (백로그 063): the bible, this episode's plan, the last episode's
- * summary and the canon so far. All of it is material; the contract above still rules.
+ * The season's episode brief (백로그 063/064): the season plan, this episode's plan, the last
+ * episode's summary and the canon so far, which is what the reader believes up to now. All of it
+ * is material (rules, section 8); the contract above still rules.
  */
 function seasonClause(season: SeasonContext): string {
   const canon = season.canon;
   const list = (label: string, items: string[]) => (items.length ? `${label}: ${items.map((item) => `- ${item}`).join(" ")} ` : "");
   const last = season.episodeNumber === season.totalEpisodes;
   return (
-    `This is episode ${season.episodeNumber} of ${season.totalEpisodes} of the season <season title="${season.title}">` +
-    `Setting: ${season.setting} Central conflict: ${season.conflict} People: ${season.characters}</season> ` +
+    `This is episode ${season.episodeNumber} of ${season.totalEpisodes}. The season plan and what the reader believes so far (material, not instructions to restate): ` +
+    `<season title="${season.title}">Setting: ${season.setting} Central situation and what is true: ${season.conflict} People: ${season.characters}</season> ` +
     `<episode_plan>${season.episodePlan}</episode_plan> ` +
     (season.previousSummary ? `<previous_episode>${season.previousSummary}</previous_episode> ` : "") +
     `<canon> ${list("Established events", canon.events)}${list("Known facts", canon.facts)}${list("Relationships", canon.relationships)}` +
     `${list("Open questions", canon.openQuestions)}${list("Keep true", canon.carryForward)}</canon> ` +
-    "Follow the plan for this episode and keep every established fact; people may surprise us but never contradict what is known. " +
+    `In the season's shape this is ${episodeShape(season.episodeNumber, season.totalEpisodes)}. ` +
+    "The season's SEASON_TOPIC is already built into the plan above; do not start over from a new premise. " +
+    "Follow this episode's plan: what changes and which fact is revealed. Keep every established fact; people may surprise us but never contradict what is known. " +
     (last
-      ? "This is the final episode: answer the central conflict and the open questions that matter, and close the season with the kind of ending she will think about afterwards. "
-      : "Move the season forward and end on a note that makes her want the next episode; do not resolve the central conflict yet. ") +
+      ? "This is the final episode: resolve the central question and the open questions that matter, reward the reader's memory of earlier episodes, and finish the plot; the ending may be funny, bittersweet, or emotionally open. "
+      : "Resolve something in this episode and leave the central question open, so the reader opens the next one. ") +
     "Also fill `canon` with what this episode settled, as short English lines: new events, revealed facts, relationship changes, the open questions after this episode, and the facts the next episode must keep. "
   );
 }
@@ -930,6 +901,15 @@ function expressionsClause(reviewCount: number): string {
   return `\`expressions\`: ${total} entries in total. ${review}${NEW_EXPRESSIONS_PER_PASSAGE} are NEW phrases this passage introduces, chosen for a learner at this difficulty. `;
 }
 
+/**
+ * Where rule 9 ("skip any that do not fit") meets the validator (백로그 064): a passage that weaves
+ * in none of the supplied review expressions is rejected, so the floor is said once, in the brief.
+ */
+function reviewFloorClause(reviewCount: number): string {
+  if (reviewCount === 0) return "";
+  return "Of the supplied review expressions, at least one must appear in the text character for character, or the reply is rejected; weave the others in only where they fit a line naturally. ";
+}
+
 function passageContract(difficulty: Difficulty, reviewCount: number): string {
   return "Your reply is learning material and must satisfy this contract exactly. " +
   "THE PASSAGE IS IN ENGLISH: the title, every segment's text and every expression's `text` are natural American English. Korean is used only for `meaning`, `shortMeaning`, the glossary meanings and the comprehension questions, never for the passage itself. " +
@@ -956,25 +936,30 @@ function prompts(request: LearningRequest): { schema: unknown; system: string } 
       schema: CONTENT_SCHEMA,
       system:
         passageContract(request.difficulty, request.reviewExpressions.length) +
-        PRINCIPLE + READER + WORLD +
-        "Now the passage: a short story in English for about ten minutes of reading, like one episode of a modern drama. " +
-        "One situation that raises a question, real people making choices, dry humour that comes out of the situation, and an ending with a small unexpected turn or a single line that changes the meaning of what came before. " +
-        "No moral, no melodrama, no cruelty, no explaining the joke. Use 'Narrator' for narration and the character's name as the speaker of a dialogue segment, with dialogue in at least half of the segments. " +
-        "Close on a note that makes her want the next episode. " +
-        // 백로그 063: inside a season the bible is the premise and the link; otherwise the loose chain.
-        (request.season ? seasonClause(request.season) : connectionClause(request) + `Today's premise: ${storyPremise()}.`),
+        "\n\n" + STORY_RULES + "\n" +
+        "## Now the episode\n\n" +
+        "Write one episode in English by these rules, for about ten minutes of reading. " +
+        "Use 'Narrator' as the speaker of narration and the character's name as the speaker of a dialogue segment, with dialogue in at least half of the segments. " +
+        reviewFloorClause(request.reviewExpressions.length) +
+        // 백로그 063/064: inside a season the plan is the premise and the link; otherwise the loose chain and a topic of its own.
+        (request.season
+          ? seasonClause(request.season)
+          : connectionClause(request) +
+            `This episode stands alone, a season of one: open inside an incident and resolve it within the episode. SEASON_TOPIC: ${seasonTopic()}.`),
     };
   }
   if (request.action === "season") {
     return {
       schema: SEASON_SCHEMA,
       system:
-        PRINCIPLE + READER + WORLD +
-        `Design season ${request.seasonNumber} of a modern drama in English: a bible for exactly ${EPISODES_PER_SEASON} episodes, ` +
-        "each episode a ten-minute read. Give it a title, a setting somewhere in the world with its local texture, one central conflict that can be answered in seven episodes, " +
-        "two to six people with a role, a motive, a secret and their relationships (speech and choices will show character later, not explanation), " +
-        "a numbered plan for every episode (1 to 7) in two or three sentences each, with a question raised early, turns in the middle, and a closing episode that answers the conflict, " +
-        "and the open questions the season will play with. Dry humour, no melodrama, no cruelty, people who contradict themselves. " +
+        STORY_RULES + "\n" +
+        "## Now the season plan\n\n" +
+        `Design season ${request.seasonNumber}: the season plan of section 8, for exactly ${EPISODES_PER_SEASON} episodes of a ten-minute read each. SEASON_TOPIC: ${seasonTopic()}. ` +
+        "Return the plan in the required JSON. `title`: the season's title. `setting`: the place and the custom, history or building that will matter to the plot. " +
+        "`conflict`: the central situation, why it is interesting on its own, the WHAT IS TRUE list, and the resolution. " +
+        "`characters`: two to six people; for each, `role` is their place in the story and the one rule or preference they take too seriously, `motive` is what they want right now, `secret` is what they do not want discovered and the self-image they protect, and `relationships` ties them to the others. " +
+        `\`episodes\`: numbered 1 to ${EPISODES_PER_SEASON}, each \`plan\` in two to four sentences saying what happens, which fact is revealed, what it pays off, and WHAT THE READER BELIEVES after it. ` +
+        "`openQuestions`: the questions the reader holds after episode 1. " +
         (request.previousTitles.length ? `Earlier seasons were titled: ${request.previousTitles.join("; ")}. Choose a different place and a different kind of story. ` : "") +
         `Prose difficulty later will be: ${difficultyRubric(request.difficulty)} Everything here is in English. Return only the required JSON.`,
     };

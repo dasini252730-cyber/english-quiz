@@ -2,7 +2,7 @@
   "schema_version": 1,
   "title": "개인용 영어 학습 앱 MVP backlog",
   "source": "요구사항/요구사항.md",
-  "updated_at": "2026-10-11",
+  "updated_at": "2026-10-14",
   "statuses": {
     "todo": "할 일",
     "in_progress": "작업 중",
@@ -1032,6 +1032,23 @@
         "server",
         "content",
         "data"
+      ]
+    },
+    {
+      "id": "064",
+      "title": "Story 생성 규칙 v2 반영 (취향·플롯 섹션 교체, SEASON_TOPIC, 시즌 플랜 재구성)",
+      "description": "2026-10-13 사용자 지침. 스토리 프롬프트의 취향(READER/PRINCIPLE/WORLD)·플롯 안내와 Season Bible 설계 지시를 'StoryEnglish: Story Generation Rules (v2)' 본문으로 교체한다. 레벨 루브릭, JSON 스키마, 세그먼트 한도, expressions/glossary/comprehension/speakers/synopsis 필드, 검증·재시도 규칙은 그대로 둔다. 시즌 주제는 SEASON_TOPIC으로 주어지며 기존 전제 목록에서 뽑는다. 에피소드 프롬프트가 인물의 욕구·비밀·관계를 받도록 앱의 인물 요약 줄도 넓힌다. 대화 프롬프트는 바꾸지 않는다.",
+      "details": "backlog/064.md",
+      "status": "review_needed",
+      "priority": "P0",
+      "estimate": "M",
+      "depends_on": [
+        "063"
+      ],
+      "labels": [
+        "prompt",
+        "edge-function",
+        "story"
       ]
     }
   ]

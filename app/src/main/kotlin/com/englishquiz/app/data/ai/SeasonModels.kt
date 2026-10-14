@@ -18,8 +18,26 @@ data class SeasonBible(
     val episodes: List<EpisodePlan>,
     val openQuestions: List<String>,
 ) {
-    /** The people as the story prompt and the conversation hear of them, in one line. */
+    /** The people as the conversation hears of them, in one line. */
     fun peopleLine(): String = characters.joinToString("; ") { "${it.name} (${it.role})" }
+
+    /**
+     * The cast as an episode hears of it (백로그 064): the story rules want each person's want,
+     * secret and ties, not only a name and a role. The line is kept inside [maxChars] by giving
+     * every person an equal share, so a long cast loses words at the end of each entry rather
+     * than its last people.
+     */
+    fun castLine(maxChars: Int): String {
+        if (characters.isEmpty()) return ""
+        val share = (maxChars - SEPARATOR.length * (characters.size - 1)) / characters.size
+        return characters.joinToString(SEPARATOR) { it.castEntry().fitted(share) }
+    }
+
+    private fun String.fitted(max: Int): String {
+        if (length <= max) return this
+        val cut = take(max - 1).trimEnd().substringBeforeLast(' ', missingDelimiterValue = take(max - 1))
+        return "$cut)"
+    }
 
     fun toJson(): JSONObject = JSONObject()
         .put("title", title).put("setting", setting).put("conflict", conflict)
@@ -28,6 +46,8 @@ data class SeasonBible(
         .put("openQuestions", JSONArray(openQuestions))
 
     companion object {
+        private const val SEPARATOR = "; "
+
         fun fromJson(json: JSONObject): SeasonBible = SeasonBible(
             title = json.optString("title"),
             setting = json.optString("setting"),
@@ -49,6 +69,9 @@ data class SeasonCharacter(
     val secret: String,
     val relationships: String,
 ) {
+    /** "Name (role; wants: ...; hides: ...; ties)": one person as the story prompt hears of them. */
+    fun castEntry(): String = "$name ($role; wants: $motive; hides: $secret; $relationships)"
+
     fun toJson(): JSONObject = JSONObject()
         .put("name", name).put("gender", gender.wireValue).put("role", role)
         .put("motive", motive).put("secret", secret).put("relationships", relationships)
