@@ -25,6 +25,8 @@ import androidx.compose.ui.unit.dp
 import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.domain.game.GameStats
 import com.englishquiz.app.domain.game.Badge
+import com.englishquiz.app.domain.quiz.QuizBuilder
+import com.englishquiz.app.domain.review.ReviewQueue
 import com.englishquiz.app.ui.theme.MongleCard
 import com.englishquiz.app.ui.theme.MongleChip
 import com.englishquiz.app.ui.theme.MongleColor
@@ -40,6 +42,10 @@ data class HomeSummary(
     val levels: Map<ContentMode, HomeLevel> = emptyMap(),
     /** Level, missions, badges and the boss (백로그 037~041); null shows none of the game cards. */
     val game: GameStats? = null,
+    /** What waits in each queue (백로그 055/060); null before the box is known. */
+    val queue: ReviewQueue? = null,
+    /** "다음 회차부터 적용돼요" after a story level change while an episode already waits (백로그 063). */
+    val storyLevelNote: String? = null,
 )
 
 @Composable
@@ -71,6 +77,7 @@ fun HomeScreen(
             color = MongleColor.Purple,
         )
         SummaryTiles(summary)
+        summary.queue?.let { ReviewQueueNotice(it) }
         summary.game?.let { game ->
             HomeLevelCard(game, onBuyShield)
             HomeMissionCard(game.missions)
@@ -107,6 +114,7 @@ fun HomeScreen(
                 onClick = onStoryClick,
                 onLevelChange = { onLevelChange(ContentMode.STORY, it) },
                 onSuggestionAnswer = { onSuggestionAnswer(ContentMode.STORY, it) },
+                note = summary.storyLevelNote,
             )
         }
         summary.game?.let { HomeBossCard(it.boss, onBossClick) }
@@ -121,6 +129,20 @@ fun HomeScreen(
                 badge = game.newBadges.size.takeIf { it > 0 }?.let { "새 배지 $it" },
             )
         }
+    }
+}
+
+/**
+ * Today's review load and what waits behind it (백로그 060), so a day of old reviews with no new
+ * expression is understood, not felt as "still so much to review".
+ */
+@Composable
+private fun ReviewQueueNotice(queue: ReviewQueue) {
+    val plan = queue.todayPlan(QuizBuilder.DEFAULT_MAX_QUESTIONS, QuizBuilder.NEW_PER_DAY)
+    val notice = plan.notice(queue) ?: return
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(notice, style = MaterialTheme.typography.bodyMedium, color = MongleColor.InkMuted)
+        plan.reason(queue)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MongleColor.InkMuted) }
     }
 }
 

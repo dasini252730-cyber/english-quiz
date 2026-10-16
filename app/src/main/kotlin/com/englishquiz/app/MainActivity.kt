@@ -30,6 +30,7 @@ class MainActivity : ComponentActivity() {
                     aiLearningClient = appContainer.aiLearningClient,
                     prefetchTomorrow = { appContainer.contentPrefetcher?.prefetchTomorrow() },
                     gameProgressRepository = appContainer.gameProgressRepository,
+                    seasonCoordinator = appContainer.seasonCoordinator,
                 )
             }
         }

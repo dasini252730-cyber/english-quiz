@@ -8,6 +8,7 @@ import com.englishquiz.app.data.ai.ContentGenerationRequest
 import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.data.ai.ContentSegment
 import com.englishquiz.app.data.ai.LearningContent
+import com.englishquiz.app.data.ai.PassageSummary
 import com.englishquiz.app.data.local.LearningDatabase
 import com.englishquiz.app.data.preferences.AppSettingsRepository
 import com.englishquiz.app.data.repository.LearningRepository
@@ -33,6 +34,8 @@ import java.time.ZonedDateTime
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import com.englishquiz.app.data.repository.findDailyContent
+import com.englishquiz.app.data.repository.listLibrary
 
 /** 백로그 025: tomorrow's passages are made once, for both modes, at tomorrow's level and due list. */
 @RunWith(AndroidJUnit4::class)
@@ -71,6 +74,7 @@ class ContentPrefetcherTest {
         mode = request.mode,
         segments = listOf(ContentSegment("Alex", "We can pull it off together.")),
         expressions = listOf(ContentExpression("pull it off", "해내다", 0, 7, 18)),
+        synopsis = "Alex pulled it off in a ${request.mode.wireValue}. What it cost is left open.",
     )
 
     @Test
@@ -100,9 +104,12 @@ class ContentPrefetcherTest {
 
         assertEquals(listOf(ContentMode.CONVERSATION), prefetcher.prefetchTomorrowNow())
 
+        // The story goes first (백로그 054), so the conversation can be set in its world.
         assertEquals(2, requests.size)
-        assertEquals(listOf(4, 5), requests.map { it.difficulty })
+        assertEquals(listOf(5, 4), requests.map { it.difficulty })
         assertEquals(listOf("hang out"), requests[0].reviewExpressions)
+        // The story failed, so the conversation had no companion to practise.
+        assertNull(requests[1].companion)
         assertNotNull(repository.findDailyContent(TOMORROW, ContentMode.CONVERSATION))
         assertNull(repository.findDailyContent(TOMORROW, ContentMode.STORY))
         // Tonight's row is untouched: tomorrow's passage is not today's.
@@ -112,6 +119,14 @@ class ContentPrefetcherTest {
         storyFails = false
         assertEquals(listOf(ContentMode.STORY), prefetcher.prefetchTomorrowNow())
         assertEquals(3, requests.size)
+        // 백로그 054: the retried story hears of the conversation already made for tomorrow; there is
+        // no earlier story to go on from.
+        assertEquals(ContentMode.STORY, requests[2].mode)
+        assertNull(requests[2].previousStory)
+        assertEquals(
+            PassageSummary(ContentMode.CONVERSATION, "Tomorrow conversation at 4", "Alex pulled it off in a conversation. What it cost is left open."),
+            requests[2].companion,
+        )
         assertEquals(
             listOf(ContentMode.CONVERSATION, ContentMode.STORY),
             repository.listLibrary().filter { it.learningDate == TOMORROW }.map { ContentMode.valueOf(it.mode.uppercase()) },

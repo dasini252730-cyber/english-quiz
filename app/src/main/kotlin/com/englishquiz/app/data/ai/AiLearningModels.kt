@@ -4,6 +4,21 @@ data class ContentGenerationRequest(
     val mode: ContentMode,
     val difficulty: Int,
     val reviewExpressions: List<String> = emptyList(),
+    /** The latest earlier story (백로그 054), so today's can go on from it. */
+    val previousStory: PassageSummary? = null,
+    /** The same day's other passage, so a conversation practises the story's situation. */
+    val companion: PassageSummary? = null,
+    /** A story's place in its season (백로그 063); null for a conversation or a season-less story. */
+    val season: SeasonContext? = null,
+)
+
+/** What one passage tells the next about itself (백로그 054); [people] and [place] come from the season (백로그 063). */
+data class PassageSummary(
+    val mode: ContentMode,
+    val title: String,
+    val synopsis: String,
+    val people: String = "",
+    val place: String = "",
 )
 
 enum class ContentMode(val wireValue: String) {
@@ -27,7 +42,14 @@ data class LearningContent(
     val comprehension: List<ComprehensionQuestion> = emptyList(),
     /** Who each speaker is (백로그 050), keyed by the segment speaker name; empty before it or when the model gave none. */
     val speakers: Map<String, SpeakerGender> = emptyMap(),
-)
+    /** Two English sentences on the passage (백로그 054), handed to the next generation; "" before it. */
+    val synopsis: String = "",
+    /** What this episode settled (백로그 063); null for a conversation or a story outside a season. */
+    val canon: CanonState? = null,
+) {
+    /** This passage as the next one hears about it, or null when it has nothing to say. */
+    fun summary(): PassageSummary? = synopsis.takeIf { it.isNotBlank() }?.let { PassageSummary(mode, title, it) }
+}
 
 /** What the model says about a speaker, so a voice can be chosen to match (백로그 050). */
 enum class SpeakerGender(val wireValue: String) {
@@ -40,6 +62,22 @@ enum class SpeakerGender(val wireValue: String) {
         fun fromWire(value: String): SpeakerGender? = entries.firstOrNull { it.wireValue == value }
     }
 }
+
+/**
+ * True when the passage itself is written in Korean (백로그 051): a reply the server accepted
+ * before it learnt to refuse one, or a row stored from it. Such a passage is not learning
+ * material and is regenerated rather than shown. Names and a quoted word do not trip this.
+ */
+val LearningContent.isKoreanPassage: Boolean
+    get() {
+        val text = segments.joinToString(" ") { it.text }
+        val letters = text.count { !it.isWhitespace() }
+        if (letters == 0) return false
+        val hangul = text.count { it in 'ㄱ'..'ㆎ' || it in '가'..'힣' }
+        return hangul > letters * MAX_HANGUL_SHARE
+    }
+
+private const val MAX_HANGUL_SHARE = 0.2
 
 /** One multiple-choice question about the situation of the passage, written by the model. */
 data class ComprehensionQuestion(
@@ -67,7 +105,17 @@ data class ContentExpression(
     val endIndex: Int,
     /** A few words for a quiz option (백로그 046); "" for a passage from before it or when the model gave none. */
     val shortMeaning: String = "",
+    /** The slot the phrase fills, one of [ExpressionKinds] (백로그 059); "" when unknown. */
+    val kind: String = "",
 )
+
+/** The kinds of phrase the quiz matches wrong options by (백로그 059); the Edge Function sends no other. */
+object ExpressionKinds {
+    val ALL = setOf("noun", "verb", "adjective", "adverb", "remark")
+
+    /** [value] when it is a known kind (any case, untrimmed), else "". */
+    fun normalize(value: String): String = value.trim().lowercase().takeIf { it in ALL } ?: ""
+}
 
 data class ContextualMeaning(
     val expression: String,

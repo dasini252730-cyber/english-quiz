@@ -2,6 +2,8 @@
 # install an update from the Releases page without a cable.
 #
 # Two repository secrets (Settings → Secrets and variables → Actions):
+#   AI_APP_TOKEN           the app token the Edge Function requires (백로그 062); same value as the
+#                          function's AI_APP_TOKEN secret
 #   AI_ENDPOINT            the Supabase Edge Function URL (kept out of the public repository;
 #                          an empty value builds an app with AI features switched off)
 #   DEBUG_KEYSTORE_BASE64  base64 of the PC's ~/.android/debug.keystore, so the APK carries the
@@ -50,11 +52,15 @@ jobs:
       - name: Build the debug APK
         env:
           AI_ENDPOINT: ${{ secrets.AI_ENDPOINT }}
+          AI_APP_TOKEN: ${{ secrets.AI_APP_TOKEN }}
         run: |
           if [ -z "$AI_ENDPOINT" ]; then
             echo "::warning::AI_ENDPOINT is not set: the APK has AI features switched off."
           fi
-          args=(:app:assembleDebug "-PaiEndpoint=$AI_ENDPOINT" --no-daemon)
+          if [ -z "$AI_APP_TOKEN" ]; then
+            echo "::warning::AI_APP_TOKEN is not set: the Edge Function will answer this APK with 401."
+          fi
+          args=(:app:assembleDebug "-PaiEndpoint=$AI_ENDPOINT" "-PaiAppToken=$AI_APP_TOKEN" --no-daemon)
           if [ -n "${DEBUG_KEYSTORE:-}" ]; then args+=("-PdebugKeystore=$DEBUG_KEYSTORE"); fi
           chmod +x gradlew
           ./gradlew "${args[@]}"

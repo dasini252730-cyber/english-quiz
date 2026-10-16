@@ -21,6 +21,7 @@ internal object QuizFixtures {
         consecutiveCorrect: Int = 2,
         reviewed: Boolean = true,
         shortMeaning: String = "",
+        kind: String = "",
     ) = SavedExpressionEntity(
         id = display.hashCode().toLong(),
         normalizedExpression = display.lowercase(),
@@ -32,6 +33,7 @@ internal object QuizFixtures {
         contextSentence = contextSentence,
         consecutiveCorrectCount = consecutiveCorrect,
         shortMeaning = shortMeaning,
+        kind = kind,
     )
 
     /** Deliberately disjoint from every expression the tests use as a target or as content. */

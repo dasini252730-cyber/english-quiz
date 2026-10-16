@@ -3,6 +3,7 @@ package com.englishquiz.app.ui
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -75,6 +76,15 @@ class ReviewScreenTest {
     }
 
     @Test
+    fun aRowNoQuestionCanBeBuiltForIsMarkedNotHidden() {
+        // 백로그 057: the chip says why the row never comes up; a mastered row keeps its own chip.
+        show(ReviewUiState.Ready(listOf(newlySaved, inProgress, mastered), unaskable = setOf(inProgress.id, mastered.id)))
+
+        compose.onNodeWithText(inProgress.displayExpression).assertIsDisplayed()
+        compose.onAllNodesWithText("출제 불가").assertCountEquals(1)
+    }
+
+    @Test
     fun showsExpressionMeaningAndReviewStateForEachSavedExpression() {
         show(ReviewUiState.Ready(listOf(newlySaved, inProgress, mastered)))
 
@@ -126,6 +136,31 @@ class ReviewScreenTest {
         filter = ReviewFilter.OFTEN_WRONG
         expressions = listOf(mastered)
         compose.onNodeWithText("틀린 표현이 없어요. 퀴즈에서 틀리면 여기에 모여요.").assertIsDisplayed()
+    }
+
+    @Test
+    fun theQuizButtonSendsTheShownRowsAndHidesOnAnEmptyList() {
+        val asked = mutableListOf<List<Long>>()
+        compose.setContent {
+            EnglishQuizTheme {
+                ReviewScreen(
+                    ReviewUiState.Ready(listOf(newlySaved, inProgress.copy(incorrectCount = 1)), filter = ReviewFilter.OFTEN_WRONG),
+                    SpeechState(ready = true), {}, {}, {}, {},
+                    onQuiz = { asked += it },
+                )
+            }
+        }
+
+        // 백로그 052: only the filtered rows go to the practice quiz.
+        compose.onNodeWithText("이 목록으로 퀴즈 풀기 (최대 1문제)").performClick()
+        assertEquals(listOf(listOf(2L)), asked)
+    }
+
+    @Test
+    fun theQuizButtonIsAbsentWhenNothingIsShown() {
+        show(ReviewUiState.Ready(listOf(mastered), filter = ReviewFilter.OFTEN_WRONG))
+
+        assertTrue(compose.onAllNodesWithText("퀴즈 풀기", substring = true).fetchSemanticsNodes().isEmpty())
     }
 
     @Test

@@ -34,6 +34,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import com.englishquiz.app.data.repository.listAllSessions
+import com.englishquiz.app.data.repository.recordCompletedSession
 
 /**
  * App-level navigation for 백로그 004: the home destinations really switch, the back arrow returns
@@ -117,9 +119,60 @@ class LearningHomeTest {
         // Opening the badge screen marks them seen, so home no longer flags them.
         compose.onNodeWithContentDescription("홈으로").performClick()
         awaitText(HOME_PROMPT)
-        compose.waitUntil(TIMEOUT_MILLIS) {
+        // The seen-write, the store's emission and the recompute take a moment on a slow device.
+        compose.waitUntil(3 * TIMEOUT_MILLIS) {
             compose.onAllNodesWithText("새 배지 2").fetchSemanticsNodes().isEmpty()
         }
+    }
+
+    @Test
+    fun theReviewBoxPracticeQuizMovesTheExpressionButRecordsNoSession() {
+        val repository = openRepository()
+        runBlocking {
+            repository.saveExpression("sketchy", "수상한", 1_000L)
+            repository.saveExpression("hang out", "놀다", 900L)
+            // Past their cards, so the practice asks them (백로그 045).
+            listOf("sketchy", "hang out").forEach {
+                repository.saveReviewProgress(it, 2_000L, 3_000L, consecutiveCorrectCount = 0, incorrectCount = 0, isMastered = false)
+            }
+        }
+        compose.setContent(home(repository))
+
+        awaitText(HOME_PROMPT)
+        compose.onNodeWithText("복습함").performClick()
+        awaitText("2개 · 최근 저장순")
+        compose.onNodeWithText("이 목록으로 퀴즈 풀기 (최대 2문제)").performClick()
+
+        // 백로그 052: a quiz without a score row. One right, one wrong on purpose: only the wrong
+        // answer reaches the expression, and the missed one comes back once at the end.
+        awaitText("1 / 2")
+        assertTrue(compose.onAllNodesWithText("0점").fetchSemanticsNodes().isEmpty())
+        repeat(2) { number ->
+            val askingSketchy = compose.onAllNodesWithText("sketchy").fetchSemanticsNodes().isNotEmpty()
+            // "sketchy" answered right, "hang out" answered wrong.
+            compose.onNodeWithText("수상한").performScrollTo().performClick()
+            awaitText(if (askingSketchy) "정답이에요!" else "아쉬워요, 오답이에요.")
+            compose.onNodeWithText(if (number == 0) "다음 문제" else "틀린 문제 다시 풀기").performScrollTo().performClick()
+        }
+        compose.waitUntil(TIMEOUT_MILLIS) {
+            compose.onAllNodesWithText("다시 풀기 · ", substring = true).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("놀다").performScrollTo().performClick()
+        compose.onNodeWithText("결과 보기").performScrollTo().performClick()
+        awaitText("2문제 중 1개를 맞혔어요.")
+        compose.onNodeWithText("복습함으로").performClick()
+        awaitText("2개 · 최근 저장순")
+
+        // 백로그 056: the miss is logged for the weak-spot view, but no row's schedule or stage moved.
+        compose.waitUntil(TIMEOUT_MILLIS) {
+            runBlocking { repository.listWrongAnswerCounts().values.sum() == 1 }
+        }
+        runBlocking { repository.listSavedExpressions() }.forEach {
+            assertEquals(0, it.incorrectCount)
+            assertEquals(0, it.consecutiveCorrectCount)
+            assertEquals(2_000L, it.lastReviewedAtEpochMillis)
+        }
+        assertTrue(runBlocking { repository.listAllSessions() }.isEmpty())
     }
 
     @Test
@@ -159,6 +212,15 @@ class LearningHomeTest {
         assertEquals("boss", session.mode)
         assertEquals(50, session.score)
         assertEquals(2, session.quizQuestionCount)
+        // 백로그 056: the boss logs its answers and moves no schedule: the rows are as they were saved.
+        compose.waitUntil(TIMEOUT_MILLIS) {
+            runBlocking { listOf("sketchy", "hang out").sumOf { repository.listQuizAnswers(it).size } == 2 }
+        }
+        runBlocking { repository.listSavedExpressions() }.forEach {
+            assertEquals(listOf("boss" to true), runBlocking { repository.listQuizAnswers(it.displayExpression) }.map { a -> a.mode to a.isCorrect })
+            assertEquals(null, it.lastReviewedAtEpochMillis)
+            assertEquals(0, it.consecutiveCorrectCount)
+        }
     }
 
     @Test

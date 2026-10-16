@@ -30,6 +30,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import com.englishquiz.app.data.repository.listLibrary
+import com.englishquiz.app.data.repository.listRecentSessionSummaries
 
 /**
  * Where a session's passage comes from: the day's stored one on a second entry (백로그 021) and a
@@ -164,7 +166,7 @@ class LearningSessionContentTest {
         compose.awaitText("1 / 1")
         // Met for the first time, the passage's expression is a card, not a question (백로그 045).
         compose.onNodeWithText("pull it off").assertIsDisplayed()
-        compose.onNodeWithText("알아요").performScrollTo().performClick()
+        compose.onNodeWithText("뜻 확인 완료").performScrollTo().performClick()
 
         // ... but the recorded session - what difficulty adjustment reads (백로그 013) - counts
         // no newly saved expression: the learner tapped nothing.

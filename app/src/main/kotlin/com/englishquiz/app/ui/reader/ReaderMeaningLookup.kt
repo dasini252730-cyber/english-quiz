@@ -31,7 +31,10 @@ suspend fun lookupMeaning(
     val local = content.localMeaningFor(token) ?: savedMeaningOrNull(token.lookup, contextSentence, repository)
     val meaning = local
         ?: explainMeaning(MeaningRequest(expression = token.lookup, context = contextSentence)).meaning
-    val status = saveMeaning(token.lookup, meaning, contextSentence, repository, nowEpochMillis, shortMeaning = content.localShortMeaningFor(token))
+    val status = saveMeaning(
+        token.lookup, meaning, contextSentence, repository, nowEpochMillis,
+        shortMeaning = content.localShortMeaningFor(token), kind = content.localKindFor(token),
+    )
     MeaningUiState.Success(token.lookup, meaning, status)
 } catch (error: CancellationException) {
     throw error
@@ -84,6 +87,7 @@ private suspend fun saveMeaning(
     nowEpochMillis: () -> Long,
     countTap: Boolean = true,
     shortMeaning: String = "",
+    kind: String = "",
 ): SaveStatus = try {
     withContext(NonCancellable) {
         repository.saveExpression(
@@ -93,6 +97,7 @@ private suspend fun saveMeaning(
             contextSentence = contextSentence,
             countTap = countTap,
             shortMeaning = shortMeaning,
+            kind = kind,
         )
     }
     SaveStatus.SAVED
@@ -102,7 +107,7 @@ private suspend fun saveMeaning(
     SaveStatus.FAILED
 }
 
-private fun meaningErrorMessage(error: AiLearningException): String = when (error.errorCode) {
+internal fun meaningErrorMessage(error: AiLearningException): String = when (error.errorCode) {
     // "timeout" is this client's own socket timeout; "provider_timeout" is the Edge Function
     // giving up on the provider first. The read timeout sits above the function's, so in practice
     // it is the latter that arrives — both mean the same thing to the learner.
@@ -110,5 +115,7 @@ private fun meaningErrorMessage(error: AiLearningException): String = when (erro
     "network_error" -> "네트워크 연결을 확인해 주세요."
     "invalid_response" -> "서버 응답을 이해하지 못했어요. 다시 시도해 주세요."
     "provider_busy" -> "지금 요청이 몰려 있어요. 잠시 후 다시 시도해 주세요."
+    "unauthorized" -> "앱 인증에 실패했어요. 최신 버전으로 업데이트해 주세요."
+    "daily_limit_reached" -> "오늘 AI 호출 한도에 도달했어요. 내일 다시 이용할 수 있어요."
     else -> "뜻을 가져오지 못했어요. 다시 시도해 주세요."
 }

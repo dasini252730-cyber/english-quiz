@@ -14,6 +14,12 @@ from datetime import date
 from pathlib import Path
 
 
+# The Windows console defaults to cp949, which cannot print every character the backlog uses
+# (em dashes, for one); reconfigure so `list`/`show` never die mid-table.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 ROOT = Path(__file__).resolve().parent
 BACKLOG_PATH = ROOT / "backlog.json"
 ID_RE = re.compile(r"^\d{3,}$")

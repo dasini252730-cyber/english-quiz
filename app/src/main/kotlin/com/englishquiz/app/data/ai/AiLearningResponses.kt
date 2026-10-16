@@ -1,5 +1,6 @@
 package com.englishquiz.app.data.ai
 
+import com.englishquiz.app.domain.season.SeasonPolicy
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -43,6 +44,7 @@ internal fun parseContentResponse(response: JSONObject, expectedMode: ContentMod
             startIndex = start,
             endIndex = start + text.length,
             shortMeaning = item.optString("shortMeaning").trim().takeIf { it.length <= MAX_SHORT_MEANING_CHARS } ?: "",
+            kind = ExpressionKinds.normalize(item.optString("kind")),
         )
     } ?: invalidResponse()
     if (segments.isEmpty() || expressions.isEmpty()) invalidResponse()
@@ -54,8 +56,23 @@ internal fun parseContentResponse(response: JSONObject, expectedMode: ContentMod
         glossary = data.glossary(),
         comprehension = data.comprehension(),
         speakers = data.speakers(segments),
+        synopsis = data.optString("synopsis").trim().take(MAX_SYNOPSIS_CHARS),
+        canon = data.optJSONObject("canon")?.let(CanonState::fromJson),
     )
 }
+
+/** A season bible (백로그 063): the server has already checked it; here only the shape is read. */
+internal fun parseSeasonResponse(response: JSONObject): SeasonBible {
+    val data = response.optJSONObject("data") ?: invalidResponse()
+    val bible = SeasonBible.fromJson(data)
+    if (bible.title.isBlank() || bible.episodes.size != SeasonPolicy.EPISODES_PER_SEASON || bible.characters.isEmpty()) invalidResponse()
+    // 백로그 065: a bible is stored once and never replaced, so one from a server deployed before
+    // the engine and the reader-believes lines is refused rather than kept for seven episodes.
+    if (bible.engine.isBlank() || bible.readerBelieves.size != SeasonPolicy.EPISODES_PER_SEASON) invalidResponse()
+    return bible
+}
+
+private const val MAX_SYNOPSIS_CHARS = 600
 
 /** Speaker genders (백로그 050): a courtesy like the glossary; an entry naming nobody is skipped. */
 private fun JSONObject.speakers(segments: List<ContentSegment>): Map<String, SpeakerGender> {
@@ -184,6 +201,7 @@ internal fun LearningContent.toResponseJson(): JSONObject {
                 .put("text", expression.text)
                 .put("meaning", expression.meaning)
                 .put("shortMeaning", expression.shortMeaning)
+                .put("kind", expression.kind)
                 .put("segmentIndex", expression.segmentIndex),
         )
     }
@@ -213,5 +231,7 @@ internal fun LearningContent.toResponseJson(): JSONObject {
         .put("glossary", glossaryArray)
         .put("comprehension", comprehensionArray)
         .put("speakers", speakerArray)
+        .put("synopsis", synopsis)
+    canon?.let { data.put("canon", it.toJson()) }
     return JSONObject().put("data", data)
 }

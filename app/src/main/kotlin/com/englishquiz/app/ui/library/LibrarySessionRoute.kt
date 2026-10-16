@@ -8,6 +8,7 @@ import com.englishquiz.app.data.ai.LearningContent
 import com.englishquiz.app.data.repository.LearningRepository
 import com.englishquiz.app.ui.session.SessionStatusScreen
 import kotlinx.coroutines.CancellationException
+import com.englishquiz.app.data.repository.findDailyContent
 
 /**
  * Loads the library passage named by [pick] (`"<learningDate>|<mode>"`, as the list hands it

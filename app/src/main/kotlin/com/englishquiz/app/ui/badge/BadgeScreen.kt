@@ -14,7 +14,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
@@ -28,8 +27,10 @@ import com.englishquiz.app.ui.theme.MongleCard
 import com.englishquiz.app.ui.theme.MongleColor
 import com.englishquiz.app.ui.theme.MongleTopBar
 import com.englishquiz.app.ui.theme.mongleScreenInsets
-import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
+import com.englishquiz.app.data.repository.listAllSessions
 
 /**
  * The badge list (백로그 039). Opening it is what marks the earned badges as seen, so the "새
@@ -43,28 +44,23 @@ fun BadgeRoute(
     todayIso: () -> String,
 ) {
     val earned by produceState<Set<Badge>?>(null, repository, gameRepository) {
-        value = try {
-            val stats = GameStatsPolicy.compute(
-                sessions = repository.listAllSessions(),
-                expressions = repository.listSavedExpressions(),
-                progress = gameRepository.progress.first(),
-                todayIso = todayIso(),
-            )
-            stats.earnedBadges
-        } catch (error: CancellationException) {
-            throw error
-        } catch (_: Exception) {
-            emptySet()
-        }
-    }
-    LaunchedEffect(earned) {
-        val toMark = earned ?: return@LaunchedEffect
-        try {
-            gameRepository.markBadgesSeen(toMark)
-        } catch (error: CancellationException) {
-            throw error
-        } catch (_: Exception) {
-            // Seen-state is a convenience; the badge itself is still earned next time.
+        // Looking and marking as seen are one step under NonCancellable: a glance that leaves at
+        // once would otherwise cancel the write (a separate effect may never even start) and the
+        // badges would stay flagged as new on home until the next visit.
+        value = withContext(NonCancellable) {
+            try {
+                val stats = GameStatsPolicy.compute(
+                    sessions = repository.listAllSessions(),
+                    expressions = repository.listSavedExpressions(),
+                    progress = gameRepository.progress.first(),
+                    todayIso = todayIso(),
+                )
+                // Seen-state is a convenience; a failed write still leaves the badge earned.
+                runCatching { gameRepository.markBadgesSeen(stats.earnedBadges) }
+                stats.earnedBadges
+            } catch (_: Exception) {
+                emptySet()
+            }
         }
     }
     BackHandler(onBack = onBack)

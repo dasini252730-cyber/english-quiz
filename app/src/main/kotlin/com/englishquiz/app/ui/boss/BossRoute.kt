@@ -21,6 +21,7 @@ import com.englishquiz.app.data.preferences.GameProgressRepository
 import com.englishquiz.app.data.repository.LearningRepository
 import com.englishquiz.app.domain.game.BossPolicy
 import com.englishquiz.app.domain.session.LearningSessionSummary
+import com.englishquiz.app.domain.quiz.QuizMode
 import com.englishquiz.app.ui.quiz.QuizRoute
 import com.englishquiz.app.ui.result.ResultRoute
 import com.englishquiz.app.ui.session.SessionStatusScreen
@@ -74,6 +75,8 @@ fun BossRoute(
             pointsMultiplier = BossPolicy.POINTS_MULTIPLIER,
             // A boss is a test, not a first meeting: every candidate is asked (백로그 045).
             askCards = false,
+            // Points and the challenge record only (백로그 056): the schedule stays with the daily quiz.
+            mode = QuizMode.BOSS,
         )
         else -> BossIntro(onStart = { started = true }, onBack = onExit)
     }

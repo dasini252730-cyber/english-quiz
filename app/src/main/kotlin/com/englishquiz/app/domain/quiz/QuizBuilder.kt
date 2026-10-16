@@ -4,6 +4,7 @@ import com.englishquiz.app.data.ai.ComprehensionQuestion
 import com.englishquiz.app.data.ai.LearningContent
 import com.englishquiz.app.data.local.SavedExpressionEntity
 import com.englishquiz.app.domain.game.GrowthStage
+import com.englishquiz.app.domain.review.ExpressionState
 import kotlin.random.Random
 
 /**
@@ -22,15 +23,12 @@ import kotlin.random.Random
  * The shape of a question follows the expression's growth stage (백로그 045), one step harder per
  * stage: never quizzed → a card to read; 씨앗 → two meanings; 새싹 → four; 잎 → the sentence with
  * a blank and expressions to choose from; 꽃 → the blank typed. Without a context sentence the
- * blank steps fall back to four meanings.
+ * 잎 step falls back to four meanings, and from 꽃 the expression is typed from its Korean meaning
+ * (백로그 057): mastery must be reached by recalling the words, never by recognising a meaning.
  *
- * Wrong options come from the learner's other saved expressions and, when those run out, from the
- * remaining phrases of [todayContent] (요구사항 22: their meanings are already in hand, so this
- * costs no extra AI call). Passage phrases supply options for fill-in-the-blank questions only:
- * a saved meaning is a full sentence while a passage annotation is a short phrase, so mixing them
- * as meanings would let the learner pick the answer by its length. The same rule keeps short
- * glosses (백로그 046) and full meanings apart: a meaning question uses the short glosses only
- * when the answer and enough wrong options all have one.
+ * Wrong options are built by [QuizOptions] from the learner's other saved expressions and the
+ * remaining phrases of [todayContent]: phrases of the answer's kind first (백로그 059), short
+ * glosses never mixed with full meanings (백로그 046).
  */
 object QuizBuilder {
     const val DEFAULT_MAX_QUESTIONS = 10
@@ -40,7 +38,6 @@ object QuizBuilder {
 
     /** Consecutive correct answers (the 꽃 stage) from which a blank must be typed (백로그 043/045). */
     const val TYPED_AFTER_CORRECT = 3
-    private const val MIN_OPTIONS = 2
     private const val FEW_OPTIONS = 2
     private const val MANY_OPTIONS = 4
 
@@ -59,18 +56,18 @@ object QuizBuilder {
         firstMeetingsShownToday: Int = 0,
     ): QuizSet {
         val random = Random(seed)
-        val distractors = distractorCandidates(todayContent, distractorPool)
+        val distractors = QuizOptions.candidates(todayContent, distractorPool)
         // The passage's own questions come first (백로그 042): they are about what was just
         // read, and they cost nothing to ask. They are not part of the expression cap.
-        val comprehension = todayContent?.comprehension.orEmpty().map(::comprehensionQuestion)
+        val comprehension = todayContent?.comprehension.orEmpty().map { comprehensionQuestion(it, random) }
         val candidates = todayExpressions.distinctBy { normalizeQuizText(it.displayExpression) }
         if (candidates.isEmpty()) return QuizSet(comprehension)
 
-        // Reviews first, the most overdue at the front so a backlog drains; then at most a few
-        // expressions never asked before (백로그 048), the rest waiting for another day. Only then
-        // shuffle, so the order within one session still varies.
+        // Two queues (백로그 055): reviews first, the most overdue at the front so a backlog drains;
+        // then at most a few expressions from the new-expression queue (백로그 048), the rest
+        // waiting for another day. Only then shuffle, so the order within one session still varies.
         val byDue = compareBy<SavedExpressionEntity>({ it.nextReviewAtEpochMillis ?: it.firstSavedAtEpochMillis }, { it.id })
-        val (fresh, reviews) = candidates.partition { askCards && it.lastReviewedAtEpochMillis == null }
+        val (fresh, reviews) = candidates.partition { askCards && ExpressionState.isNew(it) }
         val newToday = (NEW_PER_DAY - firstMeetingsShownToday).coerceAtLeast(0)
         val selected = (reviews.sortedWith(byDue) + fresh.sortedWith(byDue).take(newToday))
             .take(maxQuestions)
@@ -78,20 +75,25 @@ object QuizBuilder {
         return QuizSet(comprehension + selected.mapNotNull { buildQuestion(it, distractors, random, askCards) })
     }
 
-    private fun comprehensionQuestion(item: ComprehensionQuestion) = QuizQuestion(
+    /** The model tends to put the answer at one index (백로그 059), so its options are shuffled like any other question's. */
+    private fun comprehensionQuestion(item: ComprehensionQuestion, random: Random) = QuizQuestion(
         expression = "",
         type = QuizQuestionType.COMPREHENSION,
         questionText = item.question,
-        options = item.options.mapIndexed { index, option -> QuizOption(option, index == item.answerIndex) },
+        options = item.options.mapIndexed { index, option -> QuizOption(option, index == item.answerIndex) }.shuffled(random),
         explanation = item.explanation.ifBlank { "지문의 흐름을 떠올려 보세요." },
     )
 
-    /** True for a row a card left behind today: seen, but neither right nor wrong yet (백로그 045). */
-    fun isFirstMeetingShown(expression: SavedExpressionEntity, dayStartEpochMillis: Long, dayEndEpochMillis: Long): Boolean {
-        val seenAt = expression.lastReviewedAtEpochMillis ?: return false
-        return seenAt in dayStartEpochMillis until dayEndEpochMillis &&
-            expression.consecutiveCorrectCount == 0 && expression.incorrectCount == 0 && !expression.isMastered
-    }
+    /**
+     * Whether an honest question can be built for [expression] from the review box alone
+     * (백로그 057): false when its meaning is blank, hides nothing but the expression itself, or
+     * the box offers no other meaning to choose against. A card is always possible, so a new row
+     * is askable. The review box marks the rest "출제 불가"; such a row is not asked from the box,
+     * so it cannot be promoted by it (today's passage may still lend a blank its options).
+     */
+    fun isAskable(expression: SavedExpressionEntity, pool: List<SavedExpressionEntity>): Boolean =
+        ExpressionState.isNew(expression) ||
+            buildQuestion(expression, QuizOptions.candidates(null, pool), Random(0), askCards = false) != null
 
     private fun buildQuestion(
         expression: SavedExpressionEntity,
@@ -110,66 +112,29 @@ object QuizBuilder {
             growthBefore = stage,
             shortMeaning = expression.shortMeaning,
         )
-        if (askCards && expression.lastReviewedAtEpochMillis == null) {
+        if (askCards && ExpressionState.isNew(expression)) {
             // Seen for the first time: read, not tested (백로그 045).
             return question.copy(type = QuizQuestionType.LEARN_CARD, questionText = expression.contextSentence)
         }
         if (blanked != null && stage == GrowthStage.LEAF) {
-            val answer = Distractor(expression.displayExpression, expression.contextMeaning, "", true)
-            val options = buildOptions(answer, distractors, random, MANY_OPTIONS, Distractor::expression) ?: return null
+            val options = QuizOptions.blankOptions(expression, distractors, random, MANY_OPTIONS) ?: return null
             return question.copy(type = QuizQuestionType.FILL_IN_BLANK, questionText = blanked, options = options)
         }
-        if (blanked != null && stage.ordinal >= GrowthStage.FLOWER.ordinal) {
+        if (stage.ordinal >= GrowthStage.FLOWER.ordinal) {
+            // Typed either way: the blank in its sentence, or the expression from its meaning. A
+            // meaning that quotes the expression ("call it a day"는 …) has it masked first, or the
+            // answer would be on screen; one that is nothing but the expression asks nothing.
+            val meaning = maskExpression(expression.shortMeaning.ifBlank { expression.contextMeaning }, expression.displayExpression)
+            if (blanked == null && meaning.replace("____", "").isBlank()) return null
             return question.copy(
-                type = QuizQuestionType.TYPED_BLANK,
-                questionText = blanked,
+                type = if (blanked != null) QuizQuestionType.TYPED_BLANK else QuizQuestionType.TYPED_MEANING,
+                questionText = blanked ?: meaning,
                 options = listOf(QuizOption(expression.displayExpression, true)),
             )
         }
         val count = if (stage == GrowthStage.SEED) FEW_OPTIONS else MANY_OPTIONS
-        val options = meaningOptions(expression, distractors.filter { it.fromSaved }, random, count) ?: return null
+        val options = QuizOptions.meaningOptions(expression, distractors, random, count) ?: return null
         return question.copy(options = options)
-    }
-
-    /**
-     * Short glosses (백로그 046) for every option when the answer and enough wrong options carry
-     * one; otherwise the full meanings for every option. Never a mix: a lone short option, or a
-     * lone long one, would give the answer away by its length.
-     */
-    private fun meaningOptions(
-        expression: SavedExpressionEntity,
-        saved: List<Distractor>,
-        random: Random,
-        count: Int,
-    ): List<QuizOption>? {
-        val answer = Distractor(expression.displayExpression, expression.contextMeaning, expression.shortMeaning, true)
-        if (answer.shortMeaning.isNotEmpty()) {
-            val short = buildOptions(answer, saved.filter { it.shortMeaning.isNotEmpty() }, random, count, Distractor::shortMeaning)
-            if (short != null && short.size == count) return short
-        }
-        return buildOptions(answer, saved, random, count, Distractor::meaning)
-    }
-
-    /** Null when no honest question can be built: a blank answer, or fewer than [MIN_OPTIONS]. */
-    private fun buildOptions(
-        answer: Distractor,
-        distractors: List<Distractor>,
-        random: Random,
-        count: Int,
-        answerOf: (Distractor) -> String,
-    ): List<QuizOption>? {
-        val correctAnswer = answerOf(answer).trim()
-        if (correctAnswer.isEmpty()) return null
-        val wrongAnswers = distractors
-            .filter { normalizeQuizText(it.expression) != normalizeQuizText(answer.expression) }
-            .map { answerOf(it).trim() }
-            .filter { it.isNotEmpty() && normalizeQuizText(it) != normalizeQuizText(correctAnswer) }
-            .distinct()
-            .shuffled(random)
-            .take(count - 1)
-        if (wrongAnswers.size + 1 < MIN_OPTIONS) return null
-        return (wrongAnswers.map { QuizOption(it, false) } + QuizOption(correctAnswer, true))
-            .shuffled(random)
     }
 
     /** Replaces the expression in `contextSentence` with a blank, or null if that isn't possible. */
@@ -181,33 +146,14 @@ object QuizBuilder {
         return regex.replace(sentence, "____")
     }
 
+    /** [text] with every occurrence of [expression] blanked, case-insensitively, and trimmed. */
+    private fun maskExpression(text: String, expression: String): String =
+        Regex(Regex.escape(expression.trim()), RegexOption.IGNORE_CASE).replace(text, "____").trim()
+
     /**
      * The meaning comes back from the model as a finished sentence, so wrapping it in another one
      * reads as a double ending ("...뜻입니다.' 라는 뜻이에요."). It gets its own line instead.
      */
     private fun explanationFor(expression: SavedExpressionEntity): String =
         "\"${expression.displayExpression}\"의 뜻이에요.\n${expression.contextMeaning}"
-
-    /** One possible option: an expression and the meanings shown for it. */
-    private data class Distractor(
-        val expression: String,
-        val meaning: String,
-        val shortMeaning: String,
-        /** False for a phrase that only appeared in today's passage. */
-        val fromSaved: Boolean,
-    )
-
-    /**
-     * The saved expressions first, then today's phrases. Order matters only for de-duplication:
-     * the learner's own saved meaning wins over the one the passage happened to give.
-     */
-    private fun distractorCandidates(
-        content: LearningContent?,
-        pool: List<SavedExpressionEntity>,
-    ): List<Distractor> {
-        val saved = pool.map { Distractor(it.displayExpression, it.contextMeaning, it.shortMeaning, true) }
-        val fromContent = content?.expressions.orEmpty()
-            .map { Distractor(it.text, it.meaning, it.shortMeaning, false) }
-        return (saved + fromContent).distinctBy { normalizeQuizText(it.expression) }
-    }
 }

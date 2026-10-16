@@ -44,6 +44,8 @@ fun ReaderScreen(
     onRetryMeaning: () -> Unit = {},
     onRetrySave: () -> Unit = {},
     listState: LazyListState = rememberLazyListState(),
+    /** "시즌 2 · 3/7" over an episode (백로그 063); null for any other passage. */
+    subtitle: String? = null,
 ) {
     val isConversation = content.mode == ContentMode.CONVERSATION
     val rightSpeaker = remember(content) { rightHandSpeaker(content) }
@@ -88,6 +90,7 @@ fun ReaderScreen(
         ) {
             if (!isConversation) {
                 item(key = "title") {
+                    subtitle?.let { Text(it, style = MaterialTheme.typography.labelLarge, color = MongleColor.InkMuted) }
                     Text(
                         text = content.title,
                         fontFamily = FontFamily.Serif,

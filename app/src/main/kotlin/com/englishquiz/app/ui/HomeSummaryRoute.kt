@@ -27,10 +27,12 @@ import com.englishquiz.app.ui.theme.mongleScreenInsets
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import com.englishquiz.app.domain.review.ReviewQueue
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
+import com.englishquiz.app.data.repository.listAllSessions
 
 /**
  * Loads what home shows: the saved expressions, the streak and — with a [gameRepository] — the
@@ -47,6 +49,8 @@ internal fun LearningHomeSummary(
     levels: Map<ContentMode, HomeLevel>,
     onLevelChange: (ContentMode, Int) -> Unit,
     onSuggestionAnswer: (ContentMode, accepted: Boolean) -> Unit,
+    /** One line under the story's level after a change (백로그 063); null shows none. */
+    storyLevelNote: String? = null,
     onNavigate: (HomeDestination) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -68,6 +72,7 @@ internal fun LearningHomeSummary(
                             streakDays = stats.streakDays,
                             savedExpressionCount = expressions.size,
                             masteredExpressionCount = expressions.count { it.isMastered },
+                            queue = ReviewQueue.of(expressions, System.currentTimeMillis()),
                             game = stats.takeIf { gameRepository != null },
                         ),
                     )
@@ -94,7 +99,7 @@ internal fun LearningHomeSummary(
             MongleButton("다시 시도", { retry++ })
         }
         else -> HomeScreen(
-            summary = summary.copy(levels = levels),
+            summary = summary.copy(levels = levels, storyLevelNote = storyLevelNote),
             onConversationClick = { onNavigate(HomeDestination.CONVERSATION) },
             onStoryClick = { onNavigate(HomeDestination.STORY) },
             onReviewClick = { onNavigate(HomeDestination.REVIEW) },
