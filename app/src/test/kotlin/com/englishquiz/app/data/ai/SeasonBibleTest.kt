@@ -1,5 +1,6 @@
 package com.englishquiz.app.data.ai
 
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -31,6 +32,46 @@ class SeasonBibleTest {
         // Each entry is cut at a word and closed, so the model still sees six people, not one fragment.
         assertEquals(6, line.split("); ").size)
         assertTrue(line.endsWith(")"))
+    }
+
+    /** 백로그 065: the engine and the plan's two lists survive the round trip through Room's JSON, and an old bible reads back empty. */
+    @Test
+    fun theEngineAndThePlanListsRoundTripAndAnOldBibleReadsBackEmpty() {
+        val designed = bible(SeasonCharacter("Mina", SpeakerGender.FEMALE, "owner", "keep the hostel", "owes money", "cousin of Rui")).copy(
+            engine = "C. Social farce",
+            whatIsTrue = listOf("Mina sent the guest away herself.", "Rui saw it."),
+            readerBelieves = (1..7).map { "After episode $it the reader believes something." },
+        )
+
+        val restored = SeasonBible.fromJson(JSONObject(designed.toJson().toString()))
+
+        assertEquals(designed, restored)
+        val old = SeasonBible.fromJson(JSONObject("""{"title":"t","setting":"s","conflict":"c","characters":[],"episodes":[],"openQuestions":[]}"""))
+        assertEquals("", old.engine)
+        assertEquals(emptyList<String>(), old.whatIsTrue)
+        assertEquals(emptyList<String>(), old.readerBelieves)
+    }
+
+    /** 백로그 065: a season context carries the bible's engine and lists to the server, and leaves them out when the bible has none. */
+    @Test
+    fun aSeasonContextSendsTheListsOnlyWhenItHasThem() {
+        val base = SeasonContext("t", "s", "c", "cast", 2, "plan", "previous", CanonState())
+
+        val bare = base.toJson()
+        assertEquals(false, bare.has("engine"))
+        assertEquals(false, bare.has("whatIsTrue"))
+        assertEquals(false, bare.has("readerBelieves"))
+
+        val full = base.copy(engine = "A. Clever mystery", whatIsTrue = listOf("fact"), readerBelieves = listOf("belief")).toJson()
+        assertEquals("A. Clever mystery", full.getString("engine"))
+        assertEquals("fact", full.getJSONArray("whatIsTrue").getString(0))
+        assertEquals("belief", full.getJSONArray("readerBelieves").getString(0))
+
+        // The request carries the lists at the server's reading size, so the body stays inside its limit.
+        val long = "x".repeat(SeasonContext.MAX_LIST_ITEM_CHARS + 50)
+        val capped = base.copy(whatIsTrue = (1..SeasonContext.MAX_LIST_ITEMS + 3).map { "$it $long" }).toJson().getJSONArray("whatIsTrue")
+        assertEquals(SeasonContext.MAX_LIST_ITEMS, capped.length())
+        assertEquals(SeasonContext.MAX_LIST_ITEM_CHARS, capped.getString(0).length)
     }
 
     private fun bible(vararg characters: SeasonCharacter) = SeasonBible(

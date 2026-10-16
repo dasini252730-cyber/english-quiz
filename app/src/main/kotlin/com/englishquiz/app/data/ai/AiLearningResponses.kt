@@ -66,6 +66,9 @@ internal fun parseSeasonResponse(response: JSONObject): SeasonBible {
     val data = response.optJSONObject("data") ?: invalidResponse()
     val bible = SeasonBible.fromJson(data)
     if (bible.title.isBlank() || bible.episodes.size != SeasonPolicy.EPISODES_PER_SEASON || bible.characters.isEmpty()) invalidResponse()
+    // 백로그 065: a bible is stored once and never replaced, so one from a server deployed before
+    // the engine and the reader-believes lines is refused rather than kept for seven episodes.
+    if (bible.engine.isBlank() || bible.readerBelieves.size != SeasonPolicy.EPISODES_PER_SEASON) invalidResponse()
     return bible
 }
 

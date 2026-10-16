@@ -98,4 +98,6 @@ dependencies {
     androidTestImplementation("androidx.test:runner:1.7.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
+    // The real org.json for JVM unit tests (백로그 065): android.jar's copy only throws.
+    testImplementation("org.json:json:20260814")
 }

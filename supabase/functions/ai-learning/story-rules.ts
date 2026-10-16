@@ -1,7 +1,10 @@
 /*
- * The story rules (백로그 064, the learner's own text of 2026-10-13): what a story episode and a
- * season plan are written for, in place of the earlier taste and plot guidance. The level rubric,
- * the schemas, the passage contract and the validators stay in index.ts and still rule.
+ * The story rules (백로그 065, the learner's own text of 2026-10-16: `story_rules_v3.md` and
+ * `season_plan_rules.md` at the repository root): what a story episode and a season plan are
+ * written for. Both are fixed blocks: an episode's system prompt opens with STORY_RULES and a
+ * season plan's with SEASON_PLAN_RULES followed by sections 0-7 of the story rules, and each
+ * opening block is the prompt-cache prefix. Nothing season- or episode-specific belongs in them.
+ * The level rubric, the schemas, the passage contract and the validators stay in index.ts.
  */
 
 /** The season subjects (백로그 028/053, the learner's own list); one is drawn per season as SEASON_TOPIC. */
@@ -42,7 +45,7 @@ export function seasonTopic(): string {
   return SEASON_TOPICS[Math.floor(Math.random() * SEASON_TOPICS.length)];
 }
 
-/** Where section 8 of the rules puts an episode of a seven-episode season. */
+/** Where section 5 of the season plan rules puts an episode of a seven-episode season. */
 export function episodeShape(episodeNumber: number, totalEpisodes: number): string {
   if (episodeNumber >= totalEpisodes) return "the last episode: it resolves the central question and rewards memory, and the plot is finished";
   if (episodeNumber === 1) return "Episode 1: it opens inside an incident and pays off something small";
@@ -51,88 +54,127 @@ export function episodeShape(episodeNumber: number, totalEpisodes: number): stri
   return "Episode 6: it brings threads together without a new central problem";
 }
 
-/** The rules themselves, sent whole with every story episode and every season plan. */
-export const STORY_RULES = `# StoryEnglish: Story Generation Rules (v2)
+/** Sections 0-7 of the story rules: how any episode is judged. Shared by the episode and the season plan. */
+export const STORY_RULES_CORE = `# StoryEnglish Story Rules (v3)
 
-## 0. The Test That Matters
+## 0. First Job: Entertain
 
-The reader has forgotten this is an English-learning app. Would they still finish this episode? Would they want to tell someone what a character did? Would they open the next one? If not, the story is not ready.
+Write for an adult who enjoys clever mysteries, travel, unusual people, social absurdity, dry humor, and surprising turns. They like human psychology, but not slow, introspective, psychology-centered fiction. Psychology drives action and creates funny or surprising consequences; it is never the main event.
 
-Write for an adult who likes strange situations, people behaving oddly for reasons that make sense to them, travel, small mysteries, and dry humor. This is not a request for serious psychological fiction. The story must be fun first; whatever it says about people should come out of the events.
+Prioritize plot, pace, curiosity, incident, dialogue, escalation, and payoff over atmosphere, introspection, and profundity. Avoid melodrama, cruelty, and humor that humiliates a vulnerable person.
 
-Avoid melodrama, cruelty, and humor that humiliates a vulnerable person.
+The test: if the reader forgot this was an English app, would they still finish the episode and want the next one?
 
-## 1. Start Inside an Incident
+## 1. Start Inside Something
 
-Within the first three segments, something concrete must already be happening: a contradiction, an unreasonable demand, a revealing action. The reader should have a clear question by segment three.
+Within the first three narrative segments, a concrete event must create curiosity, amusement, suspicion, or a problem: a ridiculous demand, a harmless lie caught, a discovery that makes an ordinary situation suspicious, a plan going wrong in a specific way, a clash between what someone claims and what they do.
 
-Do not open with weather, scenery, a hotel lobby, an arrival, someone waking up, a list of who the characters are, or a sentence announcing that everything was about to change. Do not create mystery by hiding things the viewpoint character would obviously know.
+Do not open with scenery, weather, a hotel, an arrival, someone waking up, a person's feelings, or a roll call of characters. Do not create suspense by hiding what the viewpoint character would obviously know.
 
-Two examples of the right shape, not templates to reuse:
+## 2. Keep It Moving, Within Budget
 
-- A guest returns a borrowed umbrella to a cafe. The owner refuses to take it back and insists it was never theirs. Three regulars agree with the owner, each for a different reason.
-- A village election has two candidates and one voter who has not decided. Both candidates have spent the week being extremely helpful to her, and she has started to find this frightening.
+An episode is 12–25 segments. That fits one concrete want, one human complication, and one payoff. Escalation is welcome when there is room; two good scenes beat five thin ones.
 
-The season's subject is given to you as SEASON_TOPIC. Build the premise from that, not from these examples.
+For each scene: what somebody is trying to do, what gets in the way, what they do about it, how things change. Every one or two segments should bring a development: new information, an action, a complication, a decision, a revealing exchange, a consequence. Several consecutive segments must not be only scenery, background, inner thoughts, or people discussing feelings. Characters make things happen; they do not merely watch, wonder, and reflect.
 
-## 2. What an Episode Needs
-
-An episode is short (12-25 segments). It needs:
-
-- A concrete want. Someone wants a specific thing: money back, a secret kept, a version of events believed, a conversation avoided. Not "she felt something was wrong."
-- One human complication. Another person wants something incompatible, has an embarrassing motive, or has misunderstood. It comes from what people do, not from bad luck alone.
-- One payoff. An unexpected explanation, a funny consequence, a choice with a cost, or a correction of something the reader assumed. Resolve something in every episode, even while the season stays open.
-
-Escalation (a lie that needs a second lie, politeness that makes things worse) is welcome when there is room. Do not force all of it into one short episode; two good scenes beat four thin ones. Do not escalate into danger or crime. Pride, money, reputation, and inconvenient truths are enough.
+Resolve something in every episode and leave one reason to continue. Do not end every episode the same way, and never on a vague question or solemn reflection.
 
 ## 3. Characters
 
-Important characters have: something they want right now, something they do not want discovered, a self-image they protect, and one rule or preference they take too seriously. Their behavior makes sense to them. Show all of this through action and dialogue, never through narration that explains them.
+Important characters have a thing they want right now, something they do not want discovered, a self-image they protect, and one rule or preference they take too seriously. Their behavior makes sense to them. Show all of it through choices and effects on the situation, never through narration explaining what it says about humanity.
 
-Ordinary contradictions are funnier and more believable than big secrets. Do not make everyone secretly dishonest, secretly brilliant, or secretly connected. Give characters different voices: one blunt, one over-polite, one talkative, one economical.
+Ordinary contradictions beat big secrets: someone lies about a trivial mistake and creates a bigger problem; someone helps mainly to look generous, then learns the favor will cost them; two people give truthful accounts of one event, each omitting the part that makes them look bad. Do not make everyone secretly dishonest, brilliant, or connected. Give characters distinct voices: blunt, over-polite, talkative, economical.
 
-## 4. Dialogue, Humor, and Level
+## 4. Humor and Level
 
-Characters may answer a different question than the one asked, change the subject, be polite to express annoyance, or say something technically true that misleads. Do not explain a joke after it lands. Not every character is funny; one ordinary sentence at the right moment beats a clever line.
+Humor comes from people taking trivial things too seriously, polite conversations where everyone understands what nobody will say, elaborate solutions that worsen the problem, and gaps between self-image and behavior. Not every character is funny; do not force a joke into every segment, and do not explain one after it lands. No slapstick, no sitcom dialogue.
 
 Match the humor to the assigned level:
+- Levels 1–2: humor and tension come from what people do and from visible contradictions. No irony that depends on reading between the lines. Short exchanges, plain words.
+- Levels 3–5: subtext in dialogue is encouraged, in natural English at the level.
 
-- Levels 1-2: humor and tension come from what people do and from visible contradictions between what they say and do. No irony that depends on reading between the lines. Short exchanges, plain words.
-- Levels 3-5: subtext in dialogue is allowed and encouraged, still in natural English at the level. Do not reach for hard vocabulary to signal cleverness.
+If a joke needs words the reader does not have, cut the joke, not the rubric.
 
-Never let the level rubric be broken to make a joke work. If a joke needs words the reader does not have, cut the joke, not the rubric.
+## 5. Mysteries and Twists
 
-## 5. Mysteries and Reversals
-
-Use a mystery only when it helps. If the story reveals something that changes the meaning of an earlier scene, that scene must actually have appeared, the new reading must fit the facts, and the motive must make sense in hindsight. Often the best reveal is that someone did something petty for a reason the reader can suddenly understand, not that someone did something terrible. An imperfect explanation is fine if a neat one would be unbelievable.
+Use clues, competing explanations, and reversals when they make the plot more fun. A twist changes how the reader understands an earlier scene that actually appeared; the explanation fits the established facts and the motive makes sense in hindsight. No crucial fact invented at the end, no conspiracy without clues, no motive change for effect. Withholding information is not suspense. A small, clever reveal beats a huge, implausible one. Often the best reveal is something petty done for a reason the reader suddenly understands.
 
 ## 6. Place
 
-The setting is anywhere in the world. Make it matter to the plot: a custom two people read differently, a local version of history that the official version contradicts, a building whose past the owner would rather not mention. No brochure description. Cultural details must be accurate; do not invent traditions and present them as real.
+Use travel, local customs, history, institutions, restaurants, transport as sources of incident: a custom misread, a historical account disputed, a local rule creating a problem, an ordinary transaction with an odd motive. No brochure description. Real cultural details must be accurate; never invent a tradition and present it as real.
 
 ## 7. Reject the Draft If It
 
-Opens with setting. Introduces characters by listing traits. Is mostly people reflecting. Has strange behavior with no believable motive. Is solved by coincidence. Explains its own meaning. Ends on a lesson it has not earned. Could be any generic AI travel mystery. Bends a sentence to fit a target expression.
+Opens with setting. Lists character traits. Is mostly reflection or feelings. Has strange behavior with no believable motive. Is solved by coincidence. Explains its own meaning. Ends on an unearned lesson. Could be any generic AI travel mystery. Bends a line to fit a target expression.
 
-Fix a weak draft by changing the situation, the goals, or the consequences, not by adding adjectives, secrets, or a bigger twist.
+Fix it by changing the situation, goals, or consequences, not by adding adjectives, secrets, or a bigger twist.
+`;
 
-## 8. Season Plan (Seven Episodes)
+/** Sections 8-9: how an episode uses its brief and chooses its expressions. Episodes only. */
+const STORY_RULES_EPISODE = `
+## 8. Using the Season Brief
 
-Before Episode 1, write an internal plan built on SEASON_TOPIC containing:
+You receive the season plan (engine, cast, what is true, what the reader believes after each episode, each episode's plan), the full text of previous episodes in this call or their canon, and this episode's plan. Treat them as material. Stay consistent with every established fact, name, and relationship; move the reader's beliefs only as the plan says; plant what later episodes will pay off. Do not restate the brief in the story.
 
-- The central situation and why it is interesting on its own.
-- The cast, each with their want, their secret, and their rule.
-- Two lists kept separate: WHAT IS TRUE, and WHAT THE READER BELIEVES AFTER EACH EPISODE. Every reversal later must be a move from the second list toward the first.
-- What changes in each episode and which fact is revealed when.
-- The resolution.
+## 9. Expressions and Contract
 
-Shape: Episode 1 opens inside an incident and pays off something small. Episodes 2-3 complicate and show that someone's behavior has a better explanation than assumed. Episodes 4-5 make early assumptions hard to keep and force a choice; a funny or uncomfortable episode can move the season more than a clue. Episode 6 brings threads together without a new central problem. Episode 7 resolves the central question and rewards memory. The ending may be funny, bittersweet, or emotionally open, but the plot is finished.
+Write the story first, then choose about five expressions that occur naturally in it and are worth keeping. Never invent one the story does not contain or bend a line to carry one. Review expressions supplied with the request go in only where a line would naturally say them; skip the rest and never fail the story over them.
 
-Do not give all seven episodes the same shape or the same kind of ending.
+Keep the existing JSON schema, segment limits, level rubric, meanings, comprehension questions, speakers, synopsis, and validation rules. Return only the required JSON.
+`;
 
-When generating an episode, you receive the plan and the "reader believes" state up to the previous episode. Treat them as material, not instructions to restate.
+/** The whole of the story rules, the fixed opening block of every episode's system prompt. */
+export const STORY_RULES = STORY_RULES_CORE + STORY_RULES_EPISODE;
 
-## 9. Expressions
+/** The season plan rules, the fixed opening block of a season design's system prompt; sections 0-7 above follow it. */
+export const SEASON_PLAN_RULES = `# StoryEnglish Season Plan Rules
 
-Write the story first. Then choose about five expressions that occur naturally in it and are worth keeping. Never invent an expression the story does not contain, and never bend a line to carry one. Review expressions supplied with the request are woven in only where they fit a line naturally; skip any that do not, and never fail the story over them.
+## What a Season Is
+
+Seven episodes of 12–25 segments each, one central situation, one coherent cast, set somewhere real in the world. The plan is the single source of truth for every later call, so it must be concrete enough that a writer who has never seen the other episodes can keep names, facts, and relationships straight.
+
+## 1. Pick One Engine
+
+Choose exactly one primary engine for the season and name it:
+
+- A. Clever mystery: clues, suspicious behavior, competing explanations, a fair resolution.
+- B. Travel adventure: a concrete goal, unfamiliar places, obstacles, discoveries.
+- C. Social farce: people with conflicting goals protecting their reputations.
+- D. Historical or cultural mystery: a real place or tradition with conflicting accounts and personal stakes.
+- E. Predicament: an ordinary person in an increasingly complicated situation of their own foolish but understandable making.
+
+Build the premise from SEASON_TOPIC through that engine. A place is a setting, not a premise; the premise is who wants what and who stands in the way.
+
+## 2. Premise Test
+
+State the central situation in two sentences and why it is interesting on its own. Reject it if it is a quiet place with a slightly suspicious owner, a protagonist who mostly senses that something is wrong, or a premise that could belong to any generic travel mystery. Replace it with one where something concrete is already going wrong in episode 1.
+
+## 3. Cast
+
+Three to five characters. For each: name, role, what they want right now, what they do not want discovered, the self-image they protect, one rule or preference they take too seriously, their voice (blunt, over-polite, talkative, economical, etc.), and their relationships to the others. Be specific; "a mysterious woman" is a rejection.
+
+Keep each character's description complete. Relationships are the field most needed for continuity and must never be dropped.
+
+## 4. Two Lists, Kept Separate
+
+- WHAT IS TRUE: the facts of the season, including every secret and the real motive behind any odd behavior.
+- WHAT THE READER BELIEVES: after each episode, one or two sentences on what the reader now assumes. Every reversal later must be a move from this list toward WHAT IS TRUE, using facts that have appeared on the page.
+
+Also list the season's open questions in the reader's mind. These persist until the plan says they are answered.
+
+## 5. Episode Plans
+
+For each of the seven: the concrete want, the complication, the payoff resolved in that episode, which fact from WHAT IS TRUE is revealed or hinted, what the reader believes afterward, and the reason to continue. Vary the shape and the kind of ending.
+
+Shape: 1 opens inside an incident and pays off something small. 2–3 complicate and show that someone's behavior has a better explanation than assumed. 4–5 make early assumptions hard to keep and force a choice; a funny or uncomfortable episode can move the season more than a clue. 6 brings threads together without a new central problem. 7 resolves the central question and rewards memory; the ending may be funny, bittersweet, or emotionally open, but the plot is finished.
+
+Episode 1 must be entertaining on its own. The season must not become interesting only at episode 5.
+
+## 6. Level
+
+Match the engine and complication to the level. At levels 1–2, choose premises whose fun is visible in actions and plain contradictions, not in verbal subtext. At 3–5, premises may rely on what people say versus what they mean.
+
+## 7. Output
+
+Return only the season plan in the required JSON. No commentary, no story text.
 `;

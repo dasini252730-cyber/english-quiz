@@ -9,7 +9,11 @@ import org.json.JSONObject
  * shapes are stored in Room and sent to the Edge Function.
  */
 
-/** One season's design, made once and never replaced. */
+/**
+ * One season's design, made once and never replaced. [engine], [whatIsTrue] and [readerBelieves]
+ * (백로그 065: the plan rules' engine and two lists, one reader-believes line per episode) are
+ * empty in a bible designed before them.
+ */
 data class SeasonBible(
     val title: String,
     val setting: String,
@@ -17,6 +21,9 @@ data class SeasonBible(
     val characters: List<SeasonCharacter>,
     val episodes: List<EpisodePlan>,
     val openQuestions: List<String>,
+    val engine: String = "",
+    val whatIsTrue: List<String> = emptyList(),
+    val readerBelieves: List<String> = emptyList(),
 ) {
     /** The people as the conversation hears of them, in one line. */
     fun peopleLine(): String = characters.joinToString("; ") { "${it.name} (${it.role})" }
@@ -40,8 +47,9 @@ data class SeasonBible(
     }
 
     fun toJson(): JSONObject = JSONObject()
-        .put("title", title).put("setting", setting).put("conflict", conflict)
+        .put("title", title).put("engine", engine).put("setting", setting).put("conflict", conflict)
         .put("characters", JSONArray(characters.map { it.toJson() }))
+        .put("whatIsTrue", JSONArray(whatIsTrue)).put("readerBelieves", JSONArray(readerBelieves))
         .put("episodes", JSONArray(episodes.map { JSONObject().put("number", it.number).put("title", it.title).put("plan", it.plan) }))
         .put("openQuestions", JSONArray(openQuestions))
 
@@ -57,6 +65,9 @@ data class SeasonBible(
                 EpisodePlan(it.optInt("number"), it.optString("title"), it.optString("plan"))
             },
             openQuestions = json.optJSONArray("openQuestions").strings(),
+            engine = json.optString("engine"),
+            whatIsTrue = json.optJSONArray("whatIsTrue").strings(),
+            readerBelieves = json.optJSONArray("readerBelieves").strings(),
         )
     }
 }
@@ -110,7 +121,7 @@ data class CanonState(
         carryForward = (carryForward + delta.carryForward).squeezed(),
     )
 
-    /** Short lines, the newest kept: five such lists must ride in every request under the 16 KB body limit. */
+    /** Short lines, the newest kept: five such lists must ride in every request under the server's body limit (32 KB since 백로그 065). */
     private fun List<String>.squeezed(): List<String> =
         map { it.trim().take(MAX_ITEM_CHARS) }.filter { it.isNotEmpty() }.distinct().takeLast(MAX_ITEMS)
 
@@ -143,11 +154,32 @@ data class SeasonContext(
     val episodePlan: String,
     val previousSummary: String,
     val canon: CanonState,
+    /** The bible's engine and two lists (백로그 065); left out of the request when the bible has none. */
+    val engine: String = "",
+    val whatIsTrue: List<String> = emptyList(),
+    val readerBelieves: List<String> = emptyList(),
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("title", title).put("setting", setting).put("conflict", conflict).put("characters", characters)
         .put("episodeNumber", episodeNumber).put("episodePlan", episodePlan)
         .put("previousSummary", previousSummary).put("canon", canon.toJson())
+        .apply {
+            if (engine.isNotBlank()) put("engine", engine)
+            if (whatIsTrue.isNotEmpty()) put("whatIsTrue", JSONArray(whatIsTrue.fitted()))
+            if (readerBelieves.isNotEmpty()) put("readerBelieves", JSONArray(readerBelieves.fitted()))
+        }
+
+    /**
+     * The bible keeps its lists whole; the request carries them at the size the server reads them
+     * (its `seasonContext` keeps the same counts), so a long plan cannot push the body past the
+     * server's limit and stop every episode of its season.
+     */
+    private fun List<String>.fitted(): List<String> = take(MAX_LIST_ITEMS).map { it.take(MAX_LIST_ITEM_CHARS) }
+
+    companion object {
+        const val MAX_LIST_ITEMS = 12
+        const val MAX_LIST_ITEM_CHARS = 300
+    }
 }
 
 /** Asks the server to design a new season. */

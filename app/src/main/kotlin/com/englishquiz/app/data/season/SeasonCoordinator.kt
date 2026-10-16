@@ -85,6 +85,7 @@ class SeasonCoordinator(
                     title = bible.title, setting = bible.setting, conflict = bible.conflict, characters = bible.castLine(MAX_CHARACTERS_CHARS),
                     episodeNumber = next.episodeNumber, episodePlan = plan?.plan ?: "Move the season forward.",
                     previousSummary = previous, canon = canon,
+                    engine = bible.engine, whatIsTrue = bible.whatIsTrue, readerBelieves = bible.readerBelieves,
                 ),
             ),
         )
@@ -124,7 +125,7 @@ class SeasonCoordinator(
 
     private companion object {
         const val MAX_RESERVATION_ATTEMPTS = 3
-        /** What the server keeps of the cast line (백로그 064); the request stays well inside its 16 KB body limit. */
+        /** What the server keeps of the cast line (백로그 064); the request stays well inside the server's 32 KB body limit. */
         const val MAX_CHARACTERS_CHARS = 2_400
     }
 

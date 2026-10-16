@@ -2,7 +2,7 @@
   "schema_version": 1,
   "title": "개인용 영어 학습 앱 MVP backlog",
   "source": "요구사항/요구사항.md",
-  "updated_at": "2026-10-14",
+  "updated_at": "2026-10-16",
   "statuses": {
     "todo": "할 일",
     "in_progress": "작업 중",
@@ -1049,6 +1049,23 @@
         "prompt",
         "edge-function",
         "story"
+      ]
+    },
+    {
+      "id": "065",
+      "title": "Story 규칙 v3와 시즌 플랜 규칙 분리, 프롬프트 캐싱, 설계도 스키마 확장",
+      "description": "story_rules_v3.md로 스토리 규칙 교체, 설계도 호출은 season_plan_rules.md 사용, 두 system의 고정 블록에 cache_control 적용, SEASON_SCHEMA에 engine·whatIsTrue·readerBelieves[7] 추가, validateSeasonOutput에서 relationships 절단 제거",
+      "details": "backlog/065.md",
+      "status": "done",
+      "priority": "P0",
+      "estimate": "M",
+      "depends_on": [
+        "064"
+      ],
+      "labels": [
+        "prompt",
+        "edge-function",
+        "season"
       ]
     }
   ]

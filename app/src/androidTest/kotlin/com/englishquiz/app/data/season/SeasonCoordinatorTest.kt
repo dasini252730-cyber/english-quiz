@@ -139,6 +139,10 @@ class SeasonCoordinatorTest {
         assertEquals("Plan 3", third.episodePlan)
         assertEquals("Season 1 bible", third.title)
         assertEquals("Mina (owner; wants: keep the hostel; hides: owes money; cousin of Rui); Rui (driver; wants: quiet life; hides: saw it; cousin of Mina)", third.characters)
+        // 백로그 065: the bible's engine and two lists travel with every episode, each in its own field.
+        assertEquals("A. Clever mystery", third.engine)
+        assertEquals(listOf("True: Mina sent the guest away."), third.whatIsTrue)
+        assertEquals((1..7).map { "Believed after $it" }, third.readerBelieves)
         // The first episode saw the bible's own open questions and no previous summary.
         assertEquals("", storyRequests[0].season!!.previousSummary)
         assertEquals(listOf("Who?"), storyRequests[0].season!!.canon.openQuestions)
@@ -187,6 +191,9 @@ class SeasonCoordinatorTest {
         ),
         episodes = (1..7).map { EpisodePlan(it, "Episode $it", "Plan $it") },
         openQuestions = listOf("Who?"),
+        engine = "A. Clever mystery",
+        whatIsTrue = listOf("True: Mina sent the guest away."),
+        readerBelieves = (1..7).map { "Believed after $it" },
     )
 
     private fun date(day: Int) = "2026-10-%02d".format(day)
