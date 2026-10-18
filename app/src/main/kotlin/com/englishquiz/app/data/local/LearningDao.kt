@@ -110,9 +110,14 @@ interface LearningDao {
     /**
      * Wrong answers per expression in the boss and the practice (백로그 056), for the "자주 틀리는"
      * view. A daily miss is already in the row's `incorrectCount`, so it is not counted twice.
-     * Keyed by expression id, so the caller's own language filter applies.
+     * A failed role-play turn (백로그 076) is left out too: it says the line was not *said*, not
+     * that the expression's meaning is shaky, and its rows carry expression id 0 when the line has
+     * no saved expression. Keyed by expression id, so the caller's own language filter applies.
      */
-    @Query("SELECT expressionId, COUNT(*) AS wrong FROM quiz_answers WHERE isCorrect = 0 AND mode <> 'daily' GROUP BY expressionId")
+    @Query(
+        "SELECT expressionId, COUNT(*) AS wrong FROM quiz_answers " +
+            "WHERE isCorrect = 0 AND mode NOT IN ('daily', 'roleplay') GROUP BY expressionId",
+    )
     fun observeWrongAnswerCounts(): Flow<List<WrongAnswerCount>>
 
     @Query("SELECT * FROM daily_content WHERE language = :language AND learningDate = :learningDate AND mode = :mode")
@@ -121,13 +126,6 @@ interface LearningDao {
     /** Replaces, because a retry after a failed save must not be refused as a duplicate. */
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertDailyContent(content: DailyContentEntity)
-
-    /** The newest passage of [mode] from before [learningDate] (백로그 054): the previous episode. */
-    @Query(
-        "SELECT * FROM daily_content WHERE language = :language AND mode = :mode AND learningDate < :learningDate " +
-            "ORDER BY learningDate DESC LIMIT 1",
-    )
-    suspend fun findLatestDailyContentBefore(language: String, mode: String, learningDate: String): DailyContentEntity?
 
     /** The library (백로그 026): every passage of one language, newest day first. */
     @Query(

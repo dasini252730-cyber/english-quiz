@@ -4,7 +4,6 @@ import androidx.room.withTransaction
 import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.data.ai.LearningContent
-import com.englishquiz.app.data.ai.PassageSummary
 import com.englishquiz.app.data.ai.toResponseJson
 import com.englishquiz.app.data.local.DailyContentEntity
 import com.englishquiz.app.data.local.LearningSessionEntity
@@ -12,7 +11,7 @@ import com.englishquiz.app.data.local.LibraryItem
 import com.englishquiz.app.domain.session.LearningSessionSummary
 
 /*
- * The day's passages (백로그 021/026/054) and the finished sessions, as extensions on
+ * The day's passages (백로그 021/026) and the finished sessions, as extensions on
  * [LearningRepository]: the same object to callers, kept in a second file for the line limit.
  * Passages belong to one language (백로그 066); sessions are read whole for the streak and the
  * game, and by language for a level window.
@@ -25,10 +24,6 @@ import com.englishquiz.app.domain.session.LearningSessionSummary
  */
 suspend fun LearningRepository.findDailyContent(language: Language, learningDate: String, mode: ContentMode): LearningContent? =
     learningDao.findDailyContent(language.wireValue, learningDate, mode.wireValue)?.toContentOrNull(mode)
-
-/** The latest passage of [mode] before [learningDate] as the next one hears of it (백로그 054), or null. */
-suspend fun LearningRepository.findPreviousSummary(language: Language, mode: ContentMode, learningDate: String): PassageSummary? =
-    learningDao.findLatestDailyContentBefore(language.wireValue, mode.wireValue, learningDate)?.toContentOrNull(mode)?.summary()
 
 /**
  * Keeps [content] as the day's passage for its language and mode. Earlier days stay: they are the

@@ -2,246 +2,84 @@ package com.englishquiz.app.data.season
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.englishquiz.app.data.ai.CanonState
-import com.englishquiz.app.data.ai.ContentExpression
-import com.englishquiz.app.data.ai.ContentGenerationRequest
 import com.englishquiz.app.data.ai.ContentMode
-import com.englishquiz.app.data.ai.ContentSegment
-import com.englishquiz.app.data.ai.EpisodePlan
 import com.englishquiz.app.data.ai.Language
-import com.englishquiz.app.data.ai.LearningContent
-import com.englishquiz.app.data.ai.SeasonBible
-import com.englishquiz.app.data.ai.SeasonCharacter
-import com.englishquiz.app.data.ai.SeasonRequest
-import com.englishquiz.app.data.ai.SpeakerGender
-import com.englishquiz.app.data.local.LearningDatabase
-import com.englishquiz.app.data.repository.LearningRepository
 import com.englishquiz.app.data.repository.findDailyContent
 import com.englishquiz.app.data.repository.listLibrary
+import com.englishquiz.app.data.season.SeasonFixtures.Companion.DAY
+import com.englishquiz.app.data.season.SeasonFixtures.Companion.date
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Episodes are numbered, read on a date, and never skipped or repeated (백로그 063). Every test
- * drives the coordinator the way the session route and the prefetcher do, with fake generators
- * that record what they were asked.
+ * The reading side (백로그 063/075): an episode is consumed as a unit on the day either passage is
+ * opened, both passages become the day's, the same day never advances, and nothing is generated
+ * here: with no episode ready the caller gets null and the pipeline is asked.
  */
 @RunWith(AndroidJUnit4::class)
 class SeasonCoordinatorTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
-    private var database: LearningDatabase? = null
-    private val storyRequests = mutableListOf<ContentGenerationRequest>()
-    private val seasonRequests = mutableListOf<SeasonRequest>()
-    private var failNextStory = false
+    private val fixtures = SeasonFixtures(context)
+    private val en = Language.ENGLISH
 
     @After
-    fun tearDown() {
-        database?.close()
-        context.deleteDatabase(DATABASE_NAME)
-    }
+    fun tearDown() = fixtures.close()
 
-    private fun coordinator(): Pair<SeasonCoordinator, LearningRepository> {
-        val db = LearningDatabase.create(context, DATABASE_NAME)
-        database = db
-        val repository = LearningRepository(db)
-        val coordinator = SeasonCoordinator(
-            repository,
-            generateContent = { request ->
-                storyRequests += request
-                if (failNextStory) {
-                    failNextStory = false
-                    error("provider hiccup")
-                }
-                episode(request)
-            },
-            generateSeason = { request -> seasonRequests += request; bible(request.seasonNumber) },
-        )
-        return coordinator to repository
+    @Test
+    fun openingTheConversationFirstConsumesTheSameEpisodeAsTheStoryAndTheDayNeverAdvances() = runBlocking {
+        fixtures.pipeline.runUntilSettled(en)
+        val calls = fixtures.episodeRequests.size
+        // Conversation first: episode 1 is the day's, and its story is already the day's stored story (the library has it
+        // even if the story is never opened), and follows on the same day.
+        assertEquals("S1E1 talk", fixtures.seasons.passageFor(en, ContentMode.CONVERSATION, date(1), fixtures.now)?.title)
+        assertEquals("S1E1", fixtures.repository.findDailyContent(en, date(1), ContentMode.STORY)?.title)
+        assertEquals(2, fixtures.repository.listLibrary(en).size)
+        assertEquals("S1E1", fixtures.seasons.passageFor(en, ContentMode.STORY, date(1), fixtures.now + 1_000)?.title)
+        assertEquals("시즌 1 · 1/7", fixtures.seasons.labelFor(en, date(1)))
+        // A second entry on the same date is the stored passage; the next day moves to episode 2, story first this time.
+        assertEquals("S1E1 talk", fixtures.seasons.passageFor(en, ContentMode.CONVERSATION, date(1), fixtures.now + 2_000)?.title)
+        assertEquals("S1E2", fixtures.seasons.passageFor(en, ContentMode.STORY, date(2), fixtures.now + DAY)?.title)
+        assertEquals("S1E2 talk", fixtures.seasons.passageFor(en, ContentMode.CONVERSATION, date(2), fixtures.now + DAY)?.title)
+        assertEquals("시즌 1 · 2/7", fixtures.seasons.labelFor(en, date(2)))
+        assertEquals(calls, fixtures.episodeRequests.size)
+        // Both passages of each day are the day's stored passages: the library lists four.
+        assertEquals(4, fixtures.repository.listLibrary(en).size)
+        assertNotNull(fixtures.repository.findDailyContent(en, date(1), ContentMode.STORY))
+        assertNotNull(fixtures.repository.findDailyContent(en, date(2), ContentMode.CONVERSATION))
+        assertEquals(5, fixtures.seasons.observeUnreadCount(en).first())
     }
 
     @Test
-    fun aNewSeasonStartsAtEpisodeOneAndEpisodesFollowInOrderIntoTheNextSeason() = runBlocking {
-        val (seasons, repository) = coordinator()
-        // Test 1 and 2: eight days of reading give season 1's seven episodes, then season 2 episode 1.
-        (1..8).forEach { day ->
-            val content = seasons.storyFor(Language.ENGLISH, date(day), 2, emptyList(), NOW + day * DAY)
-            val expected = if (day <= 7) "S1E$day" else "S2E1"
-            assertEquals(expected, content.title)
-            assertEquals(if (day <= 7) "시즌 1 · $day/7" else "시즌 2 · 1/7", seasons.labelFor(Language.ENGLISH, date(day)))
-        }
-        assertEquals(listOf(1, 2), seasonRequests.map { it.seasonNumber })
-        // Test 6: the second season was designed knowing the first's title.
-        assertEquals(listOf("Season 1 bible"), seasonRequests[1].previousTitles)
-        assertEquals((1..7).toList() + 1, storyRequests.map { it.season!!.episodeNumber })
-        // Each read day's story is also the day's stored passage, so the library has eight stories.
-        assertEquals(8, repository.listLibrary(Language.ENGLISH).count { it.mode == "story" })
+    fun withNoEpisodeReadyNothingIsGeneratedAndThePipelineIsAsked() = runBlocking {
+        fixtures.autoEnsure = true
+        assertNull(fixtures.seasons.passageFor(en, ContentMode.STORY, date(1), fixtures.now))
+        assertNull(fixtures.seasons.passageFor(en, ContentMode.CONVERSATION, date(1), fixtures.now))
+        assertEquals(listOf(en, en), fixtures.workRequests)
+        assertNull(fixtures.seasons.labelFor(en, date(1)))
+        assertEquals(false, fixtures.seasons.hasUnread(en))
+        // The pipeline was started by those asks: it fills the queue in the background.
+        withTimeout(20_000) { fixtures.seasons.observeUnreadCount(en).first { it == 7 } }
+        assertEquals("S1E1", fixtures.seasons.passageFor(en, ContentMode.STORY, date(1), fixtures.now)?.title)
     }
 
     @Test
-    fun theSameDayNeverAdvancesAndAPrefetchedEpisodeIsReadNotSkipped() = runBlocking {
-        val (seasons, repository) = coordinator()
-        // Test 3: a second entry on the same date is the stored episode, no generation.
-        val first = seasons.storyFor(Language.ENGLISH, date(1), 2, emptyList(), NOW)
-        val again = seasons.storyFor(Language.ENGLISH, date(1), 2, emptyList(), NOW + 1_000)
-        assertEquals(first, again)
-        assertEquals(1, storyRequests.size)
-
-        // Test 4: tonight's prefetch makes episode 2; it waits unread, so a second prefetch makes
-        // nothing, and the next read day (even two days later) opens episode 2, not episode 3.
-        assertTrue(seasons.prefetchNext(Language.ENGLISH, 2, emptyList(), NOW + HOUR))
-        assertFalse(seasons.prefetchNext(Language.ENGLISH, 2, emptyList(), NOW + 2 * HOUR))
-        assertTrue(seasons.hasUnread(Language.ENGLISH))
-        assertEquals(2, storyRequests.size)
-        // The level moved to 5 in between: the episode already made keeps level 2, no regeneration.
-        val dayThree = seasons.storyFor(Language.ENGLISH, date(3), 5, emptyList(), NOW + 2 * DAY)
-        assertEquals("S1E2", dayThree.title)
-        assertEquals(2, storyRequests.size)
-        assertEquals(listOf(2, 2), storyRequests.map { it.difficulty })
-        // The episode after it is the first at the new level.
-        assertEquals("S1E3", seasons.storyFor(Language.ENGLISH, date(4), 5, emptyList(), NOW + 3 * DAY).title)
-        assertEquals(5, storyRequests.last().difficulty)
-        assertFalse(seasons.hasUnread(Language.ENGLISH))
-        assertNull(repository.findDailyContent(Language.ENGLISH, date(2), ContentMode.STORY))
-        assertNotNull(repository.findDailyContent(Language.ENGLISH, date(3), ContentMode.STORY))
-    }
-
-    @Test
-    fun aFailedGenerationLeavesTheEpisodeNumberForTheRetry() = runBlocking {
-        val (seasons, _) = coordinator()
-        seasons.storyFor(Language.ENGLISH, date(1), 2, emptyList(), NOW)
-        // Test 5: the provider fails once; the retry asks for the same episode 2.
-        failNextStory = true
-        val failed = runCatching { seasons.prefetchNext(Language.ENGLISH, 2, emptyList(), NOW + HOUR) }
-        assertTrue(failed.isFailure)
-        assertFalse(seasons.hasUnread(Language.ENGLISH))
-        val retried = seasons.storyFor(Language.ENGLISH, date(2), 2, emptyList(), NOW + DAY)
-        assertEquals("S1E2", retried.title)
-        assertEquals(listOf(1, 2, 2), storyRequests.map { it.season!!.episodeNumber })
-    }
-
-    @Test
-    fun theSummaryAndCanonOfOneEpisodeReachTheNextRequest() = runBlocking {
-        val (seasons, _) = coordinator()
-        seasons.storyFor(Language.ENGLISH, date(1), 2, emptyList(), NOW)
-        seasons.storyFor(Language.ENGLISH, date(2), 2, emptyList(), NOW + DAY)
-        seasons.storyFor(Language.ENGLISH, date(3), 2, emptyList(), NOW + 2 * DAY)
-        // Test 7: episode 3's brief carries episode 2's synopsis, the merged canon and the plan.
-        val third = storyRequests[2].season!!
-        assertEquals("Synopsis of S1E2.", third.previousSummary)
-        assertEquals(listOf("Event of S1E1", "Event of S1E2"), third.canon.events)
-        assertEquals(listOf("Open after S1E2"), third.canon.openQuestions)
-        assertEquals("Plan 3", third.episodePlan)
-        assertEquals("Season 1 bible", third.title)
-        assertEquals("Mina (owner; wants: keep the hostel; hides: owes money; cousin of Rui); Rui (driver; wants: quiet life; hides: saw it; cousin of Mina)", third.characters)
-        // 백로그 065: the bible's engine and two lists travel with every episode, each in its own field.
-        assertEquals("A. Clever mystery", third.engine)
-        assertEquals(listOf("True: Mina sent the guest away."), third.whatIsTrue)
-        assertEquals((1..7).map { "Believed after $it" }, third.readerBelieves)
-        // The first episode saw the bible's own open questions and no previous summary.
-        assertEquals("", storyRequests[0].season!!.previousSummary)
-        assertEquals(listOf("Who?"), storyRequests[0].season!!.canon.openQuestions)
-    }
-
-    @Test
-    fun theConversationAndTheLibraryReadTheSeasonWithoutMovingIt() = runBlocking {
-        val (seasons, repository) = coordinator()
-        seasons.storyFor(Language.ENGLISH, date(1), 2, emptyList(), NOW)
-        seasons.prefetchNext(Language.ENGLISH, 2, emptyList(), NOW + HOUR)
-        val before = storyRequests.size
-        // Test 8: a conversation hears today's episode with its people and place; nothing changes.
-        val companion = checkNotNull(seasons.companionFor(Language.ENGLISH, date(1)))
-        assertEquals("S1E1", companion.title)
-        assertEquals("Mina (owner); Rui (driver)", companion.people)
-        assertEquals("Lisbon", companion.place)
-        assertEquals("S1E2", seasons.companionForNextRead(Language.ENGLISH)?.title)
-        // Test 9: re-reading the stored passage (what the library does) touches no episode.
-        assertNotNull(repository.findDailyContent(Language.ENGLISH, date(1), ContentMode.STORY))
-        assertTrue(seasons.hasUnread(Language.ENGLISH))
-        assertEquals(before, storyRequests.size)
-        assertEquals("S1E2", seasons.storyFor(Language.ENGLISH, date(2), 2, emptyList(), NOW + DAY).title)
-    }
-
-    @Test
-    fun eachLanguageRunsItsOwnSeasonAndItsOwnUnreadQueue() = runBlocking {
-        val (seasons, repository) = coordinator()
-        // 백로그 066: the first story in each language opens that language's own season 1, episode 1.
-        seasons.storyFor(Language.ENGLISH, date(1), 2, emptyList(), NOW)
-        seasons.storyFor(Language.CHINESE, date(1), 3, emptyList(), NOW + 1_000)
-        assertEquals(listOf(Language.ENGLISH to 1, Language.CHINESE to 1), seasonRequests.map { it.language to it.seasonNumber })
-        assertEquals(listOf(Language.ENGLISH to 1, Language.CHINESE to 1), storyRequests.map { it.language to it.season!!.episodeNumber })
-        assertEquals(listOf(2, 3), storyRequests.map { it.difficulty })
-        assertEquals("시즌 1 · 1/7", seasons.labelFor(Language.CHINESE, date(1)))
-        assertEquals(listOf("en"), repository.listLibrary(Language.ENGLISH).map { it.language })
-        assertEquals(listOf("zh"), repository.listLibrary(Language.CHINESE).map { it.language })
-
-        // An English episode made ahead waits for the English reader only.
-        assertTrue(seasons.prefetchNext(Language.ENGLISH, 2, emptyList(), NOW + HOUR))
-        assertTrue(seasons.hasUnread(Language.ENGLISH))
-        assertFalse(seasons.hasUnread(Language.CHINESE))
-        assertNull(seasons.companionForNextRead(Language.CHINESE))
-
-        // Reading the Chinese story next day makes Chinese episode 2 and consumes no English episode.
-        seasons.storyFor(Language.CHINESE, date(2), 3, emptyList(), NOW + DAY)
-        assertEquals(Language.CHINESE to 2, storyRequests.last().let { it.language to it.season!!.episodeNumber })
-        // Each episode 2 goes on from its own language's episode 1 (the fake names the Chinese season "S2").
-        assertEquals(listOf("Synopsis of S1E1.", "Synopsis of S2E1."), storyRequests.drop(2).map { it.season!!.previousSummary })
-        assertTrue(seasons.hasUnread(Language.ENGLISH))
-        assertNull(repository.findDailyContent(Language.ENGLISH, date(2), ContentMode.STORY))
-        assertNotNull(repository.findDailyContent(Language.CHINESE, date(2), ContentMode.STORY))
-        assertNull(seasons.labelFor(Language.ENGLISH, date(2)))
-        assertEquals("시즌 1 · 2/7", seasons.labelFor(Language.CHINESE, date(2)))
-
-        // The English reader then opens the waiting episode without another generation.
-        val before = storyRequests.size
-        seasons.storyFor(Language.ENGLISH, date(2), 2, emptyList(), NOW + DAY + HOUR)
-        assertEquals(before, storyRequests.size)
-        assertFalse(seasons.hasUnread(Language.ENGLISH))
-        assertEquals("시즌 1 · 2/7", seasons.labelFor(Language.ENGLISH, date(2)))
-    }
-
-    private fun episode(request: ContentGenerationRequest): LearningContent {
-        val season = checkNotNull(request.season)
-        val name = "S${seasonRequests.size}E${season.episodeNumber}"
-        val sentence = "We can pull it off together in $name."
-        return LearningContent(
-            title = name,
-            mode = ContentMode.STORY,
-            segments = listOf(ContentSegment("Narrator", sentence)),
-            expressions = listOf(ContentExpression("pull it off", "해내다", 0, 7, 18)),
-            synopsis = "Synopsis of $name.",
-            language = request.language,
-            canon = CanonState(events = listOf("Event of $name"), openQuestions = listOf("Open after $name")),
-        )
-    }
-
-    private fun bible(number: Int) = SeasonBible(
-        title = "Season $number bible",
-        setting = "Lisbon",
-        conflict = "Who is sending the guests away?",
-        characters = listOf(
-            SeasonCharacter("Mina", SpeakerGender.FEMALE, "owner", "keep the hostel", "owes money", "cousin of Rui"),
-            SeasonCharacter("Rui", SpeakerGender.MALE, "driver", "quiet life", "saw it", "cousin of Mina"),
-        ),
-        episodes = (1..7).map { EpisodePlan(it, "Episode $it", "Plan $it") },
-        openQuestions = listOf("Who?"),
-        engine = "A. Clever mystery",
-        whatIsTrue = listOf("True: Mina sent the guest away."),
-        readerBelieves = (1..7).map { "Believed after $it" },
-    )
-
-    private fun date(day: Int) = "2026-10-%02d".format(day)
-
-    private companion object {
-        const val DATABASE_NAME = "test-season-coordinator.db"
-        const val NOW = 1_791_201_600_000L
-        const val HOUR = 60 * 60 * 1000L
-        const val DAY = 24 * HOUR
+    fun eachLanguageReadsItsOwnSeason() = runBlocking {
+        fixtures.pipeline.runUntilSettled(en)
+        fixtures.pipeline.runUntilSettled(Language.CHINESE)
+        assertEquals(listOf(en to 1, Language.CHINESE to 1), fixtures.seasonRequests.map { it.language to it.seasonNumber })
+        assertEquals("S1E1", fixtures.seasons.passageFor(en, ContentMode.STORY, date(1), fixtures.now)?.title)
+        assertEquals("S2E1", fixtures.seasons.passageFor(Language.CHINESE, ContentMode.STORY, date(1), fixtures.now)?.title)
+        assertEquals(Language.CHINESE, fixtures.seasons.passageFor(Language.CHINESE, ContentMode.CONVERSATION, date(1), fixtures.now)?.language)
+        assertEquals(6, fixtures.seasons.observeUnreadCount(en).first())
+        assertEquals(6, fixtures.seasons.observeUnreadCount(Language.CHINESE).first())
+        assertEquals(listOf("en"), fixtures.repository.listLibrary(en).map { it.language }.distinct())
+        assertEquals(listOf("zh"), fixtures.repository.listLibrary(Language.CHINESE).map { it.language }.distinct())
     }
 }

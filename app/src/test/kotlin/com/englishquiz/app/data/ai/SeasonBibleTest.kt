@@ -18,7 +18,6 @@ class SeasonBibleTest {
             "Mina (owner; wants: keep the hostel; hides: owes money; cousin of Rui); Rui (driver; wants: quiet life; hides: saw it; cousin of Mina)",
             bible.castLine(2_400),
         )
-        assertEquals("Mina (owner); Rui (driver)", bible.peopleLine())
     }
 
     @Test
@@ -52,26 +51,35 @@ class SeasonBibleTest {
         assertEquals(emptyList<String>(), old.readerBelieves)
     }
 
-    /** 백로그 065: a season context carries the bible's engine and lists to the server, and leaves them out when the bible has none. */
+    /** 백로그 075: the episode call's brief carries the cast as one line, every plan, and the lists at the server's reading size. */
     @Test
-    fun aSeasonContextSendsTheListsOnlyWhenItHasThem() {
-        val base = SeasonContext("t", "s", "c", "cast", 2, "plan", "previous", CanonState())
+    fun anEpisodeBriefSendsTheCastLineEveryPlanAndTheListsAtTheServersSize() {
+        val long = "x".repeat(EpisodeRequest.MAX_LIST_ITEM_CHARS + 50)
+        val designed = bible(SeasonCharacter("Mina", SpeakerGender.FEMALE, "owner", "keep the hostel", "owes money", "cousin of Rui")).copy(
+            engine = "A. Clever mystery",
+            episodes = (1..7).map { EpisodePlan(it, "Episode $it", "Plan $it") },
+            whatIsTrue = (1..EpisodeRequest.MAX_LIST_ITEMS + 3).map { "$it $long" },
+            readerBelieves = (1..7).map { "Believed after $it" },
+        )
+        val request = EpisodeRequest(Language.ENGLISH, 2, 3, listOf("pull it off"), designed, listOf(3), listOf(PreviousEpisode(2, "E2", "Narrator: Rain.")), CanonState(events = listOf("It rained.")))
 
-        val bare = base.toJson()
-        assertEquals(false, bare.has("engine"))
-        assertEquals(false, bare.has("whatIsTrue"))
-        assertEquals(false, bare.has("readerBelieves"))
-
-        val full = base.copy(engine = "A. Clever mystery", whatIsTrue = listOf("fact"), readerBelieves = listOf("belief")).toJson()
-        assertEquals("A. Clever mystery", full.getString("engine"))
-        assertEquals("fact", full.getJSONArray("whatIsTrue").getString(0))
-        assertEquals("belief", full.getJSONArray("readerBelieves").getString(0))
-
-        // The request carries the lists at the server's reading size, so the body stays inside its limit.
-        val long = "x".repeat(SeasonContext.MAX_LIST_ITEM_CHARS + 50)
-        val capped = base.copy(whatIsTrue = (1..SeasonContext.MAX_LIST_ITEMS + 3).map { "$it $long" }).toJson().getJSONArray("whatIsTrue")
-        assertEquals(SeasonContext.MAX_LIST_ITEMS, capped.length())
-        assertEquals(SeasonContext.MAX_LIST_ITEM_CHARS, capped.getString(0).length)
+        val json = request.toJson()
+        assertEquals("episodes", json.getString("action"))
+        assertEquals(listOf(3), (0 until json.getJSONArray("episodes").length()).map { json.getJSONArray("episodes").getInt(it) })
+        val season = json.getJSONObject("season")
+        assertEquals("Mina (owner; wants: keep the hostel; hides: owes money; cousin of Rui)", season.getString("characters"))
+        assertEquals(7, season.getJSONArray("plans").length())
+        assertEquals("Plan 3", season.getJSONArray("plans").getJSONObject(2).getString("plan"))
+        assertEquals(EpisodeRequest.MAX_LIST_ITEMS, season.getJSONArray("whatIsTrue").length())
+        assertEquals(EpisodeRequest.MAX_LIST_ITEM_CHARS, season.getJSONArray("whatIsTrue").getString(0).length)
+        assertEquals("Narrator: Rain.", json.getJSONArray("previousEpisodes").getJSONObject(0).getString("text"))
+        assertEquals("It rained.", json.getJSONObject("canon").getJSONArray("events").getString(0))
+        assertEquals(false, json.has("story"))
+        // With a story given, only its title and lines travel: the server writes the conversation alone.
+        val given = request.copy(story = GivenStory("E3", listOf(ContentSegment("Mina", "Hello.", "pinyin")))).toJson().getJSONObject("story")
+        assertEquals("E3", given.getString("title"))
+        assertEquals("Hello.", given.getJSONArray("segments").getJSONObject(0).getString("text"))
+        assertEquals(false, given.getJSONArray("segments").getJSONObject(0).has("pinyin"))
     }
 
     private fun bible(vararg characters: SeasonCharacter) = SeasonBible(

@@ -67,13 +67,15 @@ data class LibraryItem(
  * practice. Only the daily quiz moves an expression's review schedule; every mode leaves this
  * row, so a weak spot shows up wherever it was missed and hint use (백로그 058) can be studied
  * later. Retries at the end of a quiz (백로그 047) and passage questions are not answers here.
- * The language is the expression's (백로그 066).
+ * The language is the expression's (백로그 066). A role-play turn (백로그 076) is logged here as
+ * well, with `expressionId` 0 when its line holds no saved expression.
  */
 @Entity(tableName = "quiz_answers", indices = [Index(value = ["expressionId"])])
 data class QuizAnswerEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    /** The saved expression answered about, or 0 for a role-play line without one. */
     val expressionId: Long,
-    /** `daily`, `boss` or `practice`: `QuizMode.wireValue`. */
+    /** `daily`, `boss`, `practice` or `roleplay`: `QuizMode.wireValue`. */
     val mode: String,
     val isCorrect: Boolean,
     val hintUsed: Boolean,

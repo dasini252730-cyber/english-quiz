@@ -29,6 +29,8 @@ fun ReaderRoute(
     repository: LearningRepository,
     onBack: () -> Unit,
     onQuiz: (() -> Unit)? = null,
+    /** The role-play of a conversation (백로그 076); null leaves the button out. */
+    onRoleplay: (() -> Unit)? = null,
     nowEpochMillis: () -> Long = System::currentTimeMillis,
     /** "시즌 2 · 3/7" over an episode (백로그 063); null for any other passage. */
     subtitle: String? = null,
@@ -100,6 +102,7 @@ fun ReaderRoute(
         onStop = speech::stop,
         onBack = leave,
         onQuiz = onQuiz?.let { next -> { speech.stop(); next() } },
+        onRoleplay = onRoleplay?.let { next -> { speech.stop(); next() } },
         meaningState = meaningState,
         onTokenTap = { token -> if (token.isTappable) lookup(token) },
         onDismissMeaning = { job?.cancel(); meaningState = null },

@@ -139,8 +139,8 @@ class AiLearningResponsesTest {
     }
 
     @Test
-    fun theSynopsisSurvivesTheRoundTripAndBecomesTheNextPassagesSummary() {
-        // 백로그 054: what tomorrow's story and today's conversation hear about this passage.
+    fun theSynopsisAndTheCanonSurviveTheRoundTrip() {
+        // 백로그 054: the passage's own two-sentence summary, kept with it.
         val body = """
             {"data":{"title":"The Night Train","mode":"story","synopsis":"  Mina shared a cabin with a stranger. He lied about his stop.  ",
              "segments":[{"speaker":"Narrator","text":"That sounds sketchy."}],
@@ -152,8 +152,6 @@ class AiLearningResponsesTest {
 
         assertEquals("Mina shared a cabin with a stranger. He lied about his stop.", parsed.synopsis)
         assertEquals(parsed, restored)
-        assertEquals(PassageSummary(ContentMode.STORY, "The Night Train", parsed.synopsis), parsed.summary())
-        assertEquals(null, parsed.copy(synopsis = "").summary())
         // 백로그 063: an episode's canon rides the same round trip; a passage without one carries null.
         assertEquals(null, parsed.canon)
         val canon = CanonState(events = listOf("Mina kept the ticket."), facts = listOf("The stranger lied."), openQuestions = listOf("Why?"))

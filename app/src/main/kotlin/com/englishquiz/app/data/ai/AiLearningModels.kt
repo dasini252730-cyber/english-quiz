@@ -1,26 +1,15 @@
 package com.englishquiz.app.data.ai
 
+/**
+ * A passage made on its own (백로그 006): the fallback when the app runs without seasons. Inside a
+ * season both passages of an episode come from one [EpisodeRequest] (백로그 075).
+ */
 data class ContentGenerationRequest(
     val mode: ContentMode,
     val difficulty: Int,
     val reviewExpressions: List<String> = emptyList(),
     /** The language of the passage (백로그 066); the server defaults to English when it is absent. */
     val language: Language = Language.DEFAULT,
-    /** The latest earlier story (백로그 054), so today's can go on from it. */
-    val previousStory: PassageSummary? = null,
-    /** The same day's other passage, so a conversation practises the story's situation. */
-    val companion: PassageSummary? = null,
-    /** A story's place in its season (백로그 063); null for a conversation or a season-less story. */
-    val season: SeasonContext? = null,
-)
-
-/** What one passage tells the next about itself (백로그 054); [people] and [place] come from the season (백로그 063). */
-data class PassageSummary(
-    val mode: ContentMode,
-    val title: String,
-    val synopsis: String,
-    val people: String = "",
-    val place: String = "",
 )
 
 enum class ContentMode(val wireValue: String) {
@@ -45,16 +34,13 @@ data class LearningContent(
     val comprehension: List<ComprehensionQuestion> = emptyList(),
     /** Who each speaker is (백로그 050), keyed by the segment speaker name; empty before it or when the model gave none. */
     val speakers: Map<String, SpeakerGender> = emptyMap(),
-    /** Two English sentences on the passage (백로그 054), handed to the next generation; "" before it. */
+    /** Two sentences on the passage (백로그 054), kept with it; "" before it. */
     val synopsis: String = "",
     /** What this episode settled (백로그 063); null for a conversation or a story outside a season. */
     val canon: CanonState? = null,
     /** The passage's language (백로그 066): how it is tokenised, graded and spoken. Last, so older positional constructions still read. */
     val language: Language = Language.DEFAULT,
-) {
-    /** This passage as the next one hears about it, or null when it has nothing to say. */
-    fun summary(): PassageSummary? = synopsis.takeIf { it.isNotBlank() }?.let { PassageSummary(mode, title, it) }
-}
+)
 
 /** What the model says about a speaker, so a voice can be chosen to match (백로그 050). */
 enum class SpeakerGender(val wireValue: String) {

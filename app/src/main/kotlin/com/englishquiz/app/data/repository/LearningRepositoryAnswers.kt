@@ -37,6 +37,32 @@ suspend fun LearningRepository.recordQuizAnswer(
     )
 }
 
+/**
+ * Logs one role-play turn (백로그 076): whether the learner's spoken line passed. Nothing else
+ * moves — not the review schedule, not the score, not the weak-spot counts, which leave this mode
+ * out. [expressionText] is the line's highlighted expression; its saved row's id is kept when the
+ * box holds it, else 0, as for a line with no expression. [revealed] is whether the learner
+ * looked at the original before speaking, kept in `hintUsed`.
+ */
+suspend fun LearningRepository.recordRoleplayTurn(
+    language: Language,
+    expressionText: String?,
+    passed: Boolean,
+    revealed: Boolean,
+    answeredAtEpochMillis: Long,
+) {
+    val expressionId = expressionText?.takeIf { it.isNotBlank() }?.let { findRow(language, it)?.id } ?: 0L
+    learningDao.insertQuizAnswer(
+        QuizAnswerEntity(
+            expressionId = expressionId,
+            mode = QuizMode.ROLEPLAY.wireValue,
+            isCorrect = passed,
+            hintUsed = revealed,
+            answeredAtEpochMillis = answeredAtEpochMillis,
+        ),
+    )
+}
+
 /** Wrong answers logged by the boss and the practice per expression id (백로그 056); absent means none. */
 fun LearningRepository.observeWrongAnswerCounts(): Flow<Map<Long, Int>> =
     learningDao.observeWrongAnswerCounts().map { counts -> counts.associate { it.expressionId to it.wrong } }

@@ -8,6 +8,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
+import kotlinx.coroutines.flow.Flow
 
 /**
  * A story season (백로그 063): designed once, then followed for seven episodes. [bibleJson] is the
@@ -50,7 +51,15 @@ data class SeasonEpisodeEntity(
     val readDate: String?,
     /** The season's language, copied here so the unread and read-on-date queries need no join (백로그 066). */
     @ColumnInfo(defaultValue = "'en'") val language: String = DEFAULT_LANGUAGE,
+    /**
+     * The conversation set inside this episode (백로그 075), stored like [contentJson]; null until the
+     * pipeline has made it, which is also how an episode from before 075 looks.
+     */
+    val conversationJson: String? = null,
 )
+
+/** An episode's number and read state, for the pipeline's plan (백로그 075). */
+data class EpisodeState(val number: Int, val readDate: String?, val hasConversation: Boolean)
 
 @Dao
 interface SeasonDao {
@@ -71,8 +80,26 @@ interface SeasonDao {
     @Query("UPDATE seasons SET canonJson = :canonJson WHERE id = :id")
     suspend fun updateSeasonCanon(id: Long, canonJson: String)
 
-    @Query("SELECT COUNT(*) FROM season_episodes WHERE seasonId = :seasonId")
-    suspend fun countEpisodes(seasonId: Long): Int
+    /** Every episode of a season in order, as the pipeline reads them (백로그 075). */
+    @Query("SELECT * FROM season_episodes WHERE seasonId = :seasonId ORDER BY number")
+    suspend fun listEpisodes(seasonId: Long): List<SeasonEpisodeEntity>
+
+    @Query("SELECT number, readDate, (conversationJson IS NOT NULL) AS hasConversation FROM season_episodes WHERE seasonId = :seasonId ORDER BY number")
+    suspend fun listEpisodeStates(seasonId: Long): List<EpisodeState>
+
+    @Query("UPDATE season_episodes SET conversationJson = :conversationJson WHERE id = :id AND conversationJson IS NULL")
+    suspend fun fillConversation(id: Long, conversationJson: String): Int
+
+    /** How many episodes wait unread in [language]; home and the waiting screen watch it (백로그 075). */
+    @Query("SELECT COUNT(*) FROM season_episodes WHERE language = :language AND readDate IS NULL")
+    fun observeUnreadCount(language: String): Flow<Int>
+
+    /**
+     * A number that changes whenever an episode of [language] is added or gets its conversation
+     * (백로그 075), so a screen waiting for either can try again without knowing which happened.
+     */
+    @Query("SELECT COUNT(*) + COALESCE(SUM(CASE WHEN conversationJson IS NULL THEN 0 ELSE 1 END), 0) FROM season_episodes WHERE language = :language")
+    fun observeEpisodeState(language: String): Flow<Int>
 
     @Query("SELECT * FROM season_episodes WHERE seasonId = :seasonId AND number = :number")
     suspend fun findEpisode(seasonId: Long, number: Int): SeasonEpisodeEntity?

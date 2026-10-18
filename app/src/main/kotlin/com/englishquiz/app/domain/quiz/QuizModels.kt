@@ -13,12 +13,14 @@ enum class QuizQuestionType { LEARN_CARD, MULTIPLE_CHOICE, FILL_IN_BLANK, TYPED_
 /**
  * Which quiz an answer was given in (백로그 056). Only [DAILY] moves an expression's growth stage
  * and review schedule. [BOSS] pays double points and [PRACTICE] pays none; both only log the
- * answer, so the same expression cannot be promoted twice in a day or by practising.
+ * answer, so the same expression cannot be promoted twice in a day or by practising. [ROLEPLAY]
+ * (백로그 076) logs whether a spoken line passed; it pays nothing and is not a weak-spot signal.
  */
 enum class QuizMode(val wireValue: String) {
     DAILY("daily"),
     BOSS("boss"),
     PRACTICE("practice"),
+    ROLEPLAY("roleplay"),
 }
 
 data class QuizOption(

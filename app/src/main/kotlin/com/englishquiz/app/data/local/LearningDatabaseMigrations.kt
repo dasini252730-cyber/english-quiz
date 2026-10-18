@@ -172,6 +172,19 @@ internal val MIGRATION_11_12 = object : Migration(11, 12) {
     }
 }
 
+/**
+ * 백로그 075: an episode carries its own conversation, made in the same call as its story. A
+ * conversation prefetched for a day not yet reached belonged to the old scheme and would never be
+ * paired with the episode read that day, so rows dated after today are dropped (nothing read is
+ * touched: a learner has only ever seen rows of today or earlier).
+ */
+internal val MIGRATION_12_13 = object : Migration(12, 13) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL("ALTER TABLE `season_episodes` ADD COLUMN `conversationJson` TEXT")
+        database.execSQL("DELETE FROM `daily_content` WHERE `learningDate` > date('now', 'localtime')")
+    }
+}
+
 /** 백로그 021: one generated passage per day and mode, so re-entry stops paying for a new one. */
 internal val MIGRATION_3_4 = object : Migration(3, 4) {
     override fun migrate(database: SupportSQLiteDatabase) {

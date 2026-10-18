@@ -4,11 +4,11 @@ import android.content.Context
 import com.englishquiz.app.BuildConfig
 import com.englishquiz.app.data.ai.AiLearningClient
 import com.englishquiz.app.data.local.LearningDatabase
-import com.englishquiz.app.data.prefetch.ContentPrefetcher
 import com.englishquiz.app.data.preferences.AppSettingsRepository
 import com.englishquiz.app.data.preferences.GameProgressRepository
 import com.englishquiz.app.data.repository.LearningRepository
 import com.englishquiz.app.data.season.SeasonCoordinator
+import com.englishquiz.app.data.season.SeasonPipeline
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -30,15 +30,16 @@ class AppContainer(
     val aiLearningClient: AiLearningClient? =
         aiEndpoint.takeIf { it.isNotBlank() }?.let { AiLearningClient(it, appToken = aiAppToken) }
 
-    /** Work that must outlive a screen, such as making tomorrow's passages (백로그 025). */
+    /** Work that must outlive a screen, such as making the season's episodes (백로그 075). */
     val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    /** The story as a season of seven episodes (백로그 063). */
-    val seasonCoordinator: SeasonCoordinator? = aiLearningClient?.let { client ->
-        SeasonCoordinator(learningRepository, client::generateContent, client::generateSeason)
+    /** Makes seasons and their episodes in the background (백로그 075); never on a tap. */
+    val seasonPipeline: SeasonPipeline? = aiLearningClient?.let { client ->
+        SeasonPipeline(learningRepository, client::generateEpisode, client::generateSeason, applicationScope, appSettingsRepository::levelFor)
     }
 
-    val contentPrefetcher: ContentPrefetcher? = aiLearningClient?.let { client ->
-        ContentPrefetcher(learningRepository, appSettingsRepository, client::generateContent, applicationScope, seasons = seasonCoordinator)
+    /** The story and the conversation as episodes of a season (백로그 063/075). */
+    val seasonCoordinator: SeasonCoordinator? = seasonPipeline?.let { pipeline ->
+        SeasonCoordinator(learningRepository, requestWork = pipeline::ensure)
     }
 }

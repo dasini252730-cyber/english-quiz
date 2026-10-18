@@ -23,6 +23,9 @@ class AiLearningClient(
     // read timeout sits above that. A socket timeout here would hide the function's own
     // error code, which is what tells the learner whether retrying is worth it.
     private val readTimeoutMillis: Int = 75_000,
+    // An episode call or a season design runs up to 135s on the server (백로그 075: a story and its
+    // conversation in one reply, inside the hosting wall clock), so its read timeout sits above that.
+    private val longReadTimeoutMillis: Int = 148_000,
     /** Sent as `X-App-Token` (백로그 062); the function answers 401 without it. */
     private val appToken: String = "",
 ) {
@@ -34,9 +37,13 @@ class AiLearningClient(
 
     /** Designs a season (백로그 063): once per seven episodes. */
     suspend fun generateSeason(request: SeasonRequest): SeasonBible =
-        parseSafely(post(seasonJson(request)), ::parseSeasonResponse)
+        parseSafely(post(seasonJson(request), longReadTimeoutMillis), ::parseSeasonResponse)
 
-    private suspend fun post(body: JSONObject): JSONObject {
+    /** Makes an episode's story and conversation, or a given story's conversation (백로그 075). */
+    suspend fun generateEpisode(request: EpisodeRequest): EpisodeResult =
+        parseSafely(post(request.toJson(), longReadTimeoutMillis)) { parseEpisodeResponse(it, request.language) }
+
+    private suspend fun post(body: JSONObject, readTimeout: Int = readTimeoutMillis): JSONObject {
         val callerContext = currentCoroutineContext()
         return suspendCancellableCoroutine { continuation ->
         val connectionRef = AtomicReference<HttpURLConnection?>()
@@ -51,7 +58,7 @@ class AiLearningClient(
                 connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
                     requestMethod = "POST"
                     connectTimeout = connectTimeoutMillis
-                    readTimeout = readTimeoutMillis
+                    this.readTimeout = readTimeout
                     doOutput = true
                     setRequestProperty("Content-Type", "application/json")
                     setRequestProperty("Accept", "application/json")
@@ -113,19 +120,7 @@ class AiLearningClient(
         put("language", request.language.wireValue)
         put("difficulty", request.difficulty)
         put("reviewExpressions", JSONArray(request.reviewExpressions))
-        request.previousStory?.let { put("previousStory", it.toJson()) }
-        request.companion?.let { put("companion", it.toJson()) }
-        request.season?.let { put("season", it.toJson()) }
     }
-
-    private fun PassageSummary.toJson() = JSONObject()
-        .put("mode", mode.wireValue)
-        .put("title", title)
-        .put("synopsis", synopsis)
-        .apply {
-            if (people.isNotBlank()) put("people", people)
-            if (place.isNotBlank()) put("place", place)
-        }
 
     private fun seasonJson(request: SeasonRequest) = JSONObject().apply {
         put("action", "season")

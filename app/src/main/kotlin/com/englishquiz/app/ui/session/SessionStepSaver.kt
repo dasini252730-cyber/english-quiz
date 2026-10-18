@@ -24,12 +24,17 @@ internal val SessionStepSaver: Saver<SessionStep, String> = Saver(
     save = { step ->
         when (step) {
             SessionStep.Preparing -> JSONObject().put(KEY_STEP, STEP_PREPARING)
+            SessionStep.Waiting -> JSONObject().put(KEY_STEP, STEP_WAITING)
             is SessionStep.Failed -> JSONObject()
                 .put(KEY_STEP, STEP_FAILED)
                 .put(KEY_MESSAGE, step.message)
 
             is SessionStep.Reading -> JSONObject()
                 .put(KEY_STEP, STEP_READING)
+                .put(KEY_CONTENT, step.content.toResponseJson())
+
+            is SessionStep.Roleplay -> JSONObject()
+                .put(KEY_STEP, STEP_ROLEPLAY)
                 .put(KEY_CONTENT, step.content.toResponseJson())
 
             is SessionStep.Quiz -> JSONObject()
@@ -47,8 +52,10 @@ internal val SessionStepSaver: Saver<SessionStep, String> = Saver(
             val json = JSONObject(saved)
             when (json.getString(KEY_STEP)) {
                 STEP_PREPARING -> SessionStep.Preparing
+                STEP_WAITING -> SessionStep.Waiting
                 STEP_FAILED -> SessionStep.Failed(json.getString(KEY_MESSAGE))
                 STEP_READING -> SessionStep.Reading(json.readContent())
+                STEP_ROLEPLAY -> SessionStep.Roleplay(json.readContent())
                 STEP_QUIZ -> SessionStep.Quiz(
                     content = json.readContent(),
                     base = json.getJSONObject(KEY_SUMMARY).toSummary(),
@@ -95,7 +102,9 @@ private const val KEY_MESSAGE = "message"
 private const val KEY_CONTENT = "content"
 private const val KEY_SUMMARY = "summary"
 private const val STEP_PREPARING = "preparing"
+private const val STEP_WAITING = "waiting"
 private const val STEP_FAILED = "failed"
 private const val STEP_READING = "reading"
+private const val STEP_ROLEPLAY = "roleplay"
 private const val STEP_QUIZ = "quiz"
 private const val STEP_FINISHED = "finished"

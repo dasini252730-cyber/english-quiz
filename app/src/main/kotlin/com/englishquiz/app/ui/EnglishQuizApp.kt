@@ -51,8 +51,8 @@ fun EnglishQuizApp(
     settingsRepository: AppSettingsRepository,
     learningRepository: LearningRepository? = null,
     aiLearningClient: AiLearningClient? = null,
-    /** Called once a session is recorded and the difficulty adjusted: make tomorrow's passages (백로그 025). */
-    prefetchTomorrow: () -> Unit = {},
+    /** Asks the background pipeline to look at a language's seasons (백로그 075): from the first assessment question and from home. */
+    prepareSeason: (Language) -> Unit = {},
     /** Points spent, shields and badges seen (백로그 037~041); null runs home without the game cards. */
     gameProgressRepository: GameProgressRepository? = null,
     /** The story as a season of episodes (백로그 063); null keeps the loose daily chain. */
@@ -83,6 +83,8 @@ fun EnglishQuizApp(
                     onSaveResult = { level ->
                         settingsRepository.saveAssessmentResult(level.storedValue)
                     },
+                    // 백로그 075: the first season is designed while the eight questions are answered.
+                    onStart = { prepareSeason(Language.ENGLISH) },
                 )
             } else if (learningRepository == null) {
                 HomePlaceholder(state.settings)
@@ -93,9 +95,9 @@ fun EnglishQuizApp(
                     settings = state.settings,
                     gameRepository = gameProgressRepository,
                     seasons = seasonCoordinator,
+                    onPrepare = prepareSeason,
                     onSessionRecorded = { mode, language, sessionCompletedAtEpochMillis ->
                         if (mode != null) suggestLevel(learningRepository, settingsRepository, mode, language, sessionCompletedAtEpochMillis)
-                        prefetchTomorrow()
                     },
                     // The learner's own level moves at once (백로그 034); a write that fails leaves
                     // the level where it was, which the next tap can repeat.

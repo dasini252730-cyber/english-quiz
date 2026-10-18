@@ -28,7 +28,7 @@ class MainActivity : ComponentActivity() {
                     settingsRepository = appContainer.appSettingsRepository,
                     learningRepository = appContainer.learningRepository,
                     aiLearningClient = appContainer.aiLearningClient,
-                    prefetchTomorrow = { appContainer.contentPrefetcher?.prefetchTomorrow() },
+                    prepareSeason = { language -> appContainer.seasonPipeline?.ensure(language) },
                     gameProgressRepository = appContainer.gameProgressRepository,
                     seasonCoordinator = appContainer.seasonCoordinator,
                 )

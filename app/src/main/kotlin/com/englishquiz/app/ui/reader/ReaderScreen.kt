@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.data.ai.LearningContent
 import com.englishquiz.app.ui.theme.MongleButton
+import com.englishquiz.app.ui.theme.MongleButtonColors
 import com.englishquiz.app.ui.theme.MongleColor
 import com.englishquiz.app.ui.theme.MongleIconButton
 import com.englishquiz.app.ui.theme.MongleIcons
@@ -46,6 +47,8 @@ fun ReaderScreen(
     onStop: () -> Unit,
     onBack: () -> Unit,
     onQuiz: (() -> Unit)? = null,
+    /** Opens the role-play (백로그 076); shown for a conversation only, beside the quiz button. */
+    onRoleplay: (() -> Unit)? = null,
     meaningState: MeaningUiState? = null,
     onTokenTap: (ReaderToken) -> Unit = {},
     onDismissMeaning: () -> Unit = {},
@@ -145,7 +148,8 @@ fun ReaderScreen(
                 }
             }
         }
-        if (onQuiz != null) {
+        val roleplay = onRoleplay?.takeIf { isConversation }
+        if (onQuiz != null || roleplay != null) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -160,7 +164,8 @@ fun ReaderScreen(
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                MongleButton("다음 단계: 퀴즈", onQuiz)
+                if (roleplay != null) MongleButton("역할극", roleplay, colors = MongleButtonColors.Accent, height = 48.dp)
+                if (onQuiz != null) MongleButton("다음 단계: 퀴즈", onQuiz)
             }
         }
     }

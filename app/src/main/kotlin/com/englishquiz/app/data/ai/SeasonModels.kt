@@ -4,9 +4,9 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /*
- * The season wire shapes (백로그 063): the bible the server designs once, the canon each episode
- * adds to, and the context a story request carries. JSON codecs live here too, because the same
- * shapes are stored in Room and sent to the Edge Function.
+ * The season wire shapes (백로그 063): the bible the server designs once and the canon each episode
+ * adds to. JSON codecs live here too, because the same shapes are stored in Room and sent to the
+ * Edge Function; the episode call's own shapes are in `EpisodeModels.kt` (백로그 075).
  */
 
 /**
@@ -25,9 +25,6 @@ data class SeasonBible(
     val whatIsTrue: List<String> = emptyList(),
     val readerBelieves: List<String> = emptyList(),
 ) {
-    /** The people as the conversation hears of them, in one line. */
-    fun peopleLine(): String = characters.joinToString("; ") { "${it.name} (${it.role})" }
-
     /**
      * The cast as an episode hears of it (백로그 064): the story rules want each person's want,
      * secret and ties, not only a name and a role. The line is kept inside [maxChars] by giving
@@ -144,49 +141,11 @@ data class CanonState(
     }
 }
 
-/** A story request's place in its season: everything the episode brief needs. */
-data class SeasonContext(
-    val title: String,
-    val setting: String,
-    val conflict: String,
-    val characters: String,
-    val episodeNumber: Int,
-    val episodePlan: String,
-    val previousSummary: String,
-    val canon: CanonState,
-    /** The bible's engine and two lists (백로그 065); left out of the request when the bible has none. */
-    val engine: String = "",
-    val whatIsTrue: List<String> = emptyList(),
-    val readerBelieves: List<String> = emptyList(),
-) {
-    fun toJson(): JSONObject = JSONObject()
-        .put("title", title).put("setting", setting).put("conflict", conflict).put("characters", characters)
-        .put("episodeNumber", episodeNumber).put("episodePlan", episodePlan)
-        .put("previousSummary", previousSummary).put("canon", canon.toJson())
-        .apply {
-            if (engine.isNotBlank()) put("engine", engine)
-            if (whatIsTrue.isNotEmpty()) put("whatIsTrue", JSONArray(whatIsTrue.fitted()))
-            if (readerBelieves.isNotEmpty()) put("readerBelieves", JSONArray(readerBelieves.fitted()))
-        }
-
-    /**
-     * The bible keeps its lists whole; the request carries them at the size the server reads them
-     * (its `seasonContext` keeps the same counts), so a long plan cannot push the body past the
-     * server's limit and stop every episode of its season.
-     */
-    private fun List<String>.fitted(): List<String> = take(MAX_LIST_ITEMS).map { it.take(MAX_LIST_ITEM_CHARS) }
-
-    companion object {
-        const val MAX_LIST_ITEMS = 12
-        const val MAX_LIST_ITEM_CHARS = 300
-    }
-}
-
 /** Asks the server to design a new season in [language] (백로그 066). */
 data class SeasonRequest(val difficulty: Int, val seasonNumber: Int, val previousTitles: List<String>, val language: Language = Language.DEFAULT)
 
-private fun JSONArray?.strings(): List<String> =
+internal fun JSONArray?.strings(): List<String> =
     this?.let { array -> (0 until array.length()).map { array.optString(it) }.filter { it.isNotBlank() } } ?: emptyList()
 
-private fun JSONArray?.objects(): List<JSONObject> =
+internal fun JSONArray?.objects(): List<JSONObject> =
     this?.let { array -> (0 until array.length()).mapNotNull { array.optJSONObject(it) } } ?: emptyList()

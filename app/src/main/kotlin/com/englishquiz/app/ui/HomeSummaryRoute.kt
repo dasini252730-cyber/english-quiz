@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.produceState
@@ -21,6 +22,7 @@ import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.data.preferences.GameProgress
 import com.englishquiz.app.data.preferences.GameProgressRepository
 import com.englishquiz.app.data.repository.LearningRepository
+import com.englishquiz.app.data.season.SeasonCoordinator
 import com.englishquiz.app.domain.game.GameStatsPolicy
 import com.englishquiz.app.ui.theme.MongleButton
 import com.englishquiz.app.ui.theme.MongleColor
@@ -50,17 +52,31 @@ internal fun LearningHomeSummary(
     levels: Map<ContentMode, HomeLevel>,
     onLevelChange: (ContentMode, Int) -> Unit,
     onSuggestionAnswer: (ContentMode, accepted: Boolean) -> Unit,
-    /** One line under the story's level after a change (백로그 063); null shows none. */
-    storyLevelNote: String? = null,
+    /** One line under a mode's level after a change (백로그 063/075); absent shows none. */
+    levelNotes: Map<ContentMode, String> = emptyMap(),
     /** The language home works in (백로그 066): its expressions are counted and queued; the streak is shared. */
     language: Language = Language.DEFAULT,
     onLanguageChange: (Language) -> Unit = {},
     /** Online voices for speech (백로그 073). */
     networkVoices: Boolean = false,
     onNetworkVoicesChange: (Boolean) -> Unit = {},
+    /** The seasons (백로그 075): home says "준비 중" while no episode waits, and asks the pipeline on every open. */
+    seasons: SeasonCoordinator? = null,
+    onPrepare: (Language) -> Unit = {},
     onNavigate: (HomeDestination) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    LaunchedEffect(language) { onPrepare(language) }
+    val unread by produceState<Int?>(null, seasons, language) {
+        if (seasons == null) return@produceState
+        try {
+            seasons.observeUnreadCount(language).collect { value = it }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            value = null
+        }
+    }
     var retry by remember { mutableIntStateOf(0) }
     val result by produceState<Result<HomeSummary>?>(null, repository, gameRepository, retry, language) {
         value = null
@@ -107,7 +123,7 @@ internal fun LearningHomeSummary(
             MongleButton("다시 시도", { retry++ })
         }
         else -> HomeScreen(
-            summary = summary.copy(levels = levels, storyLevelNote = storyLevelNote),
+            summary = summary.copy(levels = levels, levelNotes = levelNotes, episodeNote = if (unread == 0) EPISODE_PREPARING_NOTE else null),
             onConversationClick = { onNavigate(HomeDestination.CONVERSATION) },
             onStoryClick = { onNavigate(HomeDestination.STORY) },
             onReviewClick = { onNavigate(HomeDestination.REVIEW) },
@@ -128,6 +144,9 @@ internal fun LearningHomeSummary(
         )
     }
 }
+
+/** Shown under both cards while no episode waits (백로그 075); the pipeline is making the next one. */
+internal const val EPISODE_PREPARING_NOTE = "다음 회차를 준비하고 있어요"
 
 internal fun todayIso(): String = Instant.ofEpochMilli(System.currentTimeMillis())
     .atZone(ZoneId.systemDefault())

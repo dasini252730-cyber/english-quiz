@@ -12,6 +12,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -37,7 +38,10 @@ import kotlinx.coroutines.launch
 fun AssessmentScreen(
     onSaveResult: suspend (AssessmentLevel) -> Unit,
     modifier: Modifier = Modifier,
+    /** Called once when the questions open (백로그 075): the first season starts in the background meanwhile. */
+    onStart: () -> Unit = {},
 ) {
+    LaunchedEffect(Unit) { onStart() }
     var questionIndex by rememberSaveable { mutableIntStateOf(0) }
     var answers by rememberSaveable { mutableStateOf(List(Assessment.questions.size) { -1 }) }
     var isSaving by remember { mutableStateOf(false) }

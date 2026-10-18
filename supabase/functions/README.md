@@ -18,7 +18,22 @@ supabase secrets set ANTHROPIC_API_KEY=<your-key> ANTHROPIC_MODEL=claude-sonnet-
 {"action":"content","mode":"conversation","difficulty":2,"reviewExpressions":["pull it off"]}
 ```
 
-`mode` is `conversation` or `story`; `difficulty` is 1, 2, or 3; review expressions are optional and capped at 12.
+`mode` is `conversation` or `story`; `difficulty` is 1 to 5; review expressions are optional and capped at 12. Since backlog 075 the app no longer uses this call inside a season; it stays for older APKs and for a build without seasons.
+
+### Episodes (backlog 075)
+
+One call makes one episode: its story and, in the same reply, the conversation set inside it.
+
+```json
+{"action":"episodes","language":"en","storyDifficulty":2,"conversationDifficulty":3,"reviewExpressions":["pull it off"],
+ "season":{"title":"…","engine":"A. Clever mystery","setting":"…","conflict":"…","characters":"Name (role; wants: …; hides: …; ties); …",
+           "whatIsTrue":["…"],"readerBelieves":["…"],"plans":[{"number":1,"title":"…","plan":"…"}]},
+ "episodes":[3],"previousEpisodes":[{"number":1,"title":"…","text":"Narrator: …\nMina: …"}],"canon":{"events":[],"facts":[],"relationships":[],"openQuestions":[],"carryForward":[]}}
+```
+
+The reply is `{"data":{"episodes":[{"number":3,"story":{…},"conversation":{…}}]}}`. The story is the episode: a story that breaks the passage contract fails the call (502 with `check`). The conversation is kept only when it passes the same contract and every speaker is one of the story's people or the season's cast; otherwise `conversation` is `null` and `conversationCheck` names what it broke, and the app asks again with `"story":{"title":"…","segments":[…]}` in the request, which returns only the conversation. `episodes` may list several numbers; the call makes the first `EPISODES_PER_CALL` (1) and the app sends the rest later.
+
+Budget (backlog 074 measurements on the deployed function, `episodes.ts`): output runs at about 90 tokens per second and the longest passage was 5,353 tokens, so an episode call allows 11,000 output tokens (6,000 for a conversation alone) and 130 s, under the hosting wall clock of 150 s on the free plan. The system prompt is three blocks: the story rules, the conversation rules and the two level rubrics (cached), the season brief (cached), then this episode with the earlier episodes' full text; the user message carries only the episode numbers, the review phrases and the 23 conversation situations. The season design (`action: "season"`) runs on `ANTHROPIC_SEASON_MODEL` when set (backlog 075 sets it to `claude-opus-5`, with `effort: "low"` and 16,000 tokens so the thinking fits), under the same 130 s.
 
 ```json
 {"action":"meaning","expression":"pull it off","context":"We can pull it off together."}
@@ -28,7 +43,13 @@ Successful responses use `{ "data": ... }`. Failures use `{ "error": { "code": "
 
 ## Local checks
 
-The story episode and season-plan prompts carry the learner's "Story Generation Rules (v2)" from `ai-learning/story-rules.ts` (backlog 064); the passage contract, level rubric, schemas and validators stay in `index.ts`.
+The story episode and season-plan prompts carry the learner's "Story Rules (v3)" from `ai-learning/story-rules.ts` (backlog 065) and the episode call adds the conversation rules from `conversation-rules.ts` (backlog 075); the passage contract, level rubric, schemas and validators stay in `index.ts`, the episode call's own pieces in `episodes.ts`.
+
+To see the exact request an episode call sends, without spending anything:
+
+```powershell
+node --experimental-strip-types supabase/functions/ai-learning/tools/dump-episode.mjs <out dir> [episode] [language]
+```
 
 Run the isolated handler tests with Node 24 or newer:
 

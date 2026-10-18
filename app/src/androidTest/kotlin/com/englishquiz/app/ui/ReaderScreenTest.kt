@@ -49,6 +49,32 @@ class ReaderScreenTest {
         assertEquals(1, quizCount)
     }
 
+    @Test fun theRoleplayButtonBelongsToAConversationOnly() {
+        // 백로그 076: the same callback is offered for both modes; only the conversation shows it.
+        var roleplayCount = 0
+        compose.setContent {
+            EnglishQuizTheme {
+                ReaderScreen(
+                    LearningContent("A cafe", ContentMode.CONVERSATION, segments, emptyList()), SpeechState(ready = true),
+                    onPlay = {}, onStop = {}, onBack = {}, onQuiz = {}, onRoleplay = { roleplayCount++ },
+                )
+            }
+        }
+        compose.onNodeWithText("역할극").performClick()
+        compose.onNodeWithText("다음 단계: 퀴즈").assertIsDisplayed()
+        assertEquals(1, roleplayCount)
+    }
+
+    @Test fun aStoryKeepsOnlyTheQuizButton() {
+        compose.setContent {
+            EnglishQuizTheme {
+                ReaderScreen(storyContent, SpeechState(ready = true), onPlay = {}, onStop = {}, onBack = {}, onQuiz = {}, onRoleplay = {})
+            }
+        }
+        compose.onNodeWithText("역할극").assertDoesNotExist()
+        compose.onNodeWithText("다음 단계: 퀴즈").assertIsDisplayed()
+    }
+
     @Test fun storyRemainsReadableWhenSpeechIsUnavailable() {
         compose.setContent {
             EnglishQuizTheme {

@@ -115,10 +115,6 @@ class LearningRepositoryLanguageTest {
         assertNull(repository.findDailyContent(Language.CHINESE, DATE, ContentMode.STORY))
         assertEquals(listOf("A Saturday Plan" to "en"), repository.listLibrary(Language.ENGLISH).map { it.title to it.language })
         assertEquals(listOf("周六的计划" to "zh"), repository.listLibrary(Language.CHINESE).map { it.title to it.language })
-        // The previous story a Chinese episode hears of is Chinese too (백로그 054).
-        repository.saveDailyContent("2026-10-17", english.copy(mode = ContentMode.STORY, title = "Ep. 1", synopsis = "Alex planned."), 90)
-        assertEquals("Ep. 1", repository.findPreviousSummary(Language.ENGLISH, ContentMode.STORY, DATE)?.title)
-        assertNull(repository.findPreviousSummary(Language.CHINESE, ContentMode.STORY, DATE))
 
         // A level window reads its language's sessions only; the streak reads them all.
         repository.recordCompletedSession(session(completedAt = 300, questions = 3, language = Language.CHINESE))

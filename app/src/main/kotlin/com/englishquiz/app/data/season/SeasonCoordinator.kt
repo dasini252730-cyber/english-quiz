@@ -1,146 +1,84 @@
 package com.englishquiz.app.data.season
 
 import androidx.room.withTransaction
-import com.englishquiz.app.data.ai.CanonState
-import com.englishquiz.app.data.ai.ContentGenerationRequest
 import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.data.ai.LearningContent
-import com.englishquiz.app.data.ai.PassageSummary
-import com.englishquiz.app.data.ai.SeasonBible
-import com.englishquiz.app.data.ai.SeasonContext
-import com.englishquiz.app.data.ai.SeasonRequest
 import com.englishquiz.app.data.ai.parseContentResponse
-import com.englishquiz.app.data.ai.toResponseJson
-import com.englishquiz.app.data.local.SeasonEntity
 import com.englishquiz.app.data.local.SeasonEpisodeEntity
 import com.englishquiz.app.data.repository.LearningRepository
 import com.englishquiz.app.data.repository.findDailyContent
 import com.englishquiz.app.data.repository.saveDailyContent
 import com.englishquiz.app.domain.season.SeasonPolicy
+import kotlinx.coroutines.flow.Flow
 import org.json.JSONObject
 
 /**
- * The story as a season of seven episodes (백로그 063). Episodes are made in order and identified
- * by number; the day the learner opens one is recorded on it. Opening the story on a date reads
- * the oldest episode not yet read, or makes the next one; a passage made ahead of time therefore
- * waits for the learner instead of being skipped. A read episode is also stored as that date's
- * passage, so the library, the result screen and the same-day re-entry work as before.
+ * The reading side of the seasons (백로그 063/075). An episode holds a story and the conversation set
+ * inside it, made together by [SeasonPipeline] ahead of time; nothing is generated here. Opening
+ * either passage on a date consumes the day's episode: today's if one was already opened, else the
+ * oldest unread. Both passages of that episode are then the day's, whichever was opened first, and
+ * each is also stored as that date's passage so the library, the result screen and the same-day
+ * re-entry work as before. When no episode is ready the caller gets null and shows "준비 중"; the
+ * pipeline is asked to look at what to make through [requestWork], as it is after every read.
  *
- * Each language runs its own seasons (백로그 066): numbering, bibles, episodes and the unread
- * queue never cross; only the pipeline is shared.
+ * Each language runs its own seasons (백로그 066): numbering, bibles, episodes and the unread queue
+ * never cross.
  */
 class SeasonCoordinator(
     private val repository: LearningRepository,
-    private val generateContent: suspend (ContentGenerationRequest) -> LearningContent,
-    private val generateSeason: suspend (SeasonRequest) -> SeasonBible,
+    /** Asked to look at the language's seasons: after an episode is consumed, and when none was ready. */
+    private val requestWork: (Language) -> Unit = {},
 ) {
     private val dao get() = repository.database.seasonDao()
 
-    /** The story to read on [learningDate]: today's if already opened, else the oldest unread, else a new episode. */
-    suspend fun storyFor(language: Language, learningDate: String, difficulty: Int, reviewExpressions: List<String>, nowEpochMillis: Long): LearningContent {
-        repository.findDailyContent(language, learningDate, ContentMode.STORY)?.let { return it }
-        val episode = dao.oldestUnread(language.wireValue) ?: generateNext(language, difficulty, reviewExpressions, nowEpochMillis)
-        val content = parse(episode)
-        // One transaction: an episode is never consumed without becoming the day's passage.
+    /**
+     * The passage of [mode] to read on [learningDate]: the one stored for the day, else the day's
+     * episode's; null when no episode is ready, or when the episode's conversation is still to come.
+     */
+    suspend fun passageFor(language: Language, mode: ContentMode, learningDate: String, nowEpochMillis: Long): LearningContent? {
+        repository.findDailyContent(language, learningDate, mode)?.let { return it }
+        val episode = dao.episodeReadOn(language.wireValue, learningDate) ?: dao.oldestUnread(language.wireValue)
+        val passages = episode?.let { ContentMode.entries.mapNotNull { mode -> passageOf(it, mode) } }.orEmpty()
+        val content = passages.firstOrNull { it.mode == mode }
+        if (episode == null || content == null) {
+            requestWork(language)
+            return null
+        }
+        // One transaction: an episode is never consumed without both its passages becoming the day's,
+        // so the story of a day on which only the conversation was opened is still in the library.
         repository.database.withTransaction {
             dao.markRead(episode.id, learningDate)
-            repository.saveDailyContent(learningDate, content, nowEpochMillis)
+            passages.forEach { repository.saveDailyContent(learningDate, it, nowEpochMillis) }
         }
+        requestWork(language)
         return content
     }
 
-    /** Makes the next episode ahead of time. False when one already waits unread: nothing is made. */
-    suspend fun prefetchNext(language: Language, difficulty: Int, reviewExpressions: List<String>, nowEpochMillis: Long): Boolean {
-        if (dao.countUnread(language.wireValue) > 0) return false
-        generateNext(language, difficulty, reviewExpressions, nowEpochMillis)
-        return true
-    }
+    /** Asks the pipeline to look at [language] again; the waiting screen does so while it waits (백로그 075). */
+    fun prepare(language: Language) = requestWork(language)
 
     suspend fun hasUnread(language: Language): Boolean = dao.countUnread(language.wireValue) > 0
 
-    /** What a conversation on [learningDate] hears of the story: the episode read that day, with its people and place. */
-    suspend fun companionFor(language: Language, learningDate: String): PassageSummary? =
-        dao.episodeReadOn(language.wireValue, learningDate)?.let { summaryOf(it) }
+    /** How many episodes wait unread; home shows "준비 중" at zero (백로그 075). */
+    fun observeUnreadCount(language: Language): Flow<Int> = dao.observeUnreadCount(language.wireValue)
 
-    /** What tomorrow's conversation hears: the episode the learner will open next. */
-    suspend fun companionForNextRead(language: Language): PassageSummary? = dao.oldestUnread(language.wireValue)?.let { summaryOf(it) }
+    /** Changes when an episode arrives or gets its conversation, so a waiting screen can try again. */
+    fun observeEpisodeState(language: Language): Flow<Int> = dao.observeEpisodeState(language.wireValue)
 
-    /** "시즌 2 · 3/7" for the episode read on [learningDate], or null when that day's story is not an episode. */
+    /** "시즌 2 · 3/7" for the episode read on [learningDate], or null when that day's passages are not an episode's. */
     suspend fun labelFor(language: Language, learningDate: String): String? {
         val episode = dao.episodeReadOn(language.wireValue, learningDate) ?: return null
         val season = dao.findSeason(episode.seasonId) ?: return null
         return SeasonPolicy.label(season.number, episode.number)
     }
 
-    private suspend fun generateNext(language: Language, difficulty: Int, reviewExpressions: List<String>, nowEpochMillis: Long, attempt: Int = 1): SeasonEpisodeEntity {
-        val latest = dao.latestSeason(language.wireValue)
-        val next = SeasonPolicy.nextEpisode(latest?.number, latest?.let { dao.countEpisodes(it.id) } ?: 0)
-        val season = if (next.startsNewSeason || latest == null) createSeason(language, next.seasonNumber, difficulty, nowEpochMillis) else latest
-        val bible = SeasonBible.fromJson(JSONObject(season.bibleJson))
-        val canon = CanonState.fromJson(JSONObject(season.canonJson))
-        val plan = bible.episodes.firstOrNull { it.number == next.episodeNumber }
-        val previous = if (next.episodeNumber > 1) dao.findEpisode(season.id, next.episodeNumber - 1)?.synopsis.orEmpty() else ""
-        val content = generateContent(
-            ContentGenerationRequest(
-                mode = ContentMode.STORY,
-                difficulty = difficulty,
-                reviewExpressions = reviewExpressions,
-                language = language,
-                season = SeasonContext(
-                    title = bible.title, setting = bible.setting, conflict = bible.conflict, characters = bible.castLine(MAX_CHARACTERS_CHARS),
-                    episodeNumber = next.episodeNumber, episodePlan = plan?.plan ?: "Move the season forward.",
-                    previousSummary = previous, canon = canon,
-                    engine = bible.engine, whatIsTrue = bible.whatIsTrue, readerBelieves = bible.readerBelieves,
-                ),
-            ),
-        )
-        val delta = content.canon ?: CanonState()
-        val episode = SeasonEpisodeEntity(
-            seasonId = season.id, number = next.episodeNumber, contentJson = content.toResponseJson().toString(),
-            synopsis = content.synopsis, canonJson = delta.toJson().toString(), difficulty = difficulty,
-            generatedAtEpochMillis = nowEpochMillis, readDate = null, language = language.wireValue,
-        )
-        val id = dao.insertEpisode(episode)
-        if (id == -1L) {
-            // Another generation of the same episode landed first (prefetch and a tap at once): the
-            // stored one is the episode and this one is let go. If it was already read in the
-            // meantime, the next number is the one to make.
-            val stored = checkNotNull(dao.findEpisode(season.id, next.episodeNumber))
-            if (stored.readDate == null || attempt >= MAX_RESERVATION_ATTEMPTS) return stored
-            return generateNext(language, difficulty, reviewExpressions, nowEpochMillis, attempt + 1)
+    /** The story is always there; the conversation is null until the pipeline has made it. */
+    private fun passageOf(episode: SeasonEpisodeEntity, mode: ContentMode): LearningContent? {
+        val json = when (mode) {
+            ContentMode.STORY -> episode.contentJson
+            ContentMode.CONVERSATION -> episode.conversationJson ?: return null
         }
-        dao.updateSeasonCanon(season.id, canon.merged(delta).toJson().toString())
-        return episode.copy(id = id)
-    }
-
-    private suspend fun createSeason(language: Language, number: Int, difficulty: Int, nowEpochMillis: Long): SeasonEntity {
-        val bible = generateSeason(SeasonRequest(difficulty, number, dao.listSeasonTitles(language.wireValue), language))
-        val season = SeasonEntity(
-            number = number, title = bible.title, bibleJson = bible.toJson().toString(),
-            canonJson = CanonState(openQuestions = bible.openQuestions).toJson().toString(),
-            difficulty = difficulty, createdAtEpochMillis = nowEpochMillis, language = language.wireValue,
-        )
-        return try {
-            season.copy(id = dao.insertSeason(season))
-        } catch (error: Exception) {
-            // The same season number was designed concurrently: keep the one that landed.
-            dao.latestSeason(language.wireValue)?.takeIf { it.number == number } ?: throw error
-        }
-    }
-
-    private companion object {
-        const val MAX_RESERVATION_ATTEMPTS = 3
-        /** What the server keeps of the cast line (백로그 064); the request stays well inside the server's 32 KB body limit. */
-        const val MAX_CHARACTERS_CHARS = 2_400
-    }
-
-    private fun parse(episode: SeasonEpisodeEntity): LearningContent =
-        parseContentResponse(JSONObject(episode.contentJson), ContentMode.STORY, Language.fromWire(episode.language))
-
-    private suspend fun summaryOf(episode: SeasonEpisodeEntity): PassageSummary? {
-        val base = runCatching { parse(episode) }.getOrNull()?.summary() ?: return null
-        val bible = dao.findSeason(episode.seasonId)?.let { runCatching { SeasonBible.fromJson(JSONObject(it.bibleJson)) }.getOrNull() }
-        return base.copy(people = bible?.peopleLine().orEmpty(), place = bible?.setting.orEmpty())
+        return parseContentResponse(JSONObject(json), mode, Language.fromWire(episode.language))
     }
 }

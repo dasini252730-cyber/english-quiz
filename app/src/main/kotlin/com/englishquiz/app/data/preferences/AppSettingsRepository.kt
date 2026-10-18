@@ -14,6 +14,7 @@ import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.domain.difficulty.DifficultyPolicy
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.appSettingsDataStore by preferencesDataStore(name = "app_settings")
@@ -55,6 +56,9 @@ class AppSettingsRepository(private val dataStore: DataStore<Preferences>) {
     constructor(context: Context) : this(context.appSettingsDataStore)
 
     val settings: Flow<AppSettings> = dataStore.data.map(::toAppSettings)
+
+    /** The stored level of [mode] in [language], whichever language home shows (백로그 075: the pipeline generates for both). */
+    suspend fun levelFor(language: Language, mode: ContentMode): Int? = dataStore.data.first().readLevel(language, mode)?.level
 
     /** The diagnosis sets both English modes to the same starting level and restarts their windows. */
     suspend fun saveAssessmentResult(assessmentLevel: Int) {

@@ -58,6 +58,15 @@ class SessionStepSaverTest {
     }
 
     @Test
+    fun theRoleplayStepKeepsItsPassage() {
+        // 백로그 076: a rotation mid-play must not send the learner back to the Reader.
+        val restored = roundTrip(SessionStep.Roleplay(content)) as SessionStep.Roleplay
+
+        assertEquals(content.segments, restored.content.segments)
+        assertEquals(content.expressions, restored.content.expressions)
+    }
+
+    @Test
     fun theQuizStepKeepsBothItsPassageAndItsRunningSummary() {
         val restored = roundTrip(SessionStep.Quiz(content, summary)) as SessionStep.Quiz
 

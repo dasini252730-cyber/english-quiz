@@ -45,8 +45,10 @@ data class HomeSummary(
     val game: GameStats? = null,
     /** What waits in each queue (백로그 055/060); null before the box is known. */
     val queue: ReviewQueue? = null,
-    /** "다음 회차부터 적용돼요" after a story level change while an episode already waits (백로그 063). */
-    val storyLevelNote: String? = null,
+    /** "다음 회차부터 적용돼요" after a level change while an episode already waits (백로그 063/075), per mode. */
+    val levelNotes: Map<ContentMode, String> = emptyMap(),
+    /** "다음 회차를 준비하고 있어요" under both cards while no episode waits (백로그 075). */
+    val episodeNote: String? = null,
 )
 
 @Composable
@@ -116,6 +118,7 @@ fun HomeScreen(
                 onClick = onConversationClick,
                 onLevelChange = { onLevelChange(ContentMode.CONVERSATION, it) },
                 onSuggestionAnswer = { onSuggestionAnswer(ContentMode.CONVERSATION, it) },
+                note = summary.levelNotes[ContentMode.CONVERSATION] ?: summary.episodeNote,
             )
             ModeCard(
                 title = "Story",
@@ -128,7 +131,7 @@ fun HomeScreen(
                 onClick = onStoryClick,
                 onLevelChange = { onLevelChange(ContentMode.STORY, it) },
                 onSuggestionAnswer = { onSuggestionAnswer(ContentMode.STORY, it) },
-                note = summary.storyLevelNote,
+                note = summary.levelNotes[ContentMode.STORY] ?: summary.episodeNote,
             )
         }
         summary.game?.let { HomeBossCard(it.boss, onBossClick) }

@@ -68,21 +68,23 @@ internal fun LearningHome(
     onLanguageChange: (Language) -> Unit = {},
     /** The online-voice switch (백로그 073). */
     onNetworkVoicesChange: (Boolean) -> Unit = {},
+    /** Asks the pipeline to look at a language's seasons (백로그 075); home does so on every open. */
+    onPrepare: (Language) -> Unit = {},
 ) {
     val language = settings.language
     val networkVoices = settings.allowNetworkVoices
     var destinationName by rememberSaveable { mutableStateOf(HomeDestination.HOME.name) }
-    // 백로그 063: a story level change reaches the episode after the one already made.
-    var storyLevelNote by remember { mutableStateOf<String?>(null) }
+    // 백로그 063/075: a level change reaches the episodes made after it; both passages of an episode are made ahead.
+    var levelNotes by remember { mutableStateOf<Map<ContentMode, String>>(emptyMap()) }
     val noteScope = rememberCoroutineScope()
     val changeLevel: (ContentMode, Int) -> Unit = { mode, level ->
         onLevelChange(mode, level)
-        if (mode == ContentMode.STORY && seasons != null) {
-            noteScope.launch { storyLevelNote = if (seasons.hasUnread(language)) "다음 회차부터 적용돼요" else null }
+        if (seasons != null) {
+            noteScope.launch { levelNotes = if (seasons.hasUnread(language)) levelNotes + (mode to "다음 회차부터 적용돼요") else levelNotes - mode }
         }
     }
-    // A note about one language's story has nothing to say under the other's level (백로그 066).
-    LaunchedEffect(language) { storyLevelNote = null }
+    // A note about one language's episodes has nothing to say under the other's level (백로그 066).
+    LaunchedEffect(language) { levelNotes = emptyMap() }
     val destination = HomeDestination.valueOf(destinationName)
     val goHome = { destinationName = HomeDestination.HOME.name }
     // The library passage chosen for a re-read, as "<learningDate>|<mode>" so it survives recreation.
@@ -96,7 +98,9 @@ internal fun LearningHome(
             gameRepository = gameRepository,
             levels = settings.levels.mapValues { HomeLevel(it.value.level, it.value.suggestedLevel) },
             onLevelChange = changeLevel,
-            storyLevelNote = storyLevelNote,
+            levelNotes = levelNotes,
+            seasons = seasons,
+            onPrepare = onPrepare,
             onSuggestionAnswer = onSuggestionAnswer,
             language = language,
             onLanguageChange = onLanguageChange,
@@ -166,6 +170,7 @@ internal fun LearningHome(
                 seasons = seasons,
                 language = language,
                 allowNetworkVoices = networkVoices,
+                onLibrary = { destinationName = HomeDestination.LIBRARY.name },
             )
         }
     }
@@ -185,6 +190,7 @@ private fun LearningSession(
     seasons: SeasonCoordinator? = null,
     language: Language = Language.DEFAULT,
     allowNetworkVoices: Boolean = false,
+    onLibrary: (() -> Unit)? = null,
 ) {
     if (aiClient == null) {
         // No endpoint was configured for this build, so say so instead of failing a call.
@@ -209,5 +215,6 @@ private fun LearningSession(
         seasons = seasons,
         language = language,
         allowNetworkVoices = allowNetworkVoices,
+        onLibrary = onLibrary,
     )
 }
