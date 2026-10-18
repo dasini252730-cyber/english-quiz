@@ -20,6 +20,12 @@ internal interface SpeechEngine {
     /** The installed voices of the language given to [setLanguage], for [SpeakerVoices]. Empty when the engine has none. */
     val voices: List<VoiceOption>
 
+    /** Every voice the engine has, whatever its language, for the one-time inventory log (백로그 073). */
+    val allVoices: List<VoiceOption>
+
+    /** The voice the engine will actually use next, as "name@locale", or null when it cannot say (백로그 073). */
+    val appliedVoice: String?
+
     fun setLanguage(locale: Locale): Int
     fun setOnUtteranceProgressListener(listener: UtteranceProgressListener)
 
@@ -29,6 +35,9 @@ internal interface SpeechEngine {
      */
     fun setVoice(name: String?): Int
     fun setPitch(pitch: Float): Int
+
+    /** Mirrors [TextToSpeech.setSpeechRate]; 1 is the engine's own pace (백로그 073). */
+    fun setSpeechRate(rate: Float): Int
 
     /** Mirrors [TextToSpeech.speak]; [queueMode] is [TextToSpeech.QUEUE_FLUSH] or `QUEUE_ADD`. */
     fun speak(text: String, queueMode: Int, utteranceId: String): Int
@@ -82,7 +91,15 @@ internal class AndroidSpeechEngine(
     override val maxInputLength: Int get() = TextToSpeech.getMaxSpeechInputLength()
 
     override val voices: List<VoiceOption>
-        get() = languageVoices().values.map { VoiceOption(it.name, it.isNetworkConnectionRequired, it.quality) }
+        get() = languageVoices().values.map { it.toOption() }
+
+    override val allVoices: List<VoiceOption>
+        get() = runCatching { engine.voices.orEmpty() }.getOrDefault(emptySet()).map { it.toOption() }
+
+    override val appliedVoice: String?
+        get() = runCatching { engine.voice }.getOrNull()?.let { "${it.name}@${it.locale}" }
+
+    private fun Voice.toOption() = VoiceOption(name, isNetworkConnectionRequired, quality, locale.toString())
 
     override fun setLanguage(locale: Locale): Int {
         if (locale != this.locale) cachedVoices = emptyMap()
@@ -102,6 +119,8 @@ internal class AndroidSpeechEngine(
     }
 
     override fun setPitch(pitch: Float): Int = engine.setPitch(pitch)
+
+    override fun setSpeechRate(rate: Float): Int = engine.setSpeechRate(rate)
 
     /** The voice the engine will use next; read by the device test that proves [setVoice]'s contract. */
     internal val currentVoiceName: String? get() = runCatching { engine.voice?.name }.getOrNull()

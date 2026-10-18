@@ -70,6 +70,8 @@ fun QuizRoute(
      * it first (백로그 048 budget intact).
      */
     mode: QuizMode = QuizMode.DAILY,
+    /** Online voices for the learn card's pronunciation (백로그 073). */
+    allowNetworkVoices: Boolean = false,
 ) {
     val practice = mode == QuizMode.PRACTICE
     val scope = rememberCoroutineScope()
@@ -94,7 +96,7 @@ fun QuizRoute(
     var growth by remember { mutableStateOf<GrowthChange?>(null) }
     var hint by remember { mutableStateOf<String?>(null) }
     val wrong = remember { mutableListOf<QuizQuestion>() }
-    val speech = rememberQuizSpeech(language)
+    val speech = rememberQuizSpeech(language, allowNetworkVoices)
     val speechState by speech.state.collectAsState()
 
     fun finish() {

@@ -66,8 +66,11 @@ internal fun LearningHome(
     seasons: SeasonCoordinator? = null,
     /** English / 中文 chosen on home (백로그 066); the settings already carry that language's levels. */
     onLanguageChange: (Language) -> Unit = {},
+    /** The online-voice switch (백로그 073). */
+    onNetworkVoicesChange: (Boolean) -> Unit = {},
 ) {
     val language = settings.language
+    val networkVoices = settings.allowNetworkVoices
     var destinationName by rememberSaveable { mutableStateOf(HomeDestination.HOME.name) }
     // 백로그 063: a story level change reaches the episode after the one already made.
     var storyLevelNote by remember { mutableStateOf<String?>(null) }
@@ -97,8 +100,10 @@ internal fun LearningHome(
             onSuggestionAnswer = onSuggestionAnswer,
             language = language,
             onLanguageChange = onLanguageChange,
+            networkVoices = networkVoices,
+            onNetworkVoicesChange = onNetworkVoicesChange,
         ) { destinationName = it.name }
-        HomeDestination.REVIEW -> ReviewRoute(repository, goHome, language = language) { ids ->
+        HomeDestination.REVIEW -> ReviewRoute(repository, goHome, language = language, allowNetworkVoices = networkVoices) { ids ->
             reviewQuizIds = ids.joinToString(",")
             destinationName = HomeDestination.REVIEW_QUIZ.name
         }
@@ -107,6 +112,7 @@ internal fun LearningHome(
             expressionIds = reviewQuizIds.split(",").mapNotNull { it.toLongOrNull() }.toSet(),
             onDone = { destinationName = HomeDestination.REVIEW.name },
             language = language,
+            allowNetworkVoices = networkVoices,
         )
         HomeDestination.BADGES -> if (gameRepository != null) {
             BadgeRoute(repository, gameRepository, goHome, ::todayIso)
@@ -114,7 +120,7 @@ internal fun LearningHome(
             LaunchedEffect(Unit) { goHome() }
         }
         // A boss session is recorded like any other but drawn from no mode, so no level suggestion.
-        HomeDestination.BOSS -> BossRoute(repository, gameRepository, goHome, onSessionRecorded = { onSessionRecorded(null, language, it) }, language = language)
+        HomeDestination.BOSS -> BossRoute(repository, gameRepository, goHome, onSessionRecorded = { onSessionRecorded(null, language, it) }, language = language, allowNetworkVoices = networkVoices)
         HomeDestination.LIBRARY -> LibraryRoute(
             repository = repository,
             onOpen = { item ->
@@ -141,6 +147,7 @@ internal fun LearningHome(
                 initialContent = content,
                 gameRepository = gameRepository,
                 language = language,
+                allowNetworkVoices = networkVoices,
             )
         }
         // Keyed on the language (백로그 066): a tap that lands before the stored switch has been read
@@ -158,6 +165,7 @@ internal fun LearningHome(
                 gameRepository = gameRepository,
                 seasons = seasons,
                 language = language,
+                allowNetworkVoices = networkVoices,
             )
         }
     }
@@ -176,6 +184,7 @@ private fun LearningSession(
     gameRepository: GameProgressRepository? = null,
     seasons: SeasonCoordinator? = null,
     language: Language = Language.DEFAULT,
+    allowNetworkVoices: Boolean = false,
 ) {
     if (aiClient == null) {
         // No endpoint was configured for this build, so say so instead of failing a call.
@@ -199,5 +208,6 @@ private fun LearningSession(
         gameRepository = gameRepository,
         seasons = seasons,
         language = language,
+        allowNetworkVoices = allowNetworkVoices,
     )
 }

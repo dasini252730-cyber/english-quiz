@@ -65,6 +65,9 @@ fun HomeScreen(
     /** The language home works in (백로그 066) and the switch between the two. */
     language: Language = Language.DEFAULT,
     onLanguageChange: (Language) -> Unit = {},
+    /** Online voices for speech (백로그 073); off by default. */
+    networkVoices: Boolean = false,
+    onNetworkVoicesChange: (Boolean) -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -132,6 +135,7 @@ fun HomeScreen(
         EntryRow(icon = MongleIcons.Cards, label = "복습함", onClick = onReviewClick)
         // 백로그 026: a passage read again weeks later is a review that costs no generation.
         EntryRow(icon = MongleIcons.Book, label = "지난 이야기 다시 읽기", onClick = onLibraryClick)
+        HomeNetworkVoiceToggle(networkVoices, onNetworkVoicesChange)
         summary.game?.let { game ->
             EntryRow(
                 icon = MongleIcons.Star,

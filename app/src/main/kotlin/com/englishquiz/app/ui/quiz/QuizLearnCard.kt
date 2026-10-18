@@ -71,10 +71,10 @@ internal fun QuizLearnCard(
 
 /** A speech engine for the quiz, stopped when the screen stops and closed when it leaves. */
 @Composable
-internal fun rememberQuizSpeech(language: Language = Language.DEFAULT): ReaderSpeech {
+internal fun rememberQuizSpeech(language: Language = Language.DEFAULT, allowNetworkVoices: Boolean = false): ReaderSpeech {
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
-    val speech = remember(context, owner, language) { ReaderSpeech(context, language) }
+    val speech = remember(context, owner, language, allowNetworkVoices) { ReaderSpeech(context, language, allowNetworkVoices) }
     DisposableEffect(speech, owner) {
         val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_STOP) speech.stop() }
         owner.lifecycle.addObserver(observer)

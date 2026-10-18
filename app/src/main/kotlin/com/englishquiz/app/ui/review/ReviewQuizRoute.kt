@@ -42,6 +42,7 @@ fun ReviewQuizRoute(
     expressionIds: Set<Long>,
     onDone: () -> Unit,
     language: Language = Language.DEFAULT,
+    allowNetworkVoices: Boolean = false,
 ) {
     var result by rememberSaveable { mutableStateOf<String?>(null) }
     val finished = result
@@ -56,6 +57,7 @@ fun ReviewQuizRoute(
             maxQuestions = PRACTICE_MAX_QUESTIONS,
             mode = QuizMode.PRACTICE,
             language = language,
+            allowNetworkVoices = allowNetworkVoices,
         )
     } else {
         val (correct, total) = finished.split("/").map { it.toIntOrNull() ?: 0 }

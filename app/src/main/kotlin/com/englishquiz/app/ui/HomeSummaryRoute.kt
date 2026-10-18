@@ -55,6 +55,9 @@ internal fun LearningHomeSummary(
     /** The language home works in (백로그 066): its expressions are counted and queued; the streak is shared. */
     language: Language = Language.DEFAULT,
     onLanguageChange: (Language) -> Unit = {},
+    /** Online voices for speech (백로그 073). */
+    networkVoices: Boolean = false,
+    onNetworkVoicesChange: (Boolean) -> Unit = {},
     onNavigate: (HomeDestination) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -120,6 +123,8 @@ internal fun LearningHomeSummary(
             onBossClick = { onNavigate(HomeDestination.BOSS) },
             language = language,
             onLanguageChange = onLanguageChange,
+            networkVoices = networkVoices,
+            onNetworkVoicesChange = onNetworkVoicesChange,
         )
     }
 }

@@ -38,7 +38,7 @@ class ReaderSpeechLanguageTest {
     }
 
     @Test
-    fun aMissingLanguageNamesItselfInTheMessage() {
+    fun aMissingLanguageNamesItselfInTheMessageAndLeavesTheEngineOnTheRequestedLocale() {
         val engine = RecordingEngine().apply { languageResult = TextToSpeech.LANG_NOT_SUPPORTED }
         val speech = ready(engine, language = Language.CHINESE)
 
@@ -47,5 +47,27 @@ class ReaderSpeechLanguageTest {
             "중국어 음성을 사용할 수 없어요. 설정 > 텍스트 음성 변환에서 중국어 음성을 설치해 주세요.",
             speech.state.value.error,
         )
+        // 백로그 073: every spelling was tried, then the engine was put back on zh_CN rather than
+        // left on a stray "cmn"; no rate is set for a language that cannot be spoken.
+        assertEquals(
+            listOf(Locale.SIMPLIFIED_CHINESE, Locale("cmn", "CN"), Locale("zh"), Locale("cmn"), Locale.SIMPLIFIED_CHINESE),
+            engine.languagesSet,
+        )
+        assertNull(engine.rateSet)
+    }
+
+    @Test
+    fun anEngineThatFilesMandarinUnderCmnIsStillReady() {
+        // 백로그 073: zh_CN is refused, cmn_CN accepted — the reader is ready, slower, and stops looking.
+        val engine = RecordingEngine().apply {
+            languageResults[Locale.SIMPLIFIED_CHINESE] = TextToSpeech.LANG_NOT_SUPPORTED
+            languageResults[Locale("cmn", "CN")] = TextToSpeech.LANG_COUNTRY_AVAILABLE
+        }
+        val speech = ready(engine, language = Language.CHINESE)
+
+        assertTrue(speech.state.value.ready)
+        assertNull(speech.state.value.error)
+        assertEquals(listOf(Locale.SIMPLIFIED_CHINESE, Locale("cmn", "CN")), engine.languagesSet)
+        assertEquals(0.9f, engine.rateSet)
     }
 }

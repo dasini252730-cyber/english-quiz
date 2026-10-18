@@ -114,6 +114,9 @@ fun EnglishQuizApp(
                     onLanguageChange = { language ->
                         scope.launch { settingsWrite { settingsRepository.setLanguage(language) } }
                     },
+                    onNetworkVoicesChange = { enabled ->
+                        scope.launch { settingsWrite { settingsRepository.setNetworkVoices(enabled) } }
+                    },
                 )
             }
         }

@@ -32,12 +32,15 @@ fun ReaderRoute(
     nowEpochMillis: () -> Long = System::currentTimeMillis,
     /** "시즌 2 · 3/7" over an episode (백로그 063); null for any other passage. */
     subtitle: String? = null,
+    /** Online voices for speech (백로그 073). */
+    allowNetworkVoices: Boolean = false,
+    // Last, so a caller can still pass it as a trailing lambda.
     explainMeaning: suspend (MeaningRequest) -> ContextualMeaning,
 ) {
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
-    val speech = remember(content, context, owner) {
-        ReaderSpeech(context, content.language).apply {
+    val speech = remember(content, context, owner, allowNetworkVoices) {
+        ReaderSpeech(context, content.language, allowNetworkVoices).apply {
             cast = content.segments.map { it.speaker }
             genders = content.speakers
         }

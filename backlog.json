@@ -1182,6 +1182,22 @@
         "chinese",
         "docs"
       ]
+    },
+    {
+      "id": "073",
+      "title": "TTS 자연스러움: 피치 변조 제거, 중국어 속도 0.9, 온라인 음성 토글, 로케일 매칭 로그",
+      "description": "모든 언어에서 화자 구분용 피치 변조를 끄고 음성이 모자라면 같은 음성을 1.0으로 재사용. 중국어 읽기 속도 0.9. 네트워크 음성 허용을 홈 설정 토글(기본 꺼짐)로. 앱 Locale과 엔진 음성 locale, 선택된 음성을 로그로 남기고 zh/cmn 표기 차이를 모두 후보로 허용.",
+      "details": "backlog/073.md",
+      "status": "review_needed",
+      "priority": "P0",
+      "estimate": "M",
+      "depends_on": [
+        "071"
+      ],
+      "labels": [
+        "tts",
+        "chinese"
+      ]
     }
   ]
 }

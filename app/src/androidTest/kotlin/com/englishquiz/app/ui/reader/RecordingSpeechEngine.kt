@@ -21,21 +21,31 @@ internal class RecordingEngine(
     val voicedAs = mutableListOf<Pair<String?, Float>>()
     var listener: UtteranceProgressListener? = null
     var languageResult = TextToSpeech.LANG_AVAILABLE
+    /** Per-locale answers (백로그 073); a locale absent here gets [languageResult]. */
+    val languageResults = mutableMapOf<Locale, Int>()
     var speakResult = TextToSpeech.SUCCESS
 
-    /** The locale last asked for, so a test can prove which language the reader set (백로그 071). */
-    var languageSet: Locale? = null
+    /** Every locale asked for, in order, so a test can prove the fallback walk (백로그 071/073). */
+    val languagesSet = mutableListOf<Locale>()
+    val languageSet: Locale? get() = languagesSet.lastOrNull()
 
     /** A voice name this engine pretends not to have. */
     var refuse: String? = null
     private var currentVoice: String? = null
     private var currentPitch = 1f
 
+    /** The rate last set, so a test can prove the Chinese reader slows down (백로그 073). */
+    var rateSet: Float? = null
+
     override val maxInputLength = 4_000
 
+    override val allVoices: List<VoiceOption> get() = voices
+
+    override val appliedVoice: String? get() = currentVoice?.let { "$it@fake" }
+
     override fun setLanguage(locale: Locale): Int {
-        languageSet = locale
-        return languageResult
+        languagesSet += locale
+        return languageResults[locale] ?: languageResult
     }
 
     override fun setOnUtteranceProgressListener(listener: UtteranceProgressListener) {
@@ -50,6 +60,11 @@ internal class RecordingEngine(
 
     override fun setPitch(pitch: Float): Int {
         currentPitch = pitch
+        return TextToSpeech.SUCCESS
+    }
+
+    override fun setSpeechRate(rate: Float): Int {
+        rateSet = rate
         return TextToSpeech.SUCCESS
     }
 
@@ -91,10 +106,11 @@ internal fun ready(
     engine: RecordingEngine,
     status: Int = TextToSpeech.SUCCESS,
     language: Language = Language.ENGLISH,
+    allowNetworkVoices: Boolean = false,
 ): ReaderSpeech {
     lateinit var speech: ReaderSpeech
     lateinit var init: (Int) -> Unit
-    onMain { speech = ReaderSpeech(language) { onInit -> init = onInit; engine } }
+    onMain { speech = ReaderSpeech(language, allowNetworkVoices) { onInit -> init = onInit; engine } }
     onMain { init(status) }
     onMain { }
     return speech

@@ -45,6 +45,7 @@ fun BossRoute(
     onSessionRecorded: suspend (sessionCompletedAtEpochMillis: Long) -> Unit = {},
     /** The language whose shakiest expressions are asked (백로그 066). */
     language: Language = Language.DEFAULT,
+    allowNetworkVoices: Boolean = false,
 ) {
     var started by rememberSaveable { mutableStateOf(false) }
     var finished by rememberSaveable(stateSaver = SummarySaver) { mutableStateOf<LearningSessionSummary?>(null) }
@@ -75,6 +76,7 @@ fun BossRoute(
             onBack = onExit,
             enrolExpressions = false,
             language = language,
+            allowNetworkVoices = allowNetworkVoices,
             questionSource = { repo, at -> repo.listBossCandidates(language, at, BossPolicy.MAX_QUESTIONS) },
             maxQuestions = BossPolicy.MAX_QUESTIONS,
             pointsMultiplier = BossPolicy.POINTS_MULTIPLIER,

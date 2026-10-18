@@ -73,6 +73,8 @@ fun LearningSessionRoute(
     seasons: SeasonCoordinator? = null,
     /** The language of this session (백로그 066): its passages, expressions and voices. */
     language: Language = Language.DEFAULT,
+    /** Online voices for speech (백로그 073). */
+    allowNetworkVoices: Boolean = false,
 ) {
     var episodeLabel by rememberSaveable { mutableStateOf<String?>(null) }
     var step by rememberSaveable(stateSaver = SessionStepSaver) {
@@ -136,12 +138,14 @@ fun LearningSessionRoute(
             },
             nowEpochMillis = nowEpochMillis,
             explainMeaning = explainMeaning,
+            allowNetworkVoices = allowNetworkVoices,
         )
 
         is SessionStep.Quiz -> QuizRoute(
             repository = repository,
             todayContent = current.content,
             language = language,
+            allowNetworkVoices = allowNetworkVoices,
             onFinished = { summary ->
                 step = SessionStep.Finished(summary)
             },

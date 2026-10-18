@@ -2,54 +2,50 @@ package com.englishquiz.app.ui.reader
 
 import com.englishquiz.app.data.ai.SpeakerGender
 
-/** One voice the engine offers, reduced to what the assignment needs. */
-internal data class VoiceOption(val name: String, val requiresNetwork: Boolean, val quality: Int)
+/** One installed voice as [SpeakerVoices] sees it; [locale] is the engine's own tag, kept for the log (백로그 073). */
+internal data class VoiceOption(val name: String, val requiresNetwork: Boolean, val quality: Int, val locale: String = "")
 
 /**
  * What to set on the engine before a speaker's line: a voice name (null = the language's default
- * voice) and a pitch. [fallbackPitch] is the pitch that still tells this speaker apart when the
- * engine refuses the voice and the default one has to stand in.
+ * voice) and a pitch. Since 백로그 073 the pitch is always 1: bending a voice's pitch to tell two
+ * speakers apart made Mandarin tones, which are pitch, unintelligible, and sounded synthetic in
+ * English too. [fallbackPitch] is kept for the engine-refused path and is 1 as well.
  */
 internal data class VoiceChoice(
     val voiceName: String?,
-    val pitch: Float,
+    val pitch: Float = 1f,
     val fallbackPitch: Float = pitch,
 )
 
 /**
- * Gives each speaker of a conversation a voice of its own (백로그 020), so Anna and Tom are told
- * apart by ear and not only by the name over the bubble.
- *
- * The engine's voices carry no gender, so it is read from the name where a maker exposes it
- * (Samsung's `SMTf`/`SMTm`, Google's `#female`/`#male`) and one of each is put first, which is
- * where the first two speakers land. Voices whose names say nothing are still distinct voices.
- * When the device has fewer usable voices than speakers, the same voice is reused at a different
- * pitch rather than letting two roles sound identical. The markers name no language, so the
- * zh-CN voices of 백로그 071 go through the same rule: a name that says nothing about gender
- * still gets a voice of its own, and the pitch fallback covers whatever is left.
+ * Gives each speaker of a passage a voice (백로그 020/050). A speaker whose gender the passage
+ * names takes the first voice whose name says that gender; the rest take the remaining voices in
+ * order of appearance, a female- and a male-sounding voice first so the first two speakers differ
+ * most. Voices whose names say nothing are still distinct voices. When the device has fewer usable
+ * voices than speakers, the same voice is reused as it is (백로그 073): a repeated voice beats a
+ * bent one. The markers name no language, so zh-CN voices go through the same rule.
  *
  * Pure Kotlin on purpose: the rule is proved on the JVM and the engine only carries it out.
  */
 internal object SpeakerVoices {
-    private const val DEFAULT_PITCH = 1f
-    private val FALLBACK_PITCHES = floatArrayOf(1f, 0.8f, 1.2f, 0.9f)
     private val FEMALE_MARKERS = Regex("female|smtf|[#_-]f\\d")
     private val MALE_MARKERS = Regex("male|smtm|[#_-]m\\d")
 
     /**
-     * [genders] is what the passage says about its speakers (백로그 050). A speaker it names gets
-     * the first voice of that gender; the rest are handed out in order of appearance as before,
-     * so a passage from before 050, or a model that named nobody, sounds as it did.
+     * [genders] is what the passage says about its speakers (백로그 050). [allowNetwork] admits
+     * voices that need a connection (백로그 073, the home toggle); off, only installed voices are
+     * candidates, as before.
      */
     fun assign(
         speakers: List<String>,
         voices: List<VoiceOption>,
         genders: Map<String, SpeakerGender> = emptyMap(),
+        allowNetwork: Boolean = false,
     ): Map<String, VoiceChoice> {
         val distinct = speakers.distinct()
         // A single narrator is the story mode of 요구사항 13절: it keeps the engine's own voice.
-        if (distinct.size <= 1) return distinct.associateWith { VoiceChoice(null, DEFAULT_PITCH) }
-        val usable = voices.filter { !it.requiresNetwork && !it.isGeneric }
+        if (distinct.size <= 1) return distinct.associateWith { VoiceChoice(null) }
+        val usable = voices.filter { (allowNetwork || !it.requiresNetwork) && !it.isGeneric }
             .sortedWith(compareByDescending<VoiceOption> { it.quality }.thenBy { it.name })
         val ordered = orderForContrast(usable)
         // Known genders first: a woman takes the best female voice, a man the best male one. The
@@ -67,31 +63,21 @@ internal object SpeakerVoices {
         }.toMap()
         val remaining = ordered.filter { it.name !in taken }
         var next = 0
-        return distinct.withIndex().associate { (index, speaker) ->
-            val fallback = fallbackPitch(index)
+        return distinct.associateWith { speaker ->
             val chosen = named[speaker]
-            speaker to when {
-                chosen != null -> VoiceChoice(chosen.name, DEFAULT_PITCH, fallback)
-                remaining.isEmpty() -> VoiceChoice(null, fallback, fallback)
-                else -> {
-                    val slot = next++
-                    if (slot < remaining.size) {
-                        VoiceChoice(remaining[slot].name, DEFAULT_PITCH, fallback)
-                    } else {
-                        VoiceChoice(remaining[slot % remaining.size].name, fallbackPitch(slot / remaining.size), fallback)
-                    }
-                }
+            when {
+                chosen != null -> VoiceChoice(chosen.name)
+                remaining.isEmpty() -> VoiceChoice(null)
+                // Past the last voice the list wraps: the same voice again, untouched.
+                else -> VoiceChoice(remaining[next++ % remaining.size].name)
             }
         }
     }
 
-    private fun fallbackPitch(step: Int): Float = FALLBACK_PITCHES[step % FALLBACK_PITCHES.size]
-
     /**
      * Google lists an `en-US-language` entry that is only an alias for whichever voice is the
      * locale's default, not a voice of its own. Giving it to a speaker would hand that speaker the
-     * same sound as another one, so it is never a candidate: with one real voice the second
-     * speaker gets that voice at another pitch instead.
+     * same sound as another one, so it is never a candidate.
      */
     private val VoiceOption.isGeneric: Boolean
         get() = name.endsWith("-language", ignoreCase = true)

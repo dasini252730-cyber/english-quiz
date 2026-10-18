@@ -36,6 +36,8 @@ data class AppSettings(
     val isAssessmentComplete: Boolean = false,
     val language: Language = Language.DEFAULT,
     val levels: Map<ContentMode, ModeLevel> = emptyMap(),
+    /** Whether speech may use voices that need a connection (백로그 073); off by default. */
+    val allowNetworkVoices: Boolean = false,
 ) {
     fun level(mode: ContentMode): Int? = levels[mode]?.level
 }
@@ -68,6 +70,11 @@ class AppSettingsRepository(private val dataStore: DataStore<Preferences>) {
     /** The language home works in from now on (백로그 066); the next emission carries its levels. */
     suspend fun setLanguage(language: Language) {
         dataStore.edit { preferences -> preferences[LANGUAGE] = language.wireValue }
+    }
+
+    /** Lets speech use online voices (백로그 073); the learner decides, since it costs data. */
+    suspend fun setNetworkVoices(enabled: Boolean) {
+        dataStore.edit { preferences -> preferences[NETWORK_VOICES] = enabled }
     }
 
     /** The learner's own choice: applied at once, the suggestion (if any) withdrawn. */
@@ -152,6 +159,7 @@ class AppSettingsRepository(private val dataStore: DataStore<Preferences>) {
             levels = ContentMode.entries.mapNotNull { mode ->
                 preferences.readLevel(language, mode)?.let { mode to it }
             }.toMap(),
+            allowNetworkVoices = preferences[NETWORK_VOICES] ?: false,
         )
     }
 
@@ -161,6 +169,7 @@ class AppSettingsRepository(private val dataStore: DataStore<Preferences>) {
         /** The diagnosis result (1..3) as stored before 백로그 034; still written for the record. */
         val CURRENT_DIFFICULTY = intPreferencesKey("current_difficulty")
         val LANGUAGE = stringPreferencesKey("selected_language")
+        val NETWORK_VOICES = booleanPreferencesKey("network_voices")
         /** English keeps the keys from before 066 ("level_story"); Chinese gets its own ("level_zh_story"). */
         private fun suffix(language: Language, mode: ContentMode) =
             if (language == Language.ENGLISH) mode.wireValue else "${language.wireValue}_${mode.wireValue}"

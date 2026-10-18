@@ -53,6 +53,8 @@ fun ReviewRoute(
     onBack: () -> Unit,
     /** The language whose box is shown (백로그 066). */
     language: Language = Language.DEFAULT,
+    /** Online voices for speech (백로그 073). */
+    allowNetworkVoices: Boolean = false,
     /** Opens a practice quiz over the shown rows (백로그 052). */
     onQuiz: (List<Long>) -> Unit = {},
 ) {
@@ -80,7 +82,7 @@ fun ReviewRoute(
             }
         }
     }
-    val speech = remember(context, owner, language) { ReaderSpeech(context, language) }
+    val speech = remember(context, owner, language, allowNetworkVoices) { ReaderSpeech(context, language, allowNetworkVoices) }
     val speechState by speech.state.collectAsState()
     DisposableEffect(speech, owner) {
         val observer = LifecycleEventObserver { _, event ->
