@@ -1073,7 +1073,7 @@
       "title": "중국어 확장 (에픽): 언어 전환, 데이터 분리, 중국어 생성·병음·TTS·채점",
       "description": "기존 영어 기능을 유지하면서 홈에서 English/中文 전환, 언어별 지문·시즌·표현·퀴즈·복습 분리(Room v12), Edge Function language 파라미터와 중국어 규칙, 병음·zh-CN TTS·간체자 채점. 계획은 066.md",
       "details": "backlog/066.md",
-      "status": "review_needed",
+      "status": "done",
       "priority": "P0",
       "estimate": "XL",
       "depends_on": [],
@@ -1150,7 +1150,7 @@
       "title": "중국어 4/6: 리더 토큰화·병음 표시·zh-CN TTS",
       "description": "zh 토큰화(표시 어구→용어집 최장 일치→글자), 토큰 간격 0, CJK 문장부호, 화자 我, 표현 병음 표시와 줄 병음 토글(기본 꺼짐), SpeechEngine 언어 파라미터와 zh 보이스, 음성 없음 안내",
       "details": "backlog/071.md",
-      "status": "review_needed",
+      "status": "done",
       "priority": "P0",
       "estimate": "L",
       "depends_on": [
@@ -1168,7 +1168,7 @@
       "title": "중국어 6/6: 영어 회귀·중국어 기능 검증과 문서 갱신",
       "description": "node·JVM·lint·계측 회귀, 중국어 생성·병음·TTS·저장·채점·복습 확인, 요구사항 26절·구현기능 명세서·README 갱신",
       "details": "backlog/072.md",
-      "status": "review_needed",
+      "status": "done",
       "priority": "P0",
       "estimate": "M",
       "depends_on": [
@@ -1188,7 +1188,7 @@
       "title": "TTS 자연스러움: 피치 변조 제거, 중국어 속도 0.9, 온라인 음성 토글, 로케일 매칭 로그",
       "description": "모든 언어에서 화자 구분용 피치 변조를 끄고 음성이 모자라면 같은 음성을 1.0으로 재사용. 중국어 읽기 속도 0.9. 네트워크 음성 허용을 홈 설정 토글(기본 꺼짐)로. 앱 Locale과 엔진 음성 locale, 선택된 음성을 로그로 남기고 zh/cmn 표기 차이를 모두 후보로 허용.",
       "details": "backlog/073.md",
-      "status": "review_needed",
+      "status": "done",
       "priority": "P0",
       "estimate": "M",
       "depends_on": [
