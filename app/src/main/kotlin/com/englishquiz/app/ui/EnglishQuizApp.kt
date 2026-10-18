@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.englishquiz.app.data.ai.AiLearningClient
 import com.englishquiz.app.data.ai.ContentMode
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.data.preferences.AppSettings
 import com.englishquiz.app.data.preferences.AppSettingsRepository
 import com.englishquiz.app.data.preferences.GameProgressRepository
@@ -92,21 +93,26 @@ fun EnglishQuizApp(
                     settings = state.settings,
                     gameRepository = gameProgressRepository,
                     seasons = seasonCoordinator,
-                    onSessionRecorded = { mode, sessionCompletedAtEpochMillis ->
-                        if (mode != null) suggestLevel(learningRepository, settingsRepository, mode, sessionCompletedAtEpochMillis)
+                    onSessionRecorded = { mode, language, sessionCompletedAtEpochMillis ->
+                        if (mode != null) suggestLevel(learningRepository, settingsRepository, mode, language, sessionCompletedAtEpochMillis)
                         prefetchTomorrow()
                     },
                     // The learner's own level moves at once (백로그 034); a write that fails leaves
                     // the level where it was, which the next tap can repeat.
                     onLevelChange = { mode, level ->
-                        scope.launch { settingsWrite { settingsRepository.setLevel(mode, level) } }
+                        scope.launch { settingsWrite { settingsRepository.setLevel(mode, level, state.settings.language) } }
                     },
                     onSuggestionAnswer = { mode, accepted ->
+                        val language = state.settings.language
                         scope.launch {
                             settingsWrite {
-                                if (accepted) settingsRepository.acceptSuggestion(mode) else settingsRepository.dismissSuggestion(mode)
+                                if (accepted) settingsRepository.acceptSuggestion(mode, language) else settingsRepository.dismissSuggestion(mode, language)
                             }
                         }
+                    },
+                    // 백로그 066: the chosen language is stored; the next settings emission carries its levels.
+                    onLanguageChange = { language ->
+                        scope.launch { settingsWrite { settingsRepository.setLanguage(language) } }
                     },
                 )
             }
@@ -124,11 +130,12 @@ private suspend fun suggestLevel(
     learningRepository: LearningRepository,
     settingsRepository: AppSettingsRepository,
     mode: ContentMode,
+    language: Language,
     sessionCompletedAtEpochMillis: Long,
 ) {
     try {
-        val recent = learningRepository.listRecentSessionSummaries(mode, DifficultyPolicy.SESSIONS_CONSIDERED)
-        settingsRepository.applyFinishedSession(mode, sessionCompletedAtEpochMillis) { current, sessionsSinceChange ->
+        val recent = learningRepository.listRecentSessionSummaries(mode, DifficultyPolicy.SESSIONS_CONSIDERED, language)
+        settingsRepository.applyFinishedSession(mode, sessionCompletedAtEpochMillis, language) { current, sessionsSinceChange ->
             DifficultyPolicy.nextDifficulty(current, recent, sessionsSinceChange)
         }
     } catch (error: CancellationException) {
@@ -167,7 +174,7 @@ internal fun LoadingScreen() {
 @Composable
 private fun HomePlaceholder(settings: AppSettings) {
     val level = settings.level(ContentMode.CONVERSATION)?.let { "$it / ${DifficultyPolicy.MAX_DIFFICULTY}" } ?: "미설정"
-    CenteredMessage(title = "오늘의 영어 학습", body = "진단 완료 · 시작 레벨: $level")
+    CenteredMessage(title = "오늘의 ${settings.language.korean} 학습", body = "진단 완료 · 시작 레벨: $level")
 }
 
 @Composable

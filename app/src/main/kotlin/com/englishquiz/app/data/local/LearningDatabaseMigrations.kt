@@ -130,6 +130,48 @@ internal val MIGRATION_10_11 = object : Migration(10, 11) {
     }
 }
 
+/**
+ * 백로그 066: a second language. Every learner-owned row gets `language`, defaulting to 'en' so
+ * nothing stored so far changes meaning. The two identity keys that would collide across languages
+ * are widened: `daily_content` is rebuilt with `language` in its primary key (a key cannot be
+ * altered in place), and the unique index on `saved_expressions` becomes (`language`,
+ * `normalizedExpression`). Seasons are numbered per language; episodes carry the language too so
+ * the unread/read-on-date queries need no join. Chinese expressions also get `pinyin`.
+ */
+internal val MIGRATION_11_12 = object : Migration(11, 12) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL("ALTER TABLE `saved_expressions` ADD COLUMN `language` TEXT NOT NULL DEFAULT 'en'")
+        database.execSQL("ALTER TABLE `saved_expressions` ADD COLUMN `pinyin` TEXT NOT NULL DEFAULT ''")
+        database.execSQL("DROP INDEX IF EXISTS `index_saved_expressions_normalizedExpression`")
+        database.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_saved_expressions_language_normalizedExpression` " +
+                "ON `saved_expressions` (`language`, `normalizedExpression`)",
+        )
+        database.execSQL("ALTER TABLE `learning_sessions` ADD COLUMN `language` TEXT NOT NULL DEFAULT 'en'")
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `daily_content_new` (
+                `learningDate` TEXT NOT NULL,
+                `mode` TEXT NOT NULL,
+                `title` TEXT NOT NULL,
+                `contentJson` TEXT NOT NULL,
+                `createdAtEpochMillis` INTEGER NOT NULL,
+                `language` TEXT NOT NULL DEFAULT 'en',
+                PRIMARY KEY(`language`, `learningDate`, `mode`)
+            )""",
+        )
+        database.execSQL(
+            """INSERT INTO `daily_content_new` (`learningDate`, `mode`, `title`, `contentJson`, `createdAtEpochMillis`, `language`)
+            SELECT `learningDate`, `mode`, `title`, `contentJson`, `createdAtEpochMillis`, 'en' FROM `daily_content`""",
+        )
+        database.execSQL("DROP TABLE `daily_content`")
+        database.execSQL("ALTER TABLE `daily_content_new` RENAME TO `daily_content`")
+        database.execSQL("ALTER TABLE `seasons` ADD COLUMN `language` TEXT NOT NULL DEFAULT 'en'")
+        database.execSQL("DROP INDEX IF EXISTS `index_seasons_number`")
+        database.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_seasons_language_number` ON `seasons` (`language`, `number`)")
+        database.execSQL("ALTER TABLE `season_episodes` ADD COLUMN `language` TEXT NOT NULL DEFAULT 'en'")
+    }
+}
+
 /** 백로그 021: one generated passage per day and mode, so re-entry stops paying for a new one. */
 internal val MIGRATION_3_4 = object : Migration(3, 4) {
     override fun migrate(database: SupportSQLiteDatabase) {

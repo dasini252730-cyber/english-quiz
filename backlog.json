@@ -2,7 +2,7 @@
   "schema_version": 1,
   "title": "개인용 영어 학습 앱 MVP backlog",
   "source": "요구사항/요구사항.md",
-  "updated_at": "2026-10-16",
+  "updated_at": "2026-10-18",
   "statuses": {
     "todo": "할 일",
     "in_progress": "작업 중",
@@ -1066,6 +1066,121 @@
         "prompt",
         "edge-function",
         "season"
+      ]
+    },
+    {
+      "id": "066",
+      "title": "중국어 확장 (에픽): 언어 전환, 데이터 분리, 중국어 생성·병음·TTS·채점",
+      "description": "기존 영어 기능을 유지하면서 홈에서 English/中文 전환, 언어별 지문·시즌·표현·퀴즈·복습 분리(Room v12), Edge Function language 파라미터와 중국어 규칙, 병음·zh-CN TTS·간체자 채점. 계획은 066.md",
+      "details": "backlog/066.md",
+      "status": "review_needed",
+      "priority": "P0",
+      "estimate": "XL",
+      "depends_on": [],
+      "labels": [
+        "chinese",
+        "epic"
+      ]
+    },
+    {
+      "id": "067",
+      "title": "중국어 1/6: Language 모델, 선택 언어·언어별 레벨 저장, 홈 English/中文 전환",
+      "description": "Language enum(en/zh), DataStore selected_language와 level_zh_<mode>(기본 3), AppSettings.level(language, mode), 홈 상단 언어 전환, 언어별 문구",
+      "details": "backlog/067.md",
+      "status": "done",
+      "priority": "P0",
+      "estimate": "M",
+      "depends_on": [
+        "066"
+      ],
+      "labels": [
+        "chinese"
+      ]
+    },
+    {
+      "id": "068",
+      "title": "중국어 2/6: Room v12 언어 분리 마이그레이션과 언어별 조회",
+      "description": "daily_content PK에 language, saved_expressions language·pinyin·유니크(language,normalizedExpression), seasons/season_episodes/learning_sessions language, DAO·리포지토리·SeasonCoordinator·프리페치 언어 조건, 11→12 마이그레이션 테스트",
+      "details": "backlog/068.md",
+      "status": "done",
+      "priority": "P0",
+      "estimate": "L",
+      "depends_on": [
+        "067"
+      ],
+      "labels": [
+        "chinese",
+        "room"
+      ]
+    },
+    {
+      "id": "069",
+      "title": "중국어 3/6: Edge Function language 파라미터, 중국어 규칙, 병음 스키마, 한자 비율 검사",
+      "description": "content/season/meaning 요청 language(기본 en), chinese-rules.ts 고정 블록(캐시), expressions/segments/glossary pinyin, passage_not_chinese, en 요청 불변 테스트, 서버 먼저 배포",
+      "details": "backlog/069.md",
+      "status": "done",
+      "priority": "P0",
+      "estimate": "L",
+      "depends_on": [
+        "066"
+      ],
+      "labels": [
+        "chinese",
+        "edge-function"
+      ]
+    },
+    {
+      "id": "070",
+      "title": "중국어 5/6: 간체자 입력 채점, 힌트, 언어별 보기·복습 큐",
+      "description": "QuizText zh 경로(공백·문장부호 제거 후 완전 일치), 힌트 打○○, QuizOptions·QuizLoader·ReviewQueue·보스 후보 선택 언어 필터, 문구",
+      "details": "backlog/070.md",
+      "status": "done",
+      "priority": "P0",
+      "estimate": "M",
+      "depends_on": [
+        "068"
+      ],
+      "labels": [
+        "chinese",
+        "quiz"
+      ]
+    },
+    {
+      "id": "071",
+      "title": "중국어 4/6: 리더 토큰화·병음 표시·zh-CN TTS",
+      "description": "zh 토큰화(표시 어구→용어집 최장 일치→글자), 토큰 간격 0, CJK 문장부호, 화자 我, 표현 병음 표시와 줄 병음 토글(기본 꺼짐), SpeechEngine 언어 파라미터와 zh 보이스, 음성 없음 안내",
+      "details": "backlog/071.md",
+      "status": "review_needed",
+      "priority": "P0",
+      "estimate": "L",
+      "depends_on": [
+        "068",
+        "069"
+      ],
+      "labels": [
+        "chinese",
+        "reader",
+        "tts"
+      ]
+    },
+    {
+      "id": "072",
+      "title": "중국어 6/6: 영어 회귀·중국어 기능 검증과 문서 갱신",
+      "description": "node·JVM·lint·계측 회귀, 중국어 생성·병음·TTS·저장·채점·복습 확인, 요구사항 26절·구현기능 명세서·README 갱신",
+      "details": "backlog/072.md",
+      "status": "review_needed",
+      "priority": "P0",
+      "estimate": "M",
+      "depends_on": [
+        "067",
+        "068",
+        "069",
+        "070",
+        "071"
+      ],
+      "labels": [
+        "chinese",
+        "docs"
       ]
     }
   ]

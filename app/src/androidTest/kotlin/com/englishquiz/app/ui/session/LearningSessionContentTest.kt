@@ -15,6 +15,7 @@ import com.englishquiz.app.data.ai.ContentExpression
 import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.data.ai.ContentSegment
 import com.englishquiz.app.data.ai.ContextualMeaning
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.data.local.LearningDatabase
 import com.englishquiz.app.data.repository.LearningRepository
 import com.englishquiz.app.ui.session.SessionRouteFixtures.EMPTY_QUIZ
@@ -129,14 +130,14 @@ class LearningSessionContentTest {
         compose.awaitText(READER_TOKEN)
         assertEquals("라이브러리 지문인데 생성을 호출했다", 0, attempts)
         // Reading an old passage again must not be mistaken for today's new one.
-        assertTrue(runBlocking { repository.listLibrary() }.isEmpty())
+        assertTrue(runBlocking { repository.listLibrary(Language.ENGLISH) }.isEmpty())
 
         // Nor are its expressions enrolled for the quiz the way today's are (백로그 031): nothing
         // was tapped and nothing is due, so the quiz is empty and the review box stays empty.
         compose.onNodeWithText(QUIZ_BUTTON).performClick()
         // Nothing is enrolled from a library passage (백로그 026/031), so there is no card either.
         compose.awaitText(EMPTY_QUIZ)
-        assertTrue(runBlocking { repository.listSavedExpressions() }.isEmpty())
+        assertTrue(runBlocking { repository.listSavedExpressions(Language.ENGLISH) }.isEmpty())
     }
 
     @Test
@@ -144,8 +145,8 @@ class LearningSessionContentTest {
         val repository = repository()
         // An honest question needs a wrong option; this one is saved but not due, so it is not asked.
         runBlocking {
-            repository.saveExpression("sketchy", "수상한", 1L)
-            repository.saveReviewProgress("sketchy", 1L, Long.MAX_VALUE, 1, 0, false)
+            repository.saveExpression(Language.ENGLISH, "sketchy", "수상한", 1L)
+            repository.saveReviewProgress(Language.ENGLISH, "sketchy", 1L, Long.MAX_VALUE, 1, 0, false)
         }
         compose.setContent {
             EnglishQuizTheme {
@@ -178,7 +179,7 @@ class LearningSessionContentTest {
         assertEquals(0, recorded.quizQuestionCount)
         assertEquals(1, recorded.learnedExpressionCount)
         assertEquals(0, recorded.newlySavedExpressionCount)
-        assertEquals(2, runBlocking { repository.listSavedExpressions() }.size)
+        assertEquals(2, runBlocking { repository.listSavedExpressions(Language.ENGLISH) }.size)
     }
 
     private companion object {

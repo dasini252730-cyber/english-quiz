@@ -153,7 +153,7 @@ class LearningDatabaseMigrationTest {
 
         val migrated = migrationHelper.runMigrationsAndValidate(
             CHAINED_MIGRATION_DATABASE_NAME,
-            11,
+            12,
             true,
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -165,6 +165,7 @@ class LearningDatabaseMigrationTest {
             MIGRATION_8_9,
             MIGRATION_9_10,
             MIGRATION_10_11,
+            MIGRATION_11_12,
         )
         // 백로그 056: the answer log arrives empty; nothing old is reinterpreted as an answer.
         migrated.query("SELECT COUNT(*) FROM quiz_answers").use { cursor ->
@@ -180,12 +181,12 @@ class LearningDatabaseMigrationTest {
         }
         val expressions = migrated.query(
             "SELECT displayExpression, firstSavedAtEpochMillis, consecutiveCorrectCount, " +
-                "contextSentence, tapCount, shortMeaning, kind FROM saved_expressions",
+                "contextSentence, tapCount, shortMeaning, kind, language, pinyin FROM saved_expressions",
         )
         // A session from before 백로그 034 keeps its numbers and carries no mode; before 백로그 035
-        // it scored nothing.
+        // it scored nothing; before 백로그 066 it was English.
         val sessions = migrated.query(
-            "SELECT learningDate, completedAtEpochMillis, quizQuestionCount, mode, score, maxCombo " +
+            "SELECT learningDate, completedAtEpochMillis, quizQuestionCount, mode, score, maxCombo, language " +
                 "FROM learning_sessions",
         )
         try {
@@ -200,6 +201,9 @@ class LearningDatabaseMigrationTest {
             assertEquals("", expressions.getString(5))
             // 백로그 059: no kind before it existed; the quiz matches such a row by nothing.
             assertEquals("", expressions.getString(6))
+            // 백로그 066: everything saved before the second language is English, without pinyin.
+            assertEquals("en", expressions.getString(7))
+            assertEquals("", expressions.getString(8))
             assertTrue(sessions.moveToFirst())
             assertEquals("2026-09-17", sessions.getString(0))
             assertEquals(300L, sessions.getLong(1))
@@ -207,6 +211,7 @@ class LearningDatabaseMigrationTest {
             assertEquals("", sessions.getString(3))
             assertEquals(0, sessions.getInt(4))
             assertEquals(0, sessions.getInt(5))
+            assertEquals("en", sessions.getString(6))
         } finally {
             expressions.close()
             sessions.close()

@@ -4,6 +4,7 @@ import com.englishquiz.app.data.ai.LearningContent
 import com.englishquiz.app.data.repository.LearningRepository
 import com.englishquiz.app.ui.reader.localKindFor
 import com.englishquiz.app.ui.reader.localMeaningFor
+import com.englishquiz.app.ui.reader.localPinyinFor
 import com.englishquiz.app.ui.reader.localShortMeaningFor
 import com.englishquiz.app.ui.reader.tokenize
 import kotlinx.coroutines.CancellationException
@@ -39,7 +40,8 @@ internal suspend fun enrolContentExpressions(
                 val meaning = content.localMeaningFor(token) ?: return@forEach
                 val added = try {
                     repository.saveExpressionIfNew(
-                        token.lookup, meaning, savedAtEpochMillis, segment.text, content.localShortMeaningFor(token), content.localKindFor(token),
+                        content.language, token.lookup, meaning, savedAtEpochMillis, segment.text,
+                        content.localShortMeaningFor(token), content.localKindFor(token), content.localPinyinFor(token),
                     )
                 } catch (error: CancellationException) {
                     throw error

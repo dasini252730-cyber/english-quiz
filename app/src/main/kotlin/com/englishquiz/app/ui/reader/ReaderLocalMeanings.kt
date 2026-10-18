@@ -40,6 +40,10 @@ private fun LearningContent.localAnnotationFor(token: ReaderToken): ContentExpre
     return expressions.firstOrNull { it.text.lookupKey() == key }
 }
 
-private val EDGE_PUNCTUATION = charArrayOf('.', ',', '!', '?', ';', ':', '"', '\'', '(', ')')
+/** The marks a lookup key may still carry at its edges after [foldTypography]: ASCII, then CJK (백로그 071). */
+private val LOOKUP_EDGE_PUNCTUATION = charArrayOf(
+    '.', ',', '!', '?', ';', ':', '"', '\'', '(', ')',
+    '。', '，', '！', '？', '、', '：', '；', '（', '）', '《', '》', '「', '」', '『', '』', '【', '】',
+)
 
-private fun String.lookupKey(): String = foldTypography().trim().trim(*EDGE_PUNCTUATION).trim()
+private fun String.lookupKey(): String = foldTypography().trim().trim(*LOOKUP_EDGE_PUNCTUATION).trim()

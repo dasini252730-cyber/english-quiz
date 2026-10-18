@@ -1,5 +1,6 @@
 package com.englishquiz.app.domain.quiz
 
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.data.ai.foldTypography
 
 /** Matches the set the Reader strips when it turns a tapped token into a saved expression. */
@@ -31,8 +32,10 @@ internal fun normalizeQuizText(text: String): String = text
  * 's and 'd), a leading "to" and a regular inflection of the head word ("hanging out", "called
  * it a day") are not held against the answer: she recalled the words. A different word is still
  * wrong — "hang in" is not "hang out" — and only the first word may change its ending.
+ * A Chinese expression (백로그 070) is judged by [ChineseText] instead: the characters, exactly.
  */
-fun typedAnswerMatches(typed: String, expression: String): Boolean {
+fun typedAnswerMatches(typed: String, expression: String, language: Language = Language.ENGLISH): Boolean {
+    if (language == Language.CHINESE) return ChineseText.matches(typed, expression)
     val typedKeys = typedAnswerKeys(typed).filter { it.isNotEmpty() }
     val expected = typedAnswerKeys(expression)
     return typedKeys.any { key -> expected.any { it == key || sameButForTheHeadWord(key, it) } }
@@ -114,9 +117,12 @@ private val LONG_FORMS = mapOf(
 
 /**
  * The hint for a typed blank: the first letter of every word with the rest blanked, so
- * "hang out" shows as "h___ o__". Punctuation inside a word is kept as it is.
+ * "hang out" shows as "h___ o__". Punctuation inside a word is kept as it is. A Chinese
+ * expression has no words to split, so its hint is the first character and a "○" per other one.
  */
-fun typedAnswerHint(expression: String): String =
-    expression.trim().split(Regex("""\s+""")).filter { it.isNotEmpty() }.joinToString(" ") { word ->
+fun typedAnswerHint(expression: String, language: Language = Language.ENGLISH): String {
+    if (language == Language.CHINESE) return ChineseText.hint(expression)
+    return expression.trim().split(Regex("""\s+""")).filter { it.isNotEmpty() }.joinToString(" ") { word ->
         word.first() + "_".repeat(word.length - 1)
     }
+}

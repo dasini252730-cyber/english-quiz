@@ -1,8 +1,10 @@
 package com.englishquiz.app.ui.quiz
 
 import androidx.room.withTransaction
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.data.local.SavedExpressionEntity
 import com.englishquiz.app.data.repository.LearningRepository
+import com.englishquiz.app.data.repository.recordQuizAnswer
 import com.englishquiz.app.domain.game.GrowthStage
 import com.englishquiz.app.domain.quiz.QuizMode
 import com.englishquiz.app.domain.quiz.QuizQuestion
@@ -14,14 +16,15 @@ import com.englishquiz.app.domain.quiz.QuizQuestion
  * growth line, null for the boss and the practice, whose rows do not change.
  */
 internal suspend fun LearningRepository.recordQuizAnswerFor(
+    language: Language,
     question: QuizQuestion,
     wasCorrect: Boolean,
     mode: QuizMode,
     hintUsed: Boolean,
     nowEpochMillis: Long,
 ): SavedExpressionEntity? = database.withTransaction {
-    val updated = if (mode == QuizMode.DAILY) recordAnswer(question.expression, wasCorrect, nowEpochMillis) else null
-    recordQuizAnswer(question.expression, mode, wasCorrect, hintUsed, nowEpochMillis)
+    val updated = if (mode == QuizMode.DAILY) recordAnswer(language, question.expression, wasCorrect, nowEpochMillis) else null
+    recordQuizAnswer(language, question.expression, mode, wasCorrect, hintUsed, nowEpochMillis)
     updated
 }
 

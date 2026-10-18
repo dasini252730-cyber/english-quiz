@@ -51,7 +51,7 @@ fun BadgeRoute(
             try {
                 val stats = GameStatsPolicy.compute(
                     sessions = repository.listAllSessions(),
-                    expressions = repository.listSavedExpressions(),
+                    expressions = repository.listAllSavedExpressions(),
                     progress = gameRepository.progress.first(),
                     todayIso = todayIso(),
                 )

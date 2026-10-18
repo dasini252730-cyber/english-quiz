@@ -5,9 +5,13 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
+/** The `language` column every learner-owned row carries since 백로그 066; rows from before it are English. */
+const val DEFAULT_LANGUAGE = "en"
+
 @Entity(
     tableName = "saved_expressions",
-    indices = [Index(value = ["normalizedExpression"], unique = true)],
+    // 백로그 066: the same string is a different expression in another language.
+    indices = [Index(value = ["language", "normalizedExpression"], unique = true)],
 )
 data class SavedExpressionEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -27,21 +31,26 @@ data class SavedExpressionEntity(
     @ColumnInfo(defaultValue = "''") val shortMeaning: String = "",
     /** The slot the phrase fills (백로그 059), so wrong options can be of the same kind; "" when unknown. */
     @ColumnInfo(defaultValue = "''") val kind: String = "",
+    /** `Language.wireValue` (백로그 066). */
+    @ColumnInfo(defaultValue = "'en'") val language: String = DEFAULT_LANGUAGE,
+    /** Hanyu Pinyin with tone marks for a Chinese expression (백로그 066); "" for English. */
+    @ColumnInfo(defaultValue = "''") val pinyin: String = "",
 )
 
 /**
- * The passage generated for one day and one mode (요구사항 9.1: 상황은 매일 다양하게 — daily, not per
- * tap). Re-entering the same mode on the same day reads this row instead of paying for and waiting
- * on another generation. [contentJson] is the Edge Function's own reply shape, so it is restored
- * through the same parser and validation as a live reply.
+ * The passage generated for one day, one language and one mode (요구사항 9.1: 상황은 매일 다양하게 —
+ * daily, not per tap). Re-entering the same mode on the same day reads this row instead of paying
+ * for and waiting on another generation. [contentJson] is the Edge Function's own reply shape, so
+ * it is restored through the same parser and validation as a live reply.
  */
-@Entity(tableName = "daily_content", primaryKeys = ["learningDate", "mode"])
+@Entity(tableName = "daily_content", primaryKeys = ["language", "learningDate", "mode"])
 data class DailyContentEntity(
     val learningDate: String,
     val mode: String,
     val title: String,
     val contentJson: String,
     val createdAtEpochMillis: Long,
+    @ColumnInfo(defaultValue = "'en'") val language: String = DEFAULT_LANGUAGE,
 )
 
 /** One row of the library list (백로그 026): enough to show a passage without parsing its JSON. */
@@ -50,6 +59,7 @@ data class LibraryItem(
     val mode: String,
     val title: String,
     val createdAtEpochMillis: Long,
+    val language: String = DEFAULT_LANGUAGE,
 )
 
 /**
@@ -57,6 +67,7 @@ data class LibraryItem(
  * practice. Only the daily quiz moves an expression's review schedule; every mode leaves this
  * row, so a weak spot shows up wherever it was missed and hint use (백로그 058) can be studied
  * later. Retries at the end of a quiz (백로그 047) and passage questions are not answers here.
+ * The language is the expression's (백로그 066).
  */
 @Entity(tableName = "quiz_answers", indices = [Index(value = ["expressionId"])])
 data class QuizAnswerEntity(
@@ -90,6 +101,8 @@ data class LearningSessionEntity(
     /** The quiz's points and longest correct run (백로그 035); sessions before it carry 0. */
     @ColumnInfo(defaultValue = "0") val score: Int = 0,
     @ColumnInfo(defaultValue = "0") val maxCombo: Int = 0,
+    /** The session's language (백로그 066): the level window is per language; the streak counts every language. */
+    @ColumnInfo(defaultValue = "'en'") val language: String = DEFAULT_LANGUAGE,
 )
 
 /** The `mode` a library re-read (백로그 026) records; see [LearningSessionEntity.mode]. */

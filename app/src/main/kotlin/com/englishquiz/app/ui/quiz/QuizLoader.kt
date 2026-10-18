@@ -1,5 +1,6 @@
 package com.englishquiz.app.ui.quiz
 
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.data.ai.LearningContent
 import com.englishquiz.app.data.local.SavedExpressionEntity
 import com.englishquiz.app.data.repository.LearningRepository
@@ -24,13 +25,15 @@ internal suspend fun loadQuizQuestions(
     skipComprehension: suspend () -> Boolean,
     comprehensionDone: Int,
     askCards: Boolean,
+    /** The language whose expressions form the pool and the options (백로그 066). */
+    language: Language,
 ): QuizLoad {
     // Re-runs (retry, recreation) find the rows already there and report zero.
     if (enrolExpressions && todayContent != null) {
         onExpressionsEnrolled(enrolContentExpressions(todayContent, repository, nowEpochMillis))
     }
     val targets = questionSource(repository, nowEpochMillis)
-    val pool = repository.listSavedExpressions()
+    val pool = repository.listSavedExpressions(language)
     val content = if (todayContent != null && skipComprehension()) todayContent.copy(comprehension = emptyList()) else todayContent
     // Cards already shown today (백로그 048) count against the day's five, on a second entry
     // into the quiz as much as after a recreation in the middle of it.

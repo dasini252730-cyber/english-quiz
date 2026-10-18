@@ -3,6 +3,7 @@ package com.englishquiz.app.ui.reader
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import androidx.test.platform.app.InstrumentationRegistry
+import com.englishquiz.app.data.ai.Language
 import java.util.Locale
 
 /**
@@ -22,6 +23,9 @@ internal class RecordingEngine(
     var languageResult = TextToSpeech.LANG_AVAILABLE
     var speakResult = TextToSpeech.SUCCESS
 
+    /** The locale last asked for, so a test can prove which language the reader set (백로그 071). */
+    var languageSet: Locale? = null
+
     /** A voice name this engine pretends not to have. */
     var refuse: String? = null
     private var currentVoice: String? = null
@@ -29,7 +33,10 @@ internal class RecordingEngine(
 
     override val maxInputLength = 4_000
 
-    override fun setLanguage(locale: Locale): Int = languageResult
+    override fun setLanguage(locale: Locale): Int {
+        languageSet = locale
+        return languageResult
+    }
 
     override fun setOnUtteranceProgressListener(listener: UtteranceProgressListener) {
         this.listener = listener
@@ -80,10 +87,14 @@ internal fun onMain(body: () -> Unit) {
  * `Handler.post`, so an extra empty turn on the main looper is needed before the controller has
  * actually read the result.
  */
-internal fun ready(engine: RecordingEngine, status: Int = TextToSpeech.SUCCESS): ReaderSpeech {
+internal fun ready(
+    engine: RecordingEngine,
+    status: Int = TextToSpeech.SUCCESS,
+    language: Language = Language.ENGLISH,
+): ReaderSpeech {
     lateinit var speech: ReaderSpeech
     lateinit var init: (Int) -> Unit
-    onMain { speech = ReaderSpeech { onInit -> init = onInit; engine } }
+    onMain { speech = ReaderSpeech(language) { onInit -> init = onInit; engine } }
     onMain { init(status) }
     onMain { }
     return speech

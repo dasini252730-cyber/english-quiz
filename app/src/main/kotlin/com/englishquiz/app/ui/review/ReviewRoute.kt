@@ -16,8 +16,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.data.local.SavedExpressionEntity
 import com.englishquiz.app.data.repository.LearningRepository
+import com.englishquiz.app.data.repository.observeWrongAnswerCounts
 import com.englishquiz.app.domain.quiz.QuizBuilder
 import com.englishquiz.app.domain.review.ReviewFilter
 import com.englishquiz.app.domain.review.WeakSpotPolicy
@@ -49,6 +51,8 @@ sealed interface ReviewUiState {
 fun ReviewRoute(
     repository: LearningRepository,
     onBack: () -> Unit,
+    /** The language whose box is shown (백로그 066). */
+    language: Language = Language.DEFAULT,
     /** Opens a practice quiz over the shown rows (백로그 052). */
     onQuiz: (List<Long>) -> Unit = {},
 ) {
@@ -57,11 +61,11 @@ fun ReviewRoute(
     var retry by remember { mutableIntStateOf(0) }
     var filterName by rememberSaveable { mutableStateOf(ReviewFilter.ALL.name) }
     val filter = ReviewFilter.valueOf(filterName)
-    val loaded by produceState<ReviewUiState>(ReviewUiState.Loading, repository, owner, retry) {
+    val loaded by produceState<ReviewUiState>(ReviewUiState.Loading, repository, owner, retry, language) {
         value = ReviewUiState.Loading
         owner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             try {
-                combine(repository.observeSavedExpressions(), repository.observeWrongAnswerCounts()) { rows, wrong -> rows to wrong }
+                combine(repository.observeSavedExpressions(language), repository.observeWrongAnswerCounts()) { rows, wrong -> rows to wrong }
                     .collect { (rows, wrong) ->
                         // Askability tries a question per row against the whole box: off the main thread.
                         val unaskable = withContext(Dispatchers.Default) {
@@ -76,7 +80,7 @@ fun ReviewRoute(
             }
         }
     }
-    val speech = remember(context, owner) { ReaderSpeech(context) }
+    val speech = remember(context, owner, language) { ReaderSpeech(context, language) }
     val speechState by speech.state.collectAsState()
     DisposableEffect(speech, owner) {
         val observer = LifecycleEventObserver { _, event ->

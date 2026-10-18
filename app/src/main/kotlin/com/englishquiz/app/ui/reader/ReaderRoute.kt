@@ -7,6 +7,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -15,6 +16,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.englishquiz.app.data.ai.ContextualMeaning
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.data.ai.LearningContent
 import com.englishquiz.app.data.ai.MeaningRequest
 import com.englishquiz.app.data.repository.LearningRepository
@@ -35,7 +37,7 @@ fun ReaderRoute(
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
     val speech = remember(content, context, owner) {
-        ReaderSpeech(context).apply {
+        ReaderSpeech(context, content.language).apply {
             cast = content.segments.map { it.speaker }
             genders = content.speakers
         }
@@ -56,6 +58,13 @@ fun ReaderRoute(
 
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    // 백로그 066: a Chinese line is cut along the words the passage and the box already know.
+    val knownWords by produceState(content.glossary.map { it.word }, content) {
+        if (content.language == Language.CHINESE) {
+            val saved = runCatching { repository.listSavedExpressions(content.language).map { it.displayExpression } }.getOrDefault(emptyList())
+            value = content.glossary.map { it.word } + saved
+        }
+    }
     var meaningState by remember(content) { mutableStateOf<MeaningUiState?>(null) }
     var pendingToken by remember(content) { mutableStateOf<ReaderToken?>(null) }
     var pendingContext by remember(content) { mutableStateOf("") }
@@ -76,7 +85,7 @@ fun ReaderRoute(
         val current = meaningState as? MeaningUiState.Success ?: return
         job?.cancel()
         job = scope.launch {
-            meaningState = retrySaveMeaning(current, pendingContext, repository, nowEpochMillis)
+            meaningState = retrySaveMeaning(current, pendingContext, repository, nowEpochMillis, content.language)
         }
     }
 
@@ -94,5 +103,6 @@ fun ReaderRoute(
         onRetryMeaning = { pendingToken?.let { lookup(it) } },
         onRetrySave = ::retrySave,
         listState = listState,
+        knownWords = knownWords,
     )
 }

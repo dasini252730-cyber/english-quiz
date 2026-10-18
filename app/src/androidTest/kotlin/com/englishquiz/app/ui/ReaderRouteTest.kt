@@ -14,6 +14,7 @@ import com.englishquiz.app.data.ai.ContentExpression
 import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.data.ai.ContentSegment
 import com.englishquiz.app.data.ai.ContextualMeaning
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.data.ai.LearningContent
 import com.englishquiz.app.data.ai.MeaningRequest
 import com.englishquiz.app.data.local.LearningDatabase
@@ -83,7 +84,7 @@ class ReaderRouteTest {
         waitForText("수상쩍다")
         compose.onNodeWithText("수상쩍다").assertIsDisplayed()
         compose.onNodeWithText("복습함에 저장했어요").assertIsDisplayed()
-        val saved = runBlocking { repository.listSavedExpressions() }
+        val saved = runBlocking { repository.listSavedExpressions(Language.ENGLISH) }
         assertEquals(1, saved.size)
         assertEquals("sketchy", saved[0].displayExpression)
         assertEquals("수상쩍다", saved[0].contextMeaning)
@@ -97,15 +98,15 @@ class ReaderRouteTest {
         compose.onNodeWithText("네트워크 연결을 확인해 주세요.").assertIsDisplayed()
         compose.onNodeWithText("다시 시도").assertIsDisplayed()
         compose.onNodeWithText("복습함에 저장했어요").assertDoesNotExist()
-        val saved = runBlocking { repository.listSavedExpressions() }
+        val saved = runBlocking { repository.listSavedExpressions(Language.ENGLISH) }
         assertTrue(saved.isEmpty())
     }
 
     @Test fun duplicateExpressionKeepsFirstSavedDateAndReviewState() {
         val repository = openRepository()
         runBlocking {
-            repository.saveExpression("pull it off", "기존 뜻", 100L, "원래 문맥")
-            repository.saveReviewProgress("pull it off", 150L, 200L, 3, 1, true)
+            repository.saveExpression(Language.ENGLISH, "pull it off", "기존 뜻", 100L, "원래 문맥")
+            repository.saveReviewProgress(Language.ENGLISH, "pull it off", 150L, 200L, 3, 1, true)
         }
         val sentence = "I knew you could pull it off."
         val start = sentence.indexOf("pull it off")
@@ -116,7 +117,7 @@ class ReaderRouteTest {
         }
         compose.onNodeWithText("pull it off").performClick()
         waitForText("복습함에 저장했어요")
-        val saved = runBlocking { repository.listSavedExpressions() }
+        val saved = runBlocking { repository.listSavedExpressions(Language.ENGLISH) }
         assertEquals(1, saved.size)
         assertEquals(100L, saved[0].firstSavedAtEpochMillis)
         assertEquals("기존 뜻", saved[0].contextMeaning)
@@ -138,7 +139,7 @@ class ReaderRouteTest {
         // The AI must see the whole segment sentence; QuizBuilder's fill-in-the-blank relies on it.
         assertEquals("sketchy", capturedRequest?.expression)
         assertEquals(segments[0].text, capturedRequest?.context)
-        val saved = runBlocking { repository.listSavedExpressions() }
+        val saved = runBlocking { repository.listSavedExpressions(Language.ENGLISH) }
         assertEquals(segments[0].text, saved[0].contextSentence)
     }
 
@@ -183,12 +184,12 @@ class ReaderRouteTest {
         waitForText("복습함에 저장하지 못했어요")
         compose.onNodeWithText("다시 저장").assertIsDisplayed()
         assertEquals(1, aiCallCount)
-        assertTrue(runBlocking { workingRepository.listSavedExpressions() }.isEmpty())
+        assertTrue(runBlocking { workingRepository.listSavedExpressions(Language.ENGLISH) }.isEmpty())
         compose.runOnIdle { repositoryState.value = workingRepository }
         compose.onNodeWithText("다시 저장").performClick()
         waitForText("복습함에 저장했어요")
         assertEquals(1, aiCallCount) // retrying save must not repeat the paid AI lookup
-        val saved = runBlocking { workingRepository.listSavedExpressions() }
+        val saved = runBlocking { workingRepository.listSavedExpressions(Language.ENGLISH) }
         assertEquals(1, saved.size)
         assertEquals("sketchy", saved[0].displayExpression)
     }

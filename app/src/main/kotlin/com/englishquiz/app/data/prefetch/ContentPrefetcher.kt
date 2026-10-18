@@ -68,28 +68,32 @@ class ContentPrefetcher(
         // learner opens it, so "due" is measured against the last moment of that day.
         val dueBy = tomorrowStart.plusDays(1).toInstant().toEpochMilli() - 1
         val levels = settings.settings.first()
+        // Only the language chosen on home is made ahead (백로그 066): the other would double the
+        // night's calls for a day that may never come; it is generated on its first tap instead.
+        val language = levels.language
         val made = mutableListOf<ContentMode>()
         // The story first (백로그 054): the conversation that follows is set in its world.
         for (mode in listOf(ContentMode.STORY, ContentMode.CONVERSATION)) {
             try {
-                if (repository.findDailyContent(tomorrowIso, mode) != null) continue
-                val due = repository.findDueExpressions(dueBy)
+                if (repository.findDailyContent(language, tomorrowIso, mode) != null) continue
+                val due = repository.findDueExpressions(language, dueBy)
                 val review = due.take(MAX_REVIEW_EXPRESSIONS).map { it.displayExpression }
                 val difficulty = levels.level(mode) ?: DEFAULT_DIFFICULTY
                 if (seasons != null && mode == ContentMode.STORY) {
                     // An episode is made ahead only when none waits; it is read, not dated.
-                    if (seasons.prefetchNext(difficulty, review, now)) made += mode
+                    if (seasons.prefetchNext(language, difficulty, review, now)) made += mode
                     continue
                 }
                 val other = if (mode == ContentMode.STORY) ContentMode.CONVERSATION else ContentMode.STORY
-                val companion = (if (seasons != null) seasons.companionForNextRead() else null)
-                    ?: repository.findDailyContent(tomorrowIso, other)?.summary()
+                val companion = (if (seasons != null) seasons.companionForNextRead(language) else null)
+                    ?: repository.findDailyContent(language, tomorrowIso, other)?.summary()
                 val content = generate(
                     ContentGenerationRequest(
                         mode = mode,
                         difficulty = difficulty,
                         reviewExpressions = review,
-                        previousStory = repository.findPreviousSummary(ContentMode.STORY, tomorrowIso),
+                        language = language,
+                        previousStory = repository.findPreviousSummary(language, ContentMode.STORY, tomorrowIso),
                         companion = companion,
                     ),
                 )

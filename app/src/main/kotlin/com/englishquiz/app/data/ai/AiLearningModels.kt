@@ -4,6 +4,8 @@ data class ContentGenerationRequest(
     val mode: ContentMode,
     val difficulty: Int,
     val reviewExpressions: List<String> = emptyList(),
+    /** The language of the passage (백로그 066); the server defaults to English when it is absent. */
+    val language: Language = Language.DEFAULT,
     /** The latest earlier story (백로그 054), so today's can go on from it. */
     val previousStory: PassageSummary? = null,
     /** The same day's other passage, so a conversation practises the story's situation. */
@@ -29,6 +31,7 @@ enum class ContentMode(val wireValue: String) {
 data class MeaningRequest(
     val expression: String,
     val context: String,
+    val language: Language = Language.DEFAULT,
 )
 
 data class LearningContent(
@@ -46,6 +49,8 @@ data class LearningContent(
     val synopsis: String = "",
     /** What this episode settled (백로그 063); null for a conversation or a story outside a season. */
     val canon: CanonState? = null,
+    /** The passage's language (백로그 066): how it is tokenised, graded and spoken. Last, so older positional constructions still read. */
+    val language: Language = Language.DEFAULT,
 ) {
     /** This passage as the next one hears about it, or null when it has nothing to say. */
     fun summary(): PassageSummary? = synopsis.takeIf { it.isNotBlank() }?.let { PassageSummary(mode, title, it) }
@@ -90,11 +95,15 @@ data class ComprehensionQuestion(
 data class GlossaryEntry(
     val word: String,
     val meaning: String,
+    /** Hanyu Pinyin for a Chinese word (백로그 066); "" otherwise. */
+    val pinyin: String = "",
 )
 
 data class ContentSegment(
     val speaker: String,
     val text: String,
+    /** The line's pinyin for a Chinese passage (백로그 066); "" otherwise. */
+    val pinyin: String = "",
 )
 
 data class ContentExpression(
@@ -107,6 +116,8 @@ data class ContentExpression(
     val shortMeaning: String = "",
     /** The slot the phrase fills, one of [ExpressionKinds] (백로그 059); "" when unknown. */
     val kind: String = "",
+    /** Hanyu Pinyin for a Chinese expression (백로그 066); "" otherwise. */
+    val pinyin: String = "",
 )
 
 /** The kinds of phrase the quiz matches wrong options by (백로그 059); the Edge Function sends no other. */
@@ -120,6 +131,8 @@ object ExpressionKinds {
 data class ContextualMeaning(
     val expression: String,
     val meaning: String,
+    /** Hanyu Pinyin for a Chinese expression (백로그 066); "" otherwise. */
+    val pinyin: String = "",
 )
 
 class AiLearningException(

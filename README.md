@@ -1,6 +1,6 @@
 # StoryEnglish
 
-개인용 영어 학습 Android 앱(Galaxy S26). 매일 대화/스토리 지문 하나를 읽고, 표현의 뜻을 보며 저장하고,
+개인용 영어·중국어 학습 Android 앱(Galaxy S26). 홈에서 English/中文을 고르고, 매일 대화/스토리 지문 하나를 읽고, 표현의 뜻을 보며 저장하고,
 퀴즈와 간격 반복으로 복습한다. Kotlin + Jetpack Compose, Room, DataStore. AI 호출은 Supabase Edge
 Function `ai-learning`이 맡고 앱에는 키가 없다. 구현된 기능 전체는 `구현기능 명세서.md`, 제품 요구는
 `요구사항/요구사항.md`, 작업 상태는 `py .\backlog_cli.py list|show|add|update`.

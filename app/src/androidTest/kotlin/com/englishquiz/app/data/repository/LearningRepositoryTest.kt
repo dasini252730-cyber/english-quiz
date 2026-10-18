@@ -7,6 +7,7 @@ import com.englishquiz.app.data.ai.ContentExpression
 import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.data.ai.ContentSegment
 import com.englishquiz.app.data.ai.GlossaryEntry
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.data.ai.LearningContent
 import com.englishquiz.app.data.ai.PassageSummary
 import com.englishquiz.app.data.local.LIBRARY_SESSION_MODE
@@ -46,13 +47,13 @@ class LearningRepositoryTest {
         val repository = LearningRepository(db)
 
         // 백로그 044: the Reader's save is a tap; the quiz's passage-wide enrolment is not.
-        repository.saveExpression("sketchy", "수상한", 100, "That sounds sketchy.")
-        repository.saveExpression("sketchy", "수상한", 200, "That sounds sketchy.")
-        repository.saveExpressionIfNew("hang out", "놀다", 100, "Let's hang out.")
-        repository.saveExpressionIfNew("hang out", "놀다", 200, "Let's hang out.")
+        repository.saveExpression(Language.ENGLISH, "sketchy", "수상한", 100, "That sounds sketchy.")
+        repository.saveExpression(Language.ENGLISH, "sketchy", "수상한", 200, "That sounds sketchy.")
+        repository.saveExpressionIfNew(Language.ENGLISH, "hang out", "놀다", 100, "Let's hang out.")
+        repository.saveExpressionIfNew(Language.ENGLISH, "hang out", "놀다", 200, "Let's hang out.")
 
-        assertEquals(2, db.learningDao().findSavedExpression("sketchy")?.tapCount)
-        assertEquals(0, db.learningDao().findSavedExpression("hang out")?.tapCount)
+        assertEquals(2, db.learningDao().findSavedExpression(Language.ENGLISH.wireValue, "sketchy")?.tapCount)
+        assertEquals(0, db.learningDao().findSavedExpression(Language.ENGLISH.wireValue, "hang out")?.tapCount)
     }
 
     @Test
@@ -60,9 +61,9 @@ class LearningRepositoryTest {
         val db = LearningDatabase.create(context, DATABASE_NAME)
         database = db
         val repository = LearningRepository(db)
-        repository.saveExpressionIfNew("sketchy", "수상한", 100, "That sounds sketchy.", shortMeaning = "수상한")
+        repository.saveExpressionIfNew(Language.ENGLISH, "sketchy", "수상한", 100, "That sounds sketchy.", shortMeaning = "수상한")
 
-        val seen = repository.markSeen("sketchy", seenAtEpochMillis = 1_000L)
+        val seen = repository.markSeen(Language.ENGLISH, "sketchy", seenAtEpochMillis = 1_000L)
 
         // 백로그 045/046: scheduled, not judged; and the gloss the passage gave is kept.
         assertEquals(1_000L, seen.lastReviewedAtEpochMillis)
@@ -72,10 +73,10 @@ class LearningRepositoryTest {
         assertEquals("수상한", seen.shortMeaning)
 
         // A row saved before the gloss existed takes the gloss a later passage brings (백로그 046).
-        repository.saveExpressionIfNew("hang out", "놀다", 100, "Let's hang out.")
-        repository.saveExpressionIfNew("hang out", "놀다", 200, "Let's hang out.", shortMeaning = "놀다")
-        repository.saveExpression("hang out", "놀다", 300, "Let's hang out.", shortMeaning = "다른 뜻")
-        assertEquals("놀다", db.learningDao().findSavedExpression("hang out")?.shortMeaning)
+        repository.saveExpressionIfNew(Language.ENGLISH, "hang out", "놀다", 100, "Let's hang out.")
+        repository.saveExpressionIfNew(Language.ENGLISH, "hang out", "놀다", 200, "Let's hang out.", shortMeaning = "놀다")
+        repository.saveExpression(Language.ENGLISH, "hang out", "놀다", 300, "Let's hang out.", shortMeaning = "다른 뜻")
+        assertEquals("놀다", db.learningDao().findSavedExpression(Language.ENGLISH.wireValue, "hang out")?.shortMeaning)
     }
 
     @Test
@@ -84,13 +85,13 @@ class LearningRepositoryTest {
         database = firstDatabase
         val firstRepository = LearningRepository(firstDatabase)
 
-        firstRepository.saveExpression(
+        firstRepository.saveExpression(Language.ENGLISH,
             displayExpression = "Pull   It Off",
             contextMeaning = "성공적으로 해내다",
             savedAtEpochMillis = 100,
             contextSentence = "I knew you could pull it off.",
         )
-        firstRepository.saveReviewProgress(
+        firstRepository.saveReviewProgress(Language.ENGLISH,
             displayExpression = "pull it off",
             lastReviewedAtEpochMillis = 150,
             nextReviewAtEpochMillis = 200,
@@ -124,14 +125,14 @@ class LearningRepositoryTest {
         val reopenedDatabase = LearningDatabase.create(context, DATABASE_NAME)
         database = reopenedDatabase
         val reopenedRepository = LearningRepository(reopenedDatabase)
-        reopenedRepository.saveExpression(
+        reopenedRepository.saveExpression(Language.ENGLISH,
             displayExpression = "pull it off",
             contextMeaning = "덮어쓰면 안 되는 새 뜻",
             savedAtEpochMillis = 200,
             contextSentence = "덮어쓰면 안 되는 새 문맥",
         )
 
-        val stored = reopenedDatabase.learningDao().findSavedExpression("pull it off")
+        val stored = reopenedDatabase.learningDao().findSavedExpression(Language.ENGLISH.wireValue, "pull it off")
         assertNotNull(stored)
         requireNotNull(stored)
         assertEquals("Pull   It Off", stored.displayExpression)
@@ -219,12 +220,12 @@ class LearningRepositoryTest {
             synopsis = "Alex planned a Saturday.",
         )
         // 백로그 054: the previous episode is the newest story strictly before the day, with a synopsis.
-        assertNull(first.findPreviousSummary(ContentMode.STORY, "2026-09-27"))
+        assertNull(first.findPreviousSummary(Language.ENGLISH, ContentMode.STORY, "2026-09-27"))
         first.saveDailyContent("2026-09-24", content = episode, nowEpochMillis = 90)
         first.saveDailyContent("2026-09-25", content = episode.copy(title = "Ep. 2", synopsis = ""), nowEpochMillis = 95)
-        assertEquals(null, first.findPreviousSummary(ContentMode.STORY, "2026-09-26")?.takeIf { it.title == "Ep. 1" })
-        assertEquals(PassageSummary(ContentMode.STORY, "Ep. 1", "Alex planned a Saturday."), first.findPreviousSummary(ContentMode.STORY, "2026-09-25"))
-        assertNull(first.findPreviousSummary(ContentMode.STORY, "2026-09-24"))
+        assertEquals(null, first.findPreviousSummary(Language.ENGLISH, ContentMode.STORY, "2026-09-26")?.takeIf { it.title == "Ep. 1" })
+        assertEquals(PassageSummary(ContentMode.STORY, "Ep. 1", "Alex planned a Saturday."), first.findPreviousSummary(Language.ENGLISH, ContentMode.STORY, "2026-09-25"))
+        assertNull(first.findPreviousSummary(Language.ENGLISH, ContentMode.STORY, "2026-09-24"))
     }
 
     @Test
@@ -245,9 +246,9 @@ class LearningRepositoryTest {
         first.saveDailyContent("2026-09-26", content = conversation, nowEpochMillis = 100)
 
         // Same day and mode reads back the exact passage; another mode or day has nothing.
-        assertEquals(conversation, first.findDailyContent("2026-09-26", ContentMode.CONVERSATION))
-        assertNull(first.findDailyContent("2026-09-26", ContentMode.STORY))
-        assertNull(first.findDailyContent("2026-09-27", ContentMode.CONVERSATION))
+        assertEquals(conversation, first.findDailyContent(Language.ENGLISH, "2026-09-26", ContentMode.CONVERSATION))
+        assertNull(first.findDailyContent(Language.ENGLISH, "2026-09-26", ContentMode.STORY))
+        assertNull(first.findDailyContent(Language.ENGLISH, "2026-09-27", ContentMode.CONVERSATION))
         // A passage stored in Korean (백로그 051) reads as none, so the session generates again.
         val korean = conversation.copy(
             segments = listOf(ContentSegment("지은", "어? 민지? 정말 오랜만이다! 요즘 어떻게 지내?")),
@@ -255,7 +256,7 @@ class LearningRepositoryTest {
             glossary = emptyList(),
         )
         first.saveDailyContent("2026-09-26", content = korean, nowEpochMillis = 150)
-        assertNull(first.findDailyContent("2026-09-26", ContentMode.CONVERSATION))
+        assertNull(first.findDailyContent(Language.ENGLISH, "2026-09-26", ContentMode.CONVERSATION))
         first.saveDailyContent("2026-09-26", content = conversation, nowEpochMillis = 200)
         firstDatabase.close()
 
@@ -263,16 +264,16 @@ class LearningRepositoryTest {
         val reopenedDatabase = LearningDatabase.create(context, DATABASE_NAME)
         database = reopenedDatabase
         val reopened = LearningRepository(reopenedDatabase)
-        assertEquals(conversation, reopened.findDailyContent("2026-09-26", ContentMode.CONVERSATION))
+        assertEquals(conversation, reopened.findDailyContent(Language.ENGLISH, "2026-09-26", ContentMode.CONVERSATION))
 
         // A new day's save keeps yesterday's row: earlier passages are the library (백로그 026).
         val story = conversation.copy(title = "Sunday", mode = ContentMode.STORY)
         reopened.saveDailyContent("2026-09-27", content = story, nowEpochMillis = 200)
-        assertEquals(conversation, reopened.findDailyContent("2026-09-26", ContentMode.CONVERSATION))
-        assertEquals(story, reopened.findDailyContent("2026-09-27", ContentMode.STORY))
+        assertEquals(conversation, reopened.findDailyContent(Language.ENGLISH, "2026-09-26", ContentMode.CONVERSATION))
+        assertEquals(story, reopened.findDailyContent(Language.ENGLISH, "2026-09-27", ContentMode.STORY))
         assertEquals(
             listOf("2026-09-27" to "Sunday", "2026-09-26" to "A Saturday Plan"),
-            reopened.listLibrary().map { it.learningDate to it.title },
+            reopened.listLibrary(Language.ENGLISH).map { it.learningDate to it.title },
         )
     }
 
@@ -281,23 +282,23 @@ class LearningRepositoryTest {
         val freshDatabase = LearningDatabase.create(context, DATABASE_NAME)
         database = freshDatabase
         val repository = LearningRepository(freshDatabase)
-        repository.saveExpression("sketchy", "수상한", 1_000L)
-        repository.saveReviewProgress("sketchy", 2_000L, 3_000L, consecutiveCorrectCount = 2, incorrectCount = 0, isMastered = false)
+        repository.saveExpression(Language.ENGLISH, "sketchy", "수상한", 1_000L)
+        repository.saveReviewProgress(Language.ENGLISH, "sketchy", 2_000L, 3_000L, consecutiveCorrectCount = 2, incorrectCount = 0, isMastered = false)
 
         // 백로그 056: the boss and the practice only log; the row is exactly as it was.
-        repository.recordQuizAnswer("sketchy", QuizMode.BOSS, wasCorrect = false, hintUsed = false, answeredAtEpochMillis = 4_000L)
-        repository.recordQuizAnswer("Sketchy ", QuizMode.PRACTICE, wasCorrect = true, hintUsed = true, answeredAtEpochMillis = 5_000L)
-        repository.recordQuizAnswer("unknown phrase", QuizMode.DAILY, wasCorrect = false, hintUsed = false, answeredAtEpochMillis = 6_000L)
-        val row = repository.listSavedExpressions().single()
+        repository.recordQuizAnswer(Language.ENGLISH, "sketchy", QuizMode.BOSS, wasCorrect = false, hintUsed = false, answeredAtEpochMillis = 4_000L)
+        repository.recordQuizAnswer(Language.ENGLISH, "Sketchy ", QuizMode.PRACTICE, wasCorrect = true, hintUsed = true, answeredAtEpochMillis = 5_000L)
+        repository.recordQuizAnswer(Language.ENGLISH, "unknown phrase", QuizMode.DAILY, wasCorrect = false, hintUsed = false, answeredAtEpochMillis = 6_000L)
+        val row = repository.listSavedExpressions(Language.ENGLISH).single()
         assertEquals(2, row.consecutiveCorrectCount)
         assertEquals(0, row.incorrectCount)
         assertEquals(3_000L, row.nextReviewAtEpochMillis)
         assertEquals(
             listOf(Triple("boss", false, false), Triple("practice", true, true)),
-            repository.listQuizAnswers("sketchy").map { Triple(it.mode, it.isCorrect, it.hintUsed) },
+            repository.listQuizAnswers(Language.ENGLISH, "sketchy").map { Triple(it.mode, it.isCorrect, it.hintUsed) },
         )
         assertEquals(mapOf(row.id to 1), repository.listWrongAnswerCounts())
-        assertEquals(emptyList<Any>(), repository.listQuizAnswers("unknown phrase"))
+        assertEquals(emptyList<Any>(), repository.listQuizAnswers(Language.ENGLISH, "unknown phrase"))
     }
 
     private companion object {

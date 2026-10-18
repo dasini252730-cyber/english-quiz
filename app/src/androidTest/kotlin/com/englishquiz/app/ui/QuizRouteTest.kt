@@ -16,10 +16,12 @@ import com.englishquiz.app.data.ai.ComprehensionQuestion
 import com.englishquiz.app.data.ai.ContentExpression
 import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.data.ai.ContentSegment
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.data.ai.LearningContent
 import com.englishquiz.app.data.local.LearningDatabase
 import com.englishquiz.app.data.local.SavedExpressionEntity
 import com.englishquiz.app.data.repository.LearningRepository
+import com.englishquiz.app.data.repository.listQuizAnswers
 import com.englishquiz.app.domain.quiz.QuizMode
 import com.englishquiz.app.domain.session.LearningSessionSummary
 import com.englishquiz.app.ui.quiz.QuizRoute
@@ -57,8 +59,8 @@ class QuizRouteTest {
         val db = LearningDatabase.create(context, DATABASE_NAME)
         database = db
         val repository = LearningRepository(db)
-        repository.saveExpression("sketchy", "수상한", NOW - 1_000)
-        repository.saveExpression("hang out", "놀다", NOW - 900)
+        repository.saveExpression(Language.ENGLISH, "sketchy", "수상한", NOW - 1_000)
+        repository.saveExpression(Language.ENGLISH, "hang out", "놀다", NOW - 900)
         repository.markReviewed("sketchy")
         repository.markReviewed("hang out")
 
@@ -104,14 +106,14 @@ class QuizRouteTest {
         compose.waitUntil(TIMEOUT_MILLIS) {
             runBlocking {
                 EXPRESSIONS.all {
-                    db.learningDao().findSavedExpression(it)?.lastReviewedAtEpochMillis == NOW
+                    db.learningDao().findSavedExpression(Language.ENGLISH.wireValue, it)?.lastReviewedAtEpochMillis == NOW
                 }
             }
         }
 
         val answered = listOf(
-            checkNotNull(db.learningDao().findSavedExpression("sketchy")),
-            checkNotNull(db.learningDao().findSavedExpression("hang out")),
+            checkNotNull(db.learningDao().findSavedExpression(Language.ENGLISH.wireValue, "sketchy")),
+            checkNotNull(db.learningDao().findSavedExpression(Language.ENGLISH.wireValue, "hang out")),
         )
         // Each expression was evaluated once: one right, one wrong, neither counted twice.
         answered.forEach { assertEquals(NOW, it.lastReviewedAtEpochMillis) }
@@ -121,7 +123,7 @@ class QuizRouteTest {
         assertEquals(1, answered.count { it.incorrectCount == 0 })
         answered.forEach { assertReviewScheduled(it) }
         // 백로그 056: the daily quiz also leaves its answers in the log, as "daily".
-        val logged = EXPRESSIONS.flatMap { repository.listQuizAnswers(it) }
+        val logged = EXPRESSIONS.flatMap { repository.listQuizAnswers(Language.ENGLISH, it) }
         assertEquals(listOf("daily", "daily"), logged.map { it.mode })
         assertEquals(1, logged.count { it.isCorrect })
     }
@@ -131,8 +133,8 @@ class QuizRouteTest {
         val db = LearningDatabase.create(context, DATABASE_NAME)
         database = db
         val repository = LearningRepository(db)
-        repository.saveExpression("sketchy", "수상한", NOW - 1_000)
-        repository.saveExpression("hang out", "놀다", NOW - 900)
+        repository.saveExpression(Language.ENGLISH, "sketchy", "수상한", NOW - 1_000)
+        repository.saveExpression(Language.ENGLISH, "hang out", "놀다", NOW - 900)
         repository.markReviewed("sketchy")
         repository.markReviewed("hang out")
 
@@ -172,8 +174,8 @@ class QuizRouteTest {
         val db = LearningDatabase.create(context, DATABASE_NAME)
         database = db
         val repository = LearningRepository(db)
-        repository.saveExpression("hang out", "놀다", NOW - 900, "Let's hang out.")
-        repository.saveExpression("sketchy", "수상한", NOW - 1_000)
+        repository.saveExpression(Language.ENGLISH, "hang out", "놀다", NOW - 900, "Let's hang out.")
+        repository.saveExpression(Language.ENGLISH, "sketchy", "수상한", NOW - 1_000)
         // At the 꽃 stage the blank is typed (백로그 043/045); the other is just past its card.
         repository.markReviewed("hang out", correctRun = 3)
         repository.markReviewed("sketchy")
@@ -200,7 +202,7 @@ class QuizRouteTest {
         compose.waitUntil(TIMEOUT_MILLIS) { summary != null }
         assertEquals(2, checkNotNull(summary).quizCorrectCount)
         compose.waitUntil(TIMEOUT_MILLIS) {
-            runBlocking { db.learningDao().findSavedExpression("hang out")?.consecutiveCorrectCount == 4 }
+            runBlocking { db.learningDao().findSavedExpression(Language.ENGLISH.wireValue, "hang out")?.consecutiveCorrectCount == 4 }
         }
     }
 
@@ -209,8 +211,8 @@ class QuizRouteTest {
         val db = LearningDatabase.create(context, DATABASE_NAME)
         database = db
         val repository = LearningRepository(db)
-        repository.saveExpression("sketchy", "수상한", NOW - 1_000)
-        repository.saveExpression("hang out", "놀다", NOW - 900)
+        repository.saveExpression(Language.ENGLISH, "sketchy", "수상한", NOW - 1_000)
+        repository.saveExpression(Language.ENGLISH, "hang out", "놀다", NOW - 900)
         val content = LearningContent(
             title = "A cafe",
             mode = ContentMode.CONVERSATION,
@@ -244,8 +246,8 @@ class QuizRouteTest {
         awaitText("2 / 3").assertIsDisplayed()
         compose.onNodeWithText("10점").assertIsDisplayed()
         assertTrue(compose.onAllNodesWithText("Emma는 왜?").fetchSemanticsNodes().isEmpty())
-        assertEquals(null, db.learningDao().findSavedExpression("sketchy")?.lastReviewedAtEpochMillis)
-        assertEquals(null, db.learningDao().findSavedExpression("hang out")?.lastReviewedAtEpochMillis)
+        assertEquals(null, db.learningDao().findSavedExpression(Language.ENGLISH.wireValue, "sketchy")?.lastReviewedAtEpochMillis)
+        assertEquals(null, db.learningDao().findSavedExpression(Language.ENGLISH.wireValue, "hang out")?.lastReviewedAtEpochMillis)
         assertEquals(null, summary)
     }
 
@@ -254,8 +256,8 @@ class QuizRouteTest {
         val db = LearningDatabase.create(context, DATABASE_NAME)
         database = db
         val repository = LearningRepository(db)
-        repository.saveExpression("sketchy", "수상한", NOW - 1_000)
-        repository.saveExpression("hang out", "놀다", NOW - 900)
+        repository.saveExpression(Language.ENGLISH, "sketchy", "수상한", NOW - 1_000)
+        repository.saveExpression(Language.ENGLISH, "hang out", "놀다", NOW - 900)
         val content = LearningContent(
             title = "A cafe",
             mode = ContentMode.CONVERSATION,
@@ -287,8 +289,8 @@ class QuizRouteTest {
         val db = LearningDatabase.create(context, DATABASE_NAME)
         database = db
         val repository = LearningRepository(db)
-        repository.saveExpression("sketchy", "수상한", NOW - 1_000)
-        repository.saveExpression("hang out", "놀다", NOW - 900)
+        repository.saveExpression(Language.ENGLISH, "sketchy", "수상한", NOW - 1_000)
+        repository.saveExpression(Language.ENGLISH, "hang out", "놀다", NOW - 900)
         repository.markReviewed("sketchy")
         repository.markReviewed("hang out")
 
@@ -324,7 +326,7 @@ class QuizRouteTest {
         assertEquals(2, finished.quizQuestionCount)
         assertEquals(0, finished.quizCorrectCount)
         assertEquals(0, finished.score)
-        EXPRESSIONS.forEach { assertEquals(0, db.learningDao().findSavedExpression(it)?.consecutiveCorrectCount) }
+        EXPRESSIONS.forEach { assertEquals(0, db.learningDao().findSavedExpression(Language.ENGLISH.wireValue, it)?.consecutiveCorrectCount) }
     }
 
     @Test
@@ -332,8 +334,8 @@ class QuizRouteTest {
         val db = LearningDatabase.create(context, DATABASE_NAME)
         database = db
         val repository = LearningRepository(db)
-        repository.saveExpression("sketchy", "수상한", NOW - 1_000, "That sounds sketchy.", shortMeaning = "수상한")
-        repository.saveExpression("hang out", "놀다", NOW - 900)
+        repository.saveExpression(Language.ENGLISH, "sketchy", "수상한", NOW - 1_000, "That sounds sketchy.", shortMeaning = "수상한")
+        repository.saveExpression(Language.ENGLISH, "hang out", "놀다", NOW - 900)
 
         var summary: LearningSessionSummary? = null
         compose.setContent {
@@ -358,10 +360,10 @@ class QuizRouteTest {
         assertEquals(2, finished.learnedExpressionCount)
         assertEquals(0, finished.score)
         compose.waitUntil(TIMEOUT_MILLIS) {
-            runBlocking { EXPRESSIONS.all { db.learningDao().findSavedExpression(it)?.lastReviewedAtEpochMillis == NOW } }
+            runBlocking { EXPRESSIONS.all { db.learningDao().findSavedExpression(Language.ENGLISH.wireValue, it)?.lastReviewedAtEpochMillis == NOW } }
         }
         EXPRESSIONS.forEach {
-            val seen = checkNotNull(db.learningDao().findSavedExpression(it))
+            val seen = checkNotNull(db.learningDao().findSavedExpression(Language.ENGLISH.wireValue, it))
             assertEquals(0, seen.incorrectCount)
             assertEquals(0, seen.consecutiveCorrectCount)
             assertEquals(NOW + DAY, seen.nextReviewAtEpochMillis)
@@ -373,9 +375,9 @@ class QuizRouteTest {
         val db = LearningDatabase.create(context, DATABASE_NAME)
         database = db
         val repository = LearningRepository(db)
-        (1..8).forEach { repository.saveExpression("new$it", "뜻$it", NOW - 1_000 - it) }
+        (1..8).forEach { repository.saveExpression(Language.ENGLISH, "new$it", "뜻$it", NOW - 1_000 - it) }
         // Four cards were seen earlier today (백로그 048): only one more fits.
-        (1..4).forEach { repository.markSeen("new$it", NOW - 60_000) }
+        (1..4).forEach { repository.markSeen(Language.ENGLISH, "new$it", NOW - 60_000) }
 
         compose.setContent {
             EnglishQuizTheme {
@@ -393,10 +395,10 @@ class QuizRouteTest {
         val db = LearningDatabase.create(context, DATABASE_NAME)
         database = db
         val repository = LearningRepository(db)
-        repository.saveExpression("sketchy", "수상한", NOW - 1_000)
-        repository.saveExpression("hang out", "놀다", NOW - 900)
+        repository.saveExpression(Language.ENGLISH, "sketchy", "수상한", NOW - 1_000)
+        repository.saveExpression(Language.ENGLISH, "hang out", "놀다", NOW - 900)
         // Not due at all, but asked before: practice still asks them.
-        listOf("sketchy", "hang out").forEach { repository.saveReviewProgress(it, NOW - DAY, NOW + 5 * DAY, 2, 0, false) }
+        listOf("sketchy", "hang out").forEach { repository.saveReviewProgress(Language.ENGLISH, it, NOW - DAY, NOW + 5 * DAY, 2, 0, false) }
         val restoration = StateRestorationTester(compose)
         var summary: LearningSessionSummary? = null
         restoration.setContent {
@@ -408,7 +410,7 @@ class QuizRouteTest {
                     now = { NOW },
                     seed = { SEED },
                     enrolExpressions = false,
-                    questionSource = { repo, _ -> repo.listSavedExpressions() },
+                    questionSource = { repo, _ -> repo.listSavedExpressions(Language.ENGLISH) },
                     mode = QuizMode.PRACTICE,
                 )
             }
@@ -423,12 +425,12 @@ class QuizRouteTest {
         awaitText("놀다").performScrollTo().performClick()
         // 백로그 056: both answers are logged as practice, and neither row's schedule moved.
         compose.waitUntil(TIMEOUT_MILLIS) {
-            runBlocking { repository.listQuizAnswers("sketchy").size == 1 && repository.listQuizAnswers("hang out").size == 1 }
+            runBlocking { repository.listQuizAnswers(Language.ENGLISH, "sketchy").size == 1 && repository.listQuizAnswers(Language.ENGLISH, "hang out").size == 1 }
         }
-        assertEquals(listOf("practice" to false), repository.listQuizAnswers("sketchy").map { it.mode to it.isCorrect })
-        assertEquals(listOf("practice" to true), repository.listQuizAnswers("hang out").map { it.mode to it.isCorrect })
+        assertEquals(listOf("practice" to false), repository.listQuizAnswers(Language.ENGLISH, "sketchy").map { it.mode to it.isCorrect })
+        assertEquals(listOf("practice" to true), repository.listQuizAnswers(Language.ENGLISH, "hang out").map { it.mode to it.isCorrect })
         listOf("sketchy", "hang out").forEach {
-            val row = checkNotNull(db.learningDao().findSavedExpression(it))
+            val row = checkNotNull(db.learningDao().findSavedExpression(Language.ENGLISH.wireValue, it))
             assertEquals(0, row.incorrectCount)
             assertEquals(2, row.consecutiveCorrectCount)
             assertEquals(NOW - DAY, row.lastReviewedAtEpochMillis)
@@ -447,7 +449,7 @@ class QuizRouteTest {
         val db = LearningDatabase.create(context, DATABASE_NAME)
         database = db
         val repository = LearningRepository(db)
-        repository.saveExpression("sketchy", "수상한", NOW - 1_000, "That sounds sketchy.", shortMeaning = "수상한")
+        repository.saveExpression(Language.ENGLISH, "sketchy", "수상한", NOW - 1_000, "That sounds sketchy.", shortMeaning = "수상한")
         var summary: LearningSessionSummary? = null
         compose.setContent {
             EnglishQuizTheme {
@@ -458,7 +460,7 @@ class QuizRouteTest {
                     now = { NOW },
                     seed = { SEED },
                     enrolExpressions = false,
-                    questionSource = { repo, _ -> repo.listSavedExpressions() },
+                    questionSource = { repo, _ -> repo.listSavedExpressions(Language.ENGLISH) },
                     mode = QuizMode.PRACTICE,
                 )
             }
@@ -470,7 +472,7 @@ class QuizRouteTest {
         compose.onNodeWithText("뜻 확인 완료").performScrollTo().performClick()
         compose.waitUntil(TIMEOUT_MILLIS) { summary != null }
         assertEquals(0, checkNotNull(summary).quizQuestionCount)
-        val untouched = checkNotNull(db.learningDao().findSavedExpression("sketchy"))
+        val untouched = checkNotNull(db.learningDao().findSavedExpression(Language.ENGLISH.wireValue, "sketchy"))
         assertEquals(0, untouched.incorrectCount)
         assertNull(untouched.lastReviewedAtEpochMillis)
     }
@@ -510,7 +512,7 @@ class QuizRouteTest {
         val repository = LearningRepository(db)
         // "hang out" was tapped while reading and saved with the meaning the Reader found, and
         // has been asked once since; "sketchy" is met for the first time today.
-        repository.saveExpression("hang out", "놀다", NOW - 900, "Let's hang out.")
+        repository.saveExpression(Language.ENGLISH, "hang out", "놀다", NOW - 900, "Let's hang out.")
         // At the 잎 stage its sentence becomes a blank to fill by choice (백로그 045).
         repository.markReviewed("hang out", correctRun = 2)
         val content = LearningContent(
@@ -546,7 +548,7 @@ class QuizRouteTest {
         // row keeps the meaning it already had, and only the one new row is reported.
         awaitText("1 / 2").assertIsDisplayed()
         assertEquals(1, enrolled)
-        val saved = repository.listSavedExpressions()
+        val saved = repository.listSavedExpressions(Language.ENGLISH)
         assertEquals(
             setOf("sketchy" to "수상한", "hang out" to "놀다"),
             saved.map { it.displayExpression to it.contextMeaning }.toSet(),
@@ -574,15 +576,15 @@ class QuizRouteTest {
         // Both answers reached the review schedule, so neither is asked again today.
         compose.waitUntil(TIMEOUT_MILLIS) {
             runBlocking {
-                EXPRESSIONS.all { db.learningDao().findSavedExpression(it)?.lastReviewedAtEpochMillis == NOW }
+                EXPRESSIONS.all { db.learningDao().findSavedExpression(Language.ENGLISH.wireValue, it)?.lastReviewedAtEpochMillis == NOW }
             }
         }
-        repository.listSavedExpressions().forEach { assertReviewScheduled(it) }
+        repository.listSavedExpressions(Language.ENGLISH).forEach { assertReviewScheduled(it) }
     }
 
     /** Puts [expression] past its first meeting (백로그 045) so the quiz asks it rather than showing a card. */
     private suspend fun LearningRepository.markReviewed(expression: String, correctRun: Int = 0) {
-        saveReviewProgress(expression, NOW - DAY, NOW - 1, consecutiveCorrectCount = correctRun, incorrectCount = 0, isMastered = false)
+        saveReviewProgress(Language.ENGLISH, expression, NOW - DAY, NOW - 1, consecutiveCorrectCount = correctRun, incorrectCount = 0, isMastered = false)
     }
 
     private fun assertReviewScheduled(expression: SavedExpressionEntity) {

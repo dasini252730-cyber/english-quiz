@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.ui.theme.MongleButton
 import com.englishquiz.app.ui.theme.MongleButtonColors
 import com.englishquiz.app.ui.theme.MongleColor
@@ -36,6 +37,7 @@ internal fun QuizTypedAnswer(
     state: QuizUiState.InProgress,
     onSubmit: (String) -> Unit,
     onHint: () -> Unit,
+    language: Language = Language.ENGLISH,
 ) {
     val selected = state.selectedOption
     if (selected != null) {
@@ -59,7 +61,7 @@ internal fun QuizTypedAnswer(
             onValueChange = { draft = it },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            placeholder = { Text("영어 표현 입력") },
+            placeholder = { Text("${language.korean} 표현 입력") },
             supportingText = state.hint?.let { hint -> { Text("힌트: $hint") } },
             keyboardOptions = KeyboardOptions(
                 capitalization = KeyboardCapitalization.None,

@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import com.englishquiz.app.data.ai.CanonState
 import com.englishquiz.app.data.ai.ContentGenerationRequest
 import com.englishquiz.app.data.ai.ContentMode
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.data.ai.LearningContent
 import com.englishquiz.app.data.ai.PassageSummary
 import com.englishquiz.app.data.ai.SeasonBible
@@ -25,6 +26,9 @@ import org.json.JSONObject
  * the oldest episode not yet read, or makes the next one; a passage made ahead of time therefore
  * waits for the learner instead of being skipped. A read episode is also stored as that date's
  * passage, so the library, the result screen and the same-day re-entry work as before.
+ *
+ * Each language runs its own seasons (백로그 066): numbering, bibles, episodes and the unread
+ * queue never cross; only the pipeline is shared.
  */
 class SeasonCoordinator(
     private val repository: LearningRepository,
@@ -34,9 +38,9 @@ class SeasonCoordinator(
     private val dao get() = repository.database.seasonDao()
 
     /** The story to read on [learningDate]: today's if already opened, else the oldest unread, else a new episode. */
-    suspend fun storyFor(learningDate: String, difficulty: Int, reviewExpressions: List<String>, nowEpochMillis: Long): LearningContent {
-        repository.findDailyContent(learningDate, ContentMode.STORY)?.let { return it }
-        val episode = dao.oldestUnread() ?: generateNext(difficulty, reviewExpressions, nowEpochMillis)
+    suspend fun storyFor(language: Language, learningDate: String, difficulty: Int, reviewExpressions: List<String>, nowEpochMillis: Long): LearningContent {
+        repository.findDailyContent(language, learningDate, ContentMode.STORY)?.let { return it }
+        val episode = dao.oldestUnread(language.wireValue) ?: generateNext(language, difficulty, reviewExpressions, nowEpochMillis)
         val content = parse(episode)
         // One transaction: an episode is never consumed without becoming the day's passage.
         repository.database.withTransaction {
@@ -47,31 +51,32 @@ class SeasonCoordinator(
     }
 
     /** Makes the next episode ahead of time. False when one already waits unread: nothing is made. */
-    suspend fun prefetchNext(difficulty: Int, reviewExpressions: List<String>, nowEpochMillis: Long): Boolean {
-        if (dao.countUnread() > 0) return false
-        generateNext(difficulty, reviewExpressions, nowEpochMillis)
+    suspend fun prefetchNext(language: Language, difficulty: Int, reviewExpressions: List<String>, nowEpochMillis: Long): Boolean {
+        if (dao.countUnread(language.wireValue) > 0) return false
+        generateNext(language, difficulty, reviewExpressions, nowEpochMillis)
         return true
     }
 
-    suspend fun hasUnread(): Boolean = dao.countUnread() > 0
+    suspend fun hasUnread(language: Language): Boolean = dao.countUnread(language.wireValue) > 0
 
     /** What a conversation on [learningDate] hears of the story: the episode read that day, with its people and place. */
-    suspend fun companionFor(learningDate: String): PassageSummary? = dao.episodeReadOn(learningDate)?.let { summaryOf(it) }
+    suspend fun companionFor(language: Language, learningDate: String): PassageSummary? =
+        dao.episodeReadOn(language.wireValue, learningDate)?.let { summaryOf(it) }
 
     /** What tomorrow's conversation hears: the episode the learner will open next. */
-    suspend fun companionForNextRead(): PassageSummary? = dao.oldestUnread()?.let { summaryOf(it) }
+    suspend fun companionForNextRead(language: Language): PassageSummary? = dao.oldestUnread(language.wireValue)?.let { summaryOf(it) }
 
     /** "시즌 2 · 3/7" for the episode read on [learningDate], or null when that day's story is not an episode. */
-    suspend fun labelFor(learningDate: String): String? {
-        val episode = dao.episodeReadOn(learningDate) ?: return null
+    suspend fun labelFor(language: Language, learningDate: String): String? {
+        val episode = dao.episodeReadOn(language.wireValue, learningDate) ?: return null
         val season = dao.findSeason(episode.seasonId) ?: return null
         return SeasonPolicy.label(season.number, episode.number)
     }
 
-    private suspend fun generateNext(difficulty: Int, reviewExpressions: List<String>, nowEpochMillis: Long, attempt: Int = 1): SeasonEpisodeEntity {
-        val latest = dao.latestSeason()
+    private suspend fun generateNext(language: Language, difficulty: Int, reviewExpressions: List<String>, nowEpochMillis: Long, attempt: Int = 1): SeasonEpisodeEntity {
+        val latest = dao.latestSeason(language.wireValue)
         val next = SeasonPolicy.nextEpisode(latest?.number, latest?.let { dao.countEpisodes(it.id) } ?: 0)
-        val season = if (next.startsNewSeason || latest == null) createSeason(next.seasonNumber, difficulty, nowEpochMillis) else latest
+        val season = if (next.startsNewSeason || latest == null) createSeason(language, next.seasonNumber, difficulty, nowEpochMillis) else latest
         val bible = SeasonBible.fromJson(JSONObject(season.bibleJson))
         val canon = CanonState.fromJson(JSONObject(season.canonJson))
         val plan = bible.episodes.firstOrNull { it.number == next.episodeNumber }
@@ -81,6 +86,7 @@ class SeasonCoordinator(
                 mode = ContentMode.STORY,
                 difficulty = difficulty,
                 reviewExpressions = reviewExpressions,
+                language = language,
                 season = SeasonContext(
                     title = bible.title, setting = bible.setting, conflict = bible.conflict, characters = bible.castLine(MAX_CHARACTERS_CHARS),
                     episodeNumber = next.episodeNumber, episodePlan = plan?.plan ?: "Move the season forward.",
@@ -93,7 +99,7 @@ class SeasonCoordinator(
         val episode = SeasonEpisodeEntity(
             seasonId = season.id, number = next.episodeNumber, contentJson = content.toResponseJson().toString(),
             synopsis = content.synopsis, canonJson = delta.toJson().toString(), difficulty = difficulty,
-            generatedAtEpochMillis = nowEpochMillis, readDate = null,
+            generatedAtEpochMillis = nowEpochMillis, readDate = null, language = language.wireValue,
         )
         val id = dao.insertEpisode(episode)
         if (id == -1L) {
@@ -102,24 +108,24 @@ class SeasonCoordinator(
             // meantime, the next number is the one to make.
             val stored = checkNotNull(dao.findEpisode(season.id, next.episodeNumber))
             if (stored.readDate == null || attempt >= MAX_RESERVATION_ATTEMPTS) return stored
-            return generateNext(difficulty, reviewExpressions, nowEpochMillis, attempt + 1)
+            return generateNext(language, difficulty, reviewExpressions, nowEpochMillis, attempt + 1)
         }
         dao.updateSeasonCanon(season.id, canon.merged(delta).toJson().toString())
         return episode.copy(id = id)
     }
 
-    private suspend fun createSeason(number: Int, difficulty: Int, nowEpochMillis: Long): SeasonEntity {
-        val bible = generateSeason(SeasonRequest(difficulty, number, dao.listSeasonTitles()))
+    private suspend fun createSeason(language: Language, number: Int, difficulty: Int, nowEpochMillis: Long): SeasonEntity {
+        val bible = generateSeason(SeasonRequest(difficulty, number, dao.listSeasonTitles(language.wireValue), language))
         val season = SeasonEntity(
             number = number, title = bible.title, bibleJson = bible.toJson().toString(),
             canonJson = CanonState(openQuestions = bible.openQuestions).toJson().toString(),
-            difficulty = difficulty, createdAtEpochMillis = nowEpochMillis,
+            difficulty = difficulty, createdAtEpochMillis = nowEpochMillis, language = language.wireValue,
         )
         return try {
             season.copy(id = dao.insertSeason(season))
         } catch (error: Exception) {
             // The same season number was designed concurrently: keep the one that landed.
-            dao.latestSeason()?.takeIf { it.number == number } ?: throw error
+            dao.latestSeason(language.wireValue)?.takeIf { it.number == number } ?: throw error
         }
     }
 
@@ -130,7 +136,7 @@ class SeasonCoordinator(
     }
 
     private fun parse(episode: SeasonEpisodeEntity): LearningContent =
-        parseContentResponse(JSONObject(episode.contentJson), ContentMode.STORY)
+        parseContentResponse(JSONObject(episode.contentJson), ContentMode.STORY, Language.fromWire(episode.language))
 
     private suspend fun summaryOf(episode: SeasonEpisodeEntity): PassageSummary? {
         val base = runCatching { parse(episode) }.getOrNull()?.summary() ?: return null

@@ -24,7 +24,9 @@ internal data class VoiceChoice(
  * (Samsung's `SMTf`/`SMTm`, Google's `#female`/`#male`) and one of each is put first, which is
  * where the first two speakers land. Voices whose names say nothing are still distinct voices.
  * When the device has fewer usable voices than speakers, the same voice is reused at a different
- * pitch rather than letting two roles sound identical.
+ * pitch rather than letting two roles sound identical. The markers name no language, so the
+ * zh-CN voices of 백로그 071 go through the same rule: a name that says nothing about gender
+ * still gets a voice of its own, and the pitch fallback covers whatever is left.
  *
  * Pure Kotlin on purpose: the rule is proved on the JVM and the engine only carries it out.
  */

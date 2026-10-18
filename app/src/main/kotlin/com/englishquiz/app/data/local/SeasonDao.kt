@@ -1,5 +1,6 @@
 package com.englishquiz.app.data.local
 
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Entity
 import androidx.room.Index
@@ -13,7 +14,7 @@ import androidx.room.Query
  * design and never changes; [canonJson] is what the episodes so far have settled, rewritten
  * after each one. [difficulty] is the level the bible was designed at.
  */
-@Entity(tableName = "seasons", indices = [Index(value = ["number"], unique = true)])
+@Entity(tableName = "seasons", indices = [Index(value = ["language", "number"], unique = true)])
 data class SeasonEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val number: Int,
@@ -22,6 +23,8 @@ data class SeasonEntity(
     val canonJson: String,
     val difficulty: Int,
     val createdAtEpochMillis: Long,
+    /** Seasons are numbered per language (백로그 066): English and Chinese each have their own season 1. */
+    @ColumnInfo(defaultValue = "'en'") val language: String = DEFAULT_LANGUAGE,
 )
 
 /**
@@ -45,19 +48,21 @@ data class SeasonEpisodeEntity(
     val difficulty: Int,
     val generatedAtEpochMillis: Long,
     val readDate: String?,
+    /** The season's language, copied here so the unread and read-on-date queries need no join (백로그 066). */
+    @ColumnInfo(defaultValue = "'en'") val language: String = DEFAULT_LANGUAGE,
 )
 
 @Dao
 interface SeasonDao {
-    @Query("SELECT * FROM seasons ORDER BY number DESC LIMIT 1")
-    suspend fun latestSeason(): SeasonEntity?
+    @Query("SELECT * FROM seasons WHERE language = :language ORDER BY number DESC LIMIT 1")
+    suspend fun latestSeason(language: String): SeasonEntity?
 
     @Query("SELECT * FROM seasons WHERE id = :id")
     suspend fun findSeason(id: Long): SeasonEntity?
 
     /** The most recent titles, newest first, so the next design avoids them; bounded for the request size. */
-    @Query("SELECT title FROM seasons ORDER BY number DESC LIMIT 10")
-    suspend fun listSeasonTitles(): List<String>
+    @Query("SELECT title FROM seasons WHERE language = :language ORDER BY number DESC LIMIT 10")
+    suspend fun listSeasonTitles(language: String): List<String>
 
     /** Fails on a duplicate number: two concurrent designs of the same season keep only the first. */
     @Insert(onConflict = OnConflictStrategy.ABORT)
@@ -72,15 +77,15 @@ interface SeasonDao {
     @Query("SELECT * FROM season_episodes WHERE seasonId = :seasonId AND number = :number")
     suspend fun findEpisode(seasonId: Long, number: Int): SeasonEpisodeEntity?
 
-    /** The episode the learner opens next: the oldest one not yet read, across seasons. */
-    @Query("SELECT * FROM season_episodes WHERE readDate IS NULL ORDER BY seasonId, number LIMIT 1")
-    suspend fun oldestUnread(): SeasonEpisodeEntity?
+    /** The episode the learner opens next in [language]: the oldest one not yet read, across its seasons. */
+    @Query("SELECT * FROM season_episodes WHERE language = :language AND readDate IS NULL ORDER BY seasonId, number LIMIT 1")
+    suspend fun oldestUnread(language: String): SeasonEpisodeEntity?
 
-    @Query("SELECT COUNT(*) FROM season_episodes WHERE readDate IS NULL")
-    suspend fun countUnread(): Int
+    @Query("SELECT COUNT(*) FROM season_episodes WHERE language = :language AND readDate IS NULL")
+    suspend fun countUnread(language: String): Int
 
-    @Query("SELECT * FROM season_episodes WHERE readDate = :readDate LIMIT 1")
-    suspend fun episodeReadOn(readDate: String): SeasonEpisodeEntity?
+    @Query("SELECT * FROM season_episodes WHERE language = :language AND readDate = :readDate LIMIT 1")
+    suspend fun episodeReadOn(language: String, readDate: String): SeasonEpisodeEntity?
 
     /** -1 when the (season, number) slot is already taken: the caller then reads the stored one. */
     @Insert(onConflict = OnConflictStrategy.IGNORE)

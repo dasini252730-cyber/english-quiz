@@ -14,11 +14,13 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.data.ai.ContextualMeaning
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.data.local.LearningDatabase
 import com.englishquiz.app.data.preferences.GameProgressRepository
 import com.englishquiz.app.data.repository.LearningRepository
 import com.englishquiz.app.data.repository.listAllSessions
 import com.englishquiz.app.data.repository.listLearningDates
+import com.englishquiz.app.data.repository.listQuizAnswers
 import com.englishquiz.app.domain.game.GameStatsPolicy
 import com.englishquiz.app.domain.game.LearnerLevelPolicy
 import com.englishquiz.app.domain.quiz.QuizMode
@@ -158,13 +160,13 @@ class LearningRecordConsistencyTest {
             assertSessions(repository, expected)
             assertEquals(index + 2, streakDays(repository))
 
-            val row = checkNotNull(runBlocking { database!!.learningDao().findSavedExpression(PULL_IT_OFF) })
+            val row = checkNotNull(runBlocking { database!!.learningDao().findSavedExpression(Language.ENGLISH.wireValue, PULL_IT_OFF) })
             val wasRight = tap == MEANING_PULL
             assertEquals(if (wasRight) 1 else 0, row.consecutiveCorrectCount)
             assertEquals(now, row.lastReviewedAtEpochMillis)
             assertEquals(now + DAY_MILLIS, row.nextReviewAtEpochMillis)
             // One daily row per day, none for the retry: the log and the schedule moved together.
-            val answers = runBlocking { repository.listQuizAnswers(PULL_IT_OFF) }
+            val answers = runBlocking { repository.listQuizAnswers(Language.ENGLISH, PULL_IT_OFF) }
             assertEquals(index + 1, answers.size)
             assertEquals(List(index + 1) { it % 2 == 1 }, answers.map { it.isCorrect })
             assertTrue(answers.all { it.mode == "daily" })
@@ -173,7 +175,7 @@ class LearningRecordConsistencyTest {
 
         // The game layer's total is exactly the session scores plus each day's mission bonus.
         val sessions = runBlocking { repository.listAllSessions() }
-        val stats = GameStatsPolicy.compute(sessions, runBlocking { repository.listSavedExpressions() }, runBlocking { gameRepository.progress.first() }, todayIso)
+        val stats = GameStatsPolicy.compute(sessions, runBlocking { repository.listSavedExpressions(Language.ENGLISH) }, runBlocking { gameRepository.progress.first() }, todayIso)
         assertEquals(expectedTotalPoints(sessions), stats.totalPoints)
         assertEquals(4 * 10, sessions.sumOf { it.score })
         assertEquals(LearnerLevelPolicy.of(stats.totalPoints).level, stats.level.level)
@@ -186,18 +188,18 @@ class LearningRecordConsistencyTest {
         // 백로그 056: the schedule change and the answer row are one transaction. With the log
         // table gone the write fails as a whole, so the row is exactly as it was.
         val repository = openRepository()
-        repository.saveExpression(PULL_IT_OFF, MEANING_PULL, DAY1_NOON - 1_000)
-        repository.saveReviewProgress(PULL_IT_OFF, DAY1_NOON - DAY_MILLIS, DAY1_NOON, 0, 0, false)
+        repository.saveExpression(Language.ENGLISH, PULL_IT_OFF, MEANING_PULL, DAY1_NOON - 1_000)
+        repository.saveReviewProgress(Language.ENGLISH, PULL_IT_OFF, DAY1_NOON - DAY_MILLIS, DAY1_NOON, 0, 0, false)
         database!!.openHelper.writableDatabase.execSQL("DROP TABLE quiz_answers")
         val question = QuizQuestion(PULL_IT_OFF, QuizQuestionType.MULTIPLE_CHOICE, PULL_IT_OFF, listOf(QuizOption(MEANING_PULL, true)), "")
 
         try {
-            repository.recordQuizAnswerFor(question, wasCorrect = true, mode = QuizMode.DAILY, hintUsed = false, nowEpochMillis = DAY1_NOON)
+            repository.recordQuizAnswerFor(Language.ENGLISH, question, wasCorrect = true, mode = QuizMode.DAILY, hintUsed = false, nowEpochMillis = DAY1_NOON)
             fail("the write should have failed without the answer table")
         } catch (_: Exception) {
             // expected
         }
-        val row = checkNotNull(database!!.learningDao().findSavedExpression(PULL_IT_OFF))
+        val row = checkNotNull(database!!.learningDao().findSavedExpression(Language.ENGLISH.wireValue, PULL_IT_OFF))
         assertEquals(0, row.consecutiveCorrectCount)
         assertEquals(DAY1_NOON - DAY_MILLIS, row.lastReviewedAtEpochMillis)
         assertEquals(DAY1_NOON, row.nextReviewAtEpochMillis)

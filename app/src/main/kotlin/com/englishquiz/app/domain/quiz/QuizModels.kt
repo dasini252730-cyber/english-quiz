@@ -48,6 +48,8 @@ data class QuizQuestion(
     val shortMeaning: String = "",
     /** True in the retry round (백로그 047): asked again, scored and recorded no more. */
     val isRetry: Boolean = false,
+    /** Hanyu Pinyin for a Chinese expression (백로그 066), shown on its learn card; "" otherwise. */
+    val pinyin: String = "",
 )
 
 data class QuizSet(

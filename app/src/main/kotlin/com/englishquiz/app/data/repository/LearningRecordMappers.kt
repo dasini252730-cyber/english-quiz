@@ -1,6 +1,7 @@
 package com.englishquiz.app.data.repository
 
 import com.englishquiz.app.data.ai.ContentMode
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.data.ai.LearningContent
 import com.englishquiz.app.data.ai.isKoreanPassage
 import com.englishquiz.app.data.ai.parseContentResponse
@@ -49,7 +50,8 @@ internal fun LearningSessionEntity.toSummary(): LearningSessionSummary = Learnin
  * generated in Korean (백로그 051): either is as good as no row, and the next save replaces it.
  */
 internal fun DailyContentEntity.toContentOrNull(mode: ContentMode): LearningContent? = try {
-    parseContentResponse(JSONObject(contentJson), mode).takeIf { !it.isKoreanPassage }
+    // The row's own language column is the truth (백로그 066), whatever its JSON says.
+    parseContentResponse(JSONObject(contentJson), mode, Language.fromWire(language)).takeIf { !it.isKoreanPassage }
 } catch (_: Exception) {
     null
 }

@@ -1,5 +1,6 @@
 package com.englishquiz.app.ui
 
+import com.englishquiz.app.data.ai.Language
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -58,8 +59,8 @@ class ReviewRouteTest {
     fun savedExpressionsFromReadingAppearInTheReviewList() {
         val repository = openRepository()
         runBlocking {
-            repository.saveExpression("sketchy", "수상한", 1_000L, "That sounds sketchy.")
-            repository.saveExpression("pull it off", "해내다", 2_000L, "I'll totally pull it off.")
+            repository.saveExpression(Language.ENGLISH, "sketchy", "수상한", 1_000L, "That sounds sketchy.")
+            repository.saveExpression(Language.ENGLISH, "pull it off", "해내다", 2_000L, "I'll totally pull it off.")
         }
 
         mount(repository)
@@ -77,9 +78,9 @@ class ReviewRouteTest {
         val repository = openRepository()
         runBlocking {
             // "sketchy" was looked up twice while reading; "pull it off" only enrolled from a passage.
-            repository.saveExpression("sketchy", "수상한", 1_000L, "That sounds sketchy.")
-            repository.saveExpression("sketchy", "수상한", 1_500L, "That sounds sketchy.")
-            repository.saveExpressionIfNew("pull it off", "해내다", 2_000L, "I'll totally pull it off.")
+            repository.saveExpression(Language.ENGLISH, "sketchy", "수상한", 1_000L, "That sounds sketchy.")
+            repository.saveExpression(Language.ENGLISH, "sketchy", "수상한", 1_500L, "That sounds sketchy.")
+            repository.saveExpressionIfNew(Language.ENGLISH, "pull it off", "해내다", 2_000L, "I'll totally pull it off.")
         }
 
         mount(repository)
@@ -97,7 +98,7 @@ class ReviewRouteTest {
     @Test
     fun savedExpressionsSurviveClosingAndReopeningTheDatabase() {
         val first = openRepository()
-        runBlocking { first.saveExpression("hummed", "웅웅거리다", 1_000L, "\"Again?\" it hummed.") }
+        runBlocking { first.saveExpression(Language.ENGLISH, "hummed", "웅웅거리다", 1_000L, "\"Again?\" it hummed.") }
         database?.close()
 
         val reopened = openRepository()

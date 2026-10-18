@@ -25,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.englishquiz.app.data.ai.ContentExpression
 import com.englishquiz.app.data.ai.ContentSegment
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.ui.theme.MongleColor
 import com.englishquiz.app.ui.theme.MongleIconButton
 import com.englishquiz.app.ui.theme.MongleIcons
@@ -39,6 +40,10 @@ internal fun ConversationSegment(
     canPlay: Boolean,
     onPlay: () -> Unit,
     onTokenTap: (ReaderToken) -> Unit,
+    language: Language = Language.ENGLISH,
+    knownWords: Collection<String> = emptyList(),
+    /** Whether the Chinese line's pinyin is shown under it (백로그 066). */
+    showPinyin: Boolean = false,
 ) {
     val playButton: @Composable () -> Unit = {
         MongleIconButton(
@@ -68,7 +73,7 @@ internal fun ConversationSegment(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             if (onRight) playButton()
-            Bubble(segment, expressions, index, onRight, onTokenTap)
+            Bubble(segment, expressions, index, onRight, onTokenTap, language, knownWords, showPinyin)
             if (!onRight) playButton()
         }
     }
@@ -81,6 +86,9 @@ private fun Bubble(
     index: Int,
     onRight: Boolean,
     onTokenTap: (ReaderToken) -> Unit,
+    language: Language,
+    knownWords: Collection<String>,
+    showPinyin: Boolean,
 ) {
     val face = if (onRight) MongleColor.PurpleSoft else MongleColor.Surface
     val border = if (onRight) MongleColor.PurpleSoftBorder else MongleColor.Border
@@ -99,7 +107,7 @@ private fun Bubble(
             .background(face)
             .padding(horizontal = 14.dp, vertical = 10.dp),
     ) {
-        SegmentTokens(segment, expressions, index, FontFamily.SansSerif, onTokenTap)
+        SegmentTokens(segment, expressions, index, FontFamily.SansSerif, onTokenTap, language = language, knownWords = knownWords, showPinyin = showPinyin)
     }
 }
 
@@ -112,6 +120,9 @@ internal fun StorySegment(
     canPlay: Boolean,
     onPlay: () -> Unit,
     onTokenTap: (ReaderToken) -> Unit,
+    language: Language = Language.ENGLISH,
+    knownWords: Collection<String> = emptyList(),
+    showPinyin: Boolean = false,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -133,6 +144,9 @@ internal fun StorySegment(
             index = index,
             fontFamily = FontFamily.Serif,
             onTokenTap = onTokenTap,
+            language = language,
+            knownWords = knownWords,
+            showPinyin = showPinyin,
             modifier = Modifier.padding(top = 4.dp),
         )
     }
@@ -140,7 +154,9 @@ internal fun StorySegment(
 
 /**
  * Draws a segment as separate word tokens so a tap lands on one expression. The AI-annotated
- * expressions carry the canvas's yellow marker; everything else is plain body text.
+ * expressions carry the canvas's yellow marker; everything else is plain body text. English
+ * words keep the space the tokeniser removed between them; Chinese characters sit flush, as
+ * written, because the gap would read as a word boundary that is not there (백로그 071).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -151,11 +167,21 @@ private fun SegmentTokens(
     fontFamily: FontFamily,
     onTokenTap: (ReaderToken) -> Unit,
     modifier: Modifier = Modifier,
+    language: Language = Language.ENGLISH,
+    knownWords: Collection<String> = emptyList(),
+    showPinyin: Boolean = false,
 ) {
-    val tokens = remember(segment, expressions, index) {
-        tokenize(segment.text, expressions, index)
+    val tokens = remember(segment, expressions, index, language, knownWords) {
+        tokenize(segment.text, expressions, index, language, knownWords)
     }
-    FlowRow(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+    val gap = if (language == Language.CHINESE) 0.dp else 4.dp
+    val sidePadding = if (language == Language.CHINESE) 0.dp else 2.dp
+    Column(modifier = modifier) {
+    // 백로그 066: the line's pinyin, above the characters as in a textbook, only while the reader asks for it.
+    if (showPinyin && segment.pinyin.isNotEmpty()) {
+        Text(segment.pinyin, style = MaterialTheme.typography.bodySmall, color = MongleColor.InkMuted, modifier = Modifier.padding(bottom = 2.dp))
+    }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(gap)) {
         for (token in tokens) {
             Text(
                 text = token.display,
@@ -171,9 +197,10 @@ private fun SegmentTokens(
                             Modifier
                         },
                     )
-                    .padding(horizontal = 2.dp),
+                    .padding(horizontal = sidePadding),
             )
         }
+    }
     }
 }
 

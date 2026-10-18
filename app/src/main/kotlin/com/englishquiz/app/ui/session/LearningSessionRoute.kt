@@ -10,6 +10,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import com.englishquiz.app.data.ai.ContentGenerationRequest
 import com.englishquiz.app.data.ai.ContentMode
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.data.ai.ContextualMeaning
 import com.englishquiz.app.data.ai.LearningContent
 import com.englishquiz.app.data.local.LIBRARY_SESSION_MODE
@@ -70,6 +71,8 @@ fun LearningSessionRoute(
     gameRepository: GameProgressRepository? = null,
     /** The story as a season of episodes (백로그 063); null keeps the loose daily chain. */
     seasons: SeasonCoordinator? = null,
+    /** The language of this session (백로그 066): its passages, expressions and voices. */
+    language: Language = Language.DEFAULT,
 ) {
     var episodeLabel by rememberSaveable { mutableStateOf<String?>(null) }
     var step by rememberSaveable(stateSaver = SessionStepSaver) {
@@ -86,15 +89,15 @@ fun LearningSessionRoute(
         try {
             val now = nowEpochMillis()
             val learningDate = isoDate(now, zoneId)
-            if (savedCountAtStart < 0) savedCountAtStart = repository.listSavedExpressions().size
+            if (savedCountAtStart < 0) savedCountAtStart = repository.listSavedExpressions(language).size
             if (initialContent != null) {
                 step = SessionStep.Reading(initialContent)
                 return@LaunchedEffect
             }
             // Today's passage for this mode: stored on a second entry (백로그 021), the next episode
             // for a story in a season (백로그 063), or a fresh generation stored for the day.
-            val content = todaysContent(repository, seasons, mode, difficulty, learningDate, now, generateContent)
-            if (seasons != null && mode == ContentMode.STORY) episodeLabel = seasons.labelFor(learningDate)
+            val content = todaysContent(repository, seasons, language, mode, difficulty, learningDate, now, generateContent)
+            if (seasons != null && mode == ContentMode.STORY) episodeLabel = seasons.labelFor(language, learningDate)
             step = SessionStep.Reading(content)
         } catch (error: CancellationException) {
             throw error
@@ -138,6 +141,7 @@ fun LearningSessionRoute(
         is SessionStep.Quiz -> QuizRoute(
             repository = repository,
             todayContent = current.content,
+            language = language,
             onFinished = { summary ->
                 step = SessionStep.Finished(summary)
             },
@@ -153,7 +157,8 @@ fun LearningSessionRoute(
             // re-read, and not on a second entry into a day whose session for this mode is recorded.
             skipComprehension = {
                 initialContent != null ||
-                    repository.findLearningSessions(isoDate(nowEpochMillis(), zoneId)).any { it.mode == mode.wireValue }
+                    repository.findLearningSessions(isoDate(nowEpochMillis(), zoneId))
+                        .any { it.mode == mode.wireValue && it.language == language.wireValue }
             },
         )
 
@@ -167,6 +172,7 @@ fun LearningSessionRoute(
             zoneId = zoneId,
             onSessionRecorded = onSessionRecorded,
             gameRepository = gameRepository,
+            language = language,
         )
     }
 }
@@ -187,11 +193,12 @@ private fun FinishedStep(
     zoneId: ZoneId,
     onSessionRecorded: suspend (sessionCompletedAtEpochMillis: Long) -> Unit,
     gameRepository: GameProgressRepository?,
+    language: Language,
 ) {
     var resolved by remember { mutableStateOf<LearningSessionSummary?>(null) }
     LaunchedEffect(summary) {
         val newlySaved = try {
-            (repository.listSavedExpressions().size - savedCountAtStart).coerceAtLeast(0)
+            (repository.listSavedExpressions(language).size - savedCountAtStart).coerceAtLeast(0)
         } catch (error: CancellationException) {
             throw error
         } catch (_: Exception) {
@@ -217,6 +224,7 @@ private fun FinishedStep(
             zoneId = zoneId,
             onSessionRecorded = onSessionRecorded,
             gameRepository = gameRepository,
+            language = language,
         )
     }
 }

@@ -111,6 +111,7 @@ object QuizBuilder {
             explanation = explanationFor(expression),
             growthBefore = stage,
             shortMeaning = expression.shortMeaning,
+            pinyin = expression.pinyin,
         )
         if (askCards && ExpressionState.isNew(expression)) {
             // Seen for the first time: read, not tested (백로그 045).

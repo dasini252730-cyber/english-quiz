@@ -11,6 +11,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.data.ai.LearningContent
 import com.englishquiz.app.data.local.SavedExpressionEntity
 import com.englishquiz.app.data.repository.LearningRepository
@@ -52,8 +53,10 @@ fun QuizRoute(
     seed: () -> Long = { System.nanoTime() },
     enrolExpressions: Boolean = true,
     onExpressionsEnrolled: (Int) -> Unit = {},
+    /** The language of the expressions asked, graded and spoken (백로그 066); today's passage, when there is one, is in it. */
+    language: Language = todayContent?.language ?: Language.DEFAULT,
     questionSource: suspend (LearningRepository, Long) -> List<SavedExpressionEntity> =
-        { repo, at -> repo.findDueExpressions(at) },
+        { repo, at -> repo.findDueExpressions(language, at) },
     maxQuestions: Int = QuizBuilder.DEFAULT_MAX_QUESTIONS,
     pointsMultiplier: Int = 1,
     skipComprehension: suspend () -> Boolean = { false },
@@ -91,7 +94,7 @@ fun QuizRoute(
     var growth by remember { mutableStateOf<GrowthChange?>(null) }
     var hint by remember { mutableStateOf<String?>(null) }
     val wrong = remember { mutableListOf<QuizQuestion>() }
-    val speech = rememberQuizSpeech()
+    val speech = rememberQuizSpeech(language)
     val speechState by speech.state.collectAsState()
 
     fun finish() {
@@ -106,7 +109,7 @@ fun QuizRoute(
         try {
             val (questions, notice) = loadQuizQuestions(
                 repository, todayContent, nowEpochMillis, shuffleSeed, enrolExpressions, onExpressionsEnrolled,
-                questionSource, maxQuestions, skipComprehension, comprehensionDone, askCards,
+                questionSource, maxQuestions, skipComprehension, comprehensionDone, askCards, language,
             )
             if (totalQuestions == UNKNOWN_TOTAL) {
                 totalQuestions = questions.size
@@ -137,7 +140,7 @@ fun QuizRoute(
             try {
                 // The last answer's write must outlive the screen: "결과 보기" leaves at once.
                 val updated = withContext(NonCancellable) {
-                    repository.recordQuizAnswerFor(question, option.isCorrect, mode, hintUsed, nowEpochMillis)
+                    repository.recordQuizAnswerFor(language, question, option.isCorrect, mode, hintUsed, nowEpochMillis)
                 } ?: return@launch
                 if (option.isCorrect && updated.isMastered) masteredCount += 1
                 if (current()) growth = growthChange(question, updated)
@@ -205,7 +208,7 @@ fun QuizRoute(
         if (!practice) {
             scope.launch {
                 // The tap that answers the last card also leaves the screen; the write must land.
-                withContext(NonCancellable) { runCatching { repository.markSeen(question.expression, nowEpochMillis) } }
+                withContext(NonCancellable) { runCatching { repository.markSeen(language, question.expression, nowEpochMillis) } }
             }
         }
         next()
@@ -222,9 +225,9 @@ fun QuizRoute(
         onSelectOption = ::answer,
         onSubmitTyped = { typed ->
             val question = questions?.getOrNull(index)
-            if (question != null) answer(QuizOption(typed.trim(), typedAnswerMatches(typed, question.expression)))
+            if (question != null) answer(QuizOption(typed.trim(), typedAnswerMatches(typed, question.expression, language)))
         },
-        onHint = { questions?.getOrNull(index)?.let { hint = typedAnswerHint(it.expression) } },
+        onHint = { questions?.getOrNull(index)?.let { hint = typedAnswerHint(it.expression, language) } },
         onNext = { if (selectedOption != null) next() },
         onRetryRecord = {
             val question = questions?.getOrNull(index)
@@ -240,5 +243,6 @@ fun QuizRoute(
         onSeen = ::card,
         speechReady = speechState.ready,
         onPlay = { speech.play(listOf(it)) },
+        language = language,
     )
 }

@@ -27,7 +27,7 @@ class AiLearningClient(
     private val appToken: String = "",
 ) {
     suspend fun generateContent(request: ContentGenerationRequest): LearningContent =
-        parseSafely(post(requestJson(request))) { parseContentResponse(it, request.mode) }
+        parseSafely(post(requestJson(request))) { parseContentResponse(it, request.mode, request.language) }
 
     suspend fun explainMeaning(request: MeaningRequest): ContextualMeaning =
         parseSafely(post(meaningJson(request)), ::parseMeaningResponse)
@@ -110,6 +110,7 @@ class AiLearningClient(
     private fun requestJson(request: ContentGenerationRequest) = JSONObject().apply {
         put("action", "content")
         put("mode", request.mode.wireValue)
+        put("language", request.language.wireValue)
         put("difficulty", request.difficulty)
         put("reviewExpressions", JSONArray(request.reviewExpressions))
         request.previousStory?.let { put("previousStory", it.toJson()) }
@@ -128,6 +129,7 @@ class AiLearningClient(
 
     private fun seasonJson(request: SeasonRequest) = JSONObject().apply {
         put("action", "season")
+        put("language", request.language.wireValue)
         put("difficulty", request.difficulty)
         put("seasonNumber", request.seasonNumber)
         put("previousTitles", JSONArray(request.previousTitles))
@@ -135,6 +137,7 @@ class AiLearningClient(
 
     private fun meaningJson(request: MeaningRequest) = JSONObject().apply {
         put("action", "meaning")
+        put("language", request.language.wireValue)
         put("expression", request.expression)
         put("context", request.context)
     }

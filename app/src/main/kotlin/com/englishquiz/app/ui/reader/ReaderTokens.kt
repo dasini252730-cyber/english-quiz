@@ -1,6 +1,7 @@
 package com.englishquiz.app.ui.reader
 
 import com.englishquiz.app.data.ai.ContentExpression
+import com.englishquiz.app.data.ai.Language
 
 /**
  * One tappable (or non-tappable) unit of a reader segment.
@@ -20,19 +21,26 @@ data class ReaderToken(
     val isTappable: Boolean get() = lookup.isNotEmpty()
 }
 
-private val EDGE_PUNCTUATION = charArrayOf(
+/** Marks stripped from a token's edges before lookup: ASCII first, then the CJK marks of a Chinese passage (백로그 071). */
+internal val EDGE_PUNCTUATION = charArrayOf(
     '.', ',', '!', '?', ';', ':', '"', '\'', '“', '”', '‘', '’', '(', ')', '[', ']', '…', '-', '—',
+    '。', '，', '！', '？', '、', '：', '；', '（', '）', '《', '》', '「', '」', '『', '』', '【', '】',
 )
+
+internal fun String.trimEdgePunctuation(): String = trim(*EDGE_PUNCTUATION).trim()
 
 /**
  * Splits [segmentText] into [ReaderToken]s. Any [ContentExpression] that targets [segmentIndex]
  * and whose range is valid and non-overlapping with an earlier one becomes a single token; the
- * remaining text is split into whitespace-delimited word tokens.
+ * remaining text is split into whitespace-delimited word tokens in English, or by [chineseTokens]
+ * — longest match against [knownWords], then single characters — in Chinese (백로그 071).
  */
 fun tokenize(
     segmentText: String,
     expressions: List<ContentExpression>,
     segmentIndex: Int,
+    language: Language = Language.ENGLISH,
+    knownWords: Collection<String> = emptyList(),
 ): List<ReaderToken> {
     if (segmentText.isEmpty()) return emptyList()
 
@@ -47,16 +55,18 @@ fun tokenize(
             accepted
         }
 
+    val plain: (Int, Int) -> List<ReaderToken> = when (language) {
+        Language.ENGLISH -> { from, to -> wordTokens(segmentText, from, to, segmentIndex) }
+        Language.CHINESE -> { from, to -> chineseTokens(segmentText, from, to, segmentIndex, knownWords) }
+    }
     val tokens = mutableListOf<ReaderToken>()
     var cursor = 0
     for (span in spans) {
-        if (span.startIndex > cursor) {
-            tokens += wordTokens(segmentText, cursor, span.startIndex, segmentIndex)
-        }
+        if (span.startIndex > cursor) tokens += plain(cursor, span.startIndex)
         val text = segmentText.substring(span.startIndex, span.endIndex)
         tokens += ReaderToken(
             display = text,
-            lookup = text.trim(*EDGE_PUNCTUATION).trim(),
+            lookup = text.trimEdgePunctuation(),
             segmentIndex = segmentIndex,
             startIndex = span.startIndex,
             endIndex = span.endIndex,
@@ -64,9 +74,7 @@ fun tokenize(
         )
         cursor = span.endIndex
     }
-    if (cursor < segmentText.length) {
-        tokens += wordTokens(segmentText, cursor, segmentText.length, segmentIndex)
-    }
+    if (cursor < segmentText.length) tokens += plain(cursor, segmentText.length)
     return tokens
 }
 
@@ -81,7 +89,7 @@ private fun wordTokens(text: String, from: Int, to: Int, segmentIndex: Int): Lis
         val word = text.substring(index, end)
         tokens += ReaderToken(
             display = word,
-            lookup = word.trim(*EDGE_PUNCTUATION).trim(),
+            lookup = word.trimEdgePunctuation(),
             segmentIndex = segmentIndex,
             startIndex = index,
             endIndex = end,

@@ -7,6 +7,7 @@ import com.englishquiz.app.data.ai.ContentExpression
 import com.englishquiz.app.data.ai.ContentGenerationRequest
 import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.data.ai.ContentSegment
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.data.ai.LearningContent
 import com.englishquiz.app.data.ai.PassageSummary
 import com.englishquiz.app.data.local.LearningDatabase
@@ -75,6 +76,7 @@ class ContentPrefetcherTest {
         segments = listOf(ContentSegment("Alex", "We can pull it off together.")),
         expressions = listOf(ContentExpression("pull it off", "해내다", 0, 7, 18)),
         synopsis = "Alex pulled it off in a ${request.mode.wireValue}. What it cost is left open.",
+        language = request.language,
     )
 
     @Test
@@ -85,8 +87,8 @@ class ContentPrefetcherTest {
         // Story is what the learner turned up (백로그 034); tomorrow's story must be made at that level.
         settings.setLevel(ContentMode.STORY, 5)
         // A phrase that comes due just after midnight belongs in tomorrow's passage.
-        repository.saveExpression("hang out", "놀다", 1L, "Let's hang out.")
-        repository.saveReviewProgress("hang out", 1L, TOMORROW_START + 1, 1, 0, false)
+        repository.saveExpression(Language.ENGLISH, "hang out", "놀다", 1L, "Let's hang out.")
+        repository.saveReviewProgress(Language.ENGLISH, "hang out", 1L, TOMORROW_START + 1, 1, 0, false)
         val requests = mutableListOf<ContentGenerationRequest>()
         var storyFails = true
         val prefetcher = ContentPrefetcher(
@@ -110,10 +112,10 @@ class ContentPrefetcherTest {
         assertEquals(listOf("hang out"), requests[0].reviewExpressions)
         // The story failed, so the conversation had no companion to practise.
         assertNull(requests[1].companion)
-        assertNotNull(repository.findDailyContent(TOMORROW, ContentMode.CONVERSATION))
-        assertNull(repository.findDailyContent(TOMORROW, ContentMode.STORY))
+        assertNotNull(repository.findDailyContent(Language.ENGLISH, TOMORROW, ContentMode.CONVERSATION))
+        assertNull(repository.findDailyContent(Language.ENGLISH, TOMORROW, ContentMode.STORY))
         // Tonight's row is untouched: tomorrow's passage is not today's.
-        assertNull(repository.findDailyContent(TODAY, ContentMode.CONVERSATION))
+        assertNull(repository.findDailyContent(Language.ENGLISH, TODAY, ContentMode.CONVERSATION))
 
         // Run again: the conversation is not made twice, the failed story is retried.
         storyFails = false
@@ -129,7 +131,7 @@ class ContentPrefetcherTest {
         )
         assertEquals(
             listOf(ContentMode.CONVERSATION, ContentMode.STORY),
-            repository.listLibrary().filter { it.learningDate == TOMORROW }.map { ContentMode.valueOf(it.mode.uppercase()) },
+            repository.listLibrary(Language.ENGLISH).filter { it.learningDate == TOMORROW }.map { ContentMode.valueOf(it.mode.uppercase()) },
         )
     }
 
@@ -160,7 +162,7 @@ class ContentPrefetcherTest {
         release.complete(Unit)
 
         withTimeout(10_000) {
-            while (repository.listLibrary().count { it.learningDate == TOMORROW } < 2) delay(50)
+            while (repository.listLibrary(Language.ENGLISH).count { it.learningDate == TOMORROW } < 2) delay(50)
         }
         // Two modes, one run: the second start did not add a third or fourth generation.
         assertEquals(2, calls.get())
@@ -169,6 +171,46 @@ class ContentPrefetcherTest {
         prefetcher.prefetchTomorrow()
         delay(500)
         assertEquals(2, calls.get())
+    }
+
+    @Test
+    fun onlyTheSelectedLanguageIsMadeAheadAndItsRequestsCarryIt() = runBlocking {
+        val repository = openRepository()
+        val settings = settings()
+        settings.saveAssessmentResult(assessmentLevel = 3)
+        // 백로그 066: home is on Chinese tonight, with its story turned up to 5.
+        settings.setLanguage(Language.CHINESE)
+        settings.setLevel(ContentMode.STORY, 5, Language.CHINESE)
+        settings.setLevel(ContentMode.CONVERSATION, 2, Language.CHINESE)
+        // Both languages have a phrase due tomorrow; only the Chinese one belongs in a Chinese passage.
+        repository.saveExpression(Language.ENGLISH, "hang out", "놀다", 1L, "Let's hang out.")
+        repository.saveReviewProgress(Language.ENGLISH, "hang out", 1L, TOMORROW_START + 1, 1, 0, false)
+        repository.saveExpression(Language.CHINESE, "打电话", "전화하다", 1L, "我们明天打电话。", pinyin = "dǎ diànhuà")
+        repository.saveReviewProgress(Language.CHINESE, "打电话", 1L, TOMORROW_START + 1, 1, 0, false)
+        val requests = mutableListOf<ContentGenerationRequest>()
+        val prefetcher = ContentPrefetcher(
+            repository = repository,
+            settings = settings,
+            generate = { request -> requests += request; passage(request) },
+            scope = this,
+            zoneId = ZONE,
+            nowEpochMillis = { TONIGHT },
+        )
+
+        assertEquals(listOf(ContentMode.STORY, ContentMode.CONVERSATION), prefetcher.prefetchTomorrowNow())
+
+        assertEquals(listOf(Language.CHINESE, Language.CHINESE), requests.map { it.language })
+        // The Chinese levels the learner set — not English's diagnosed 4, nor the prefetcher's fallback 3.
+        assertEquals(listOf(5, 2), requests.map { it.difficulty })
+        assertEquals(listOf(listOf("打电话"), listOf("打电话")), requests.map { it.reviewExpressions })
+        assertEquals(ContentMode.STORY, requests[1].companion?.mode)
+        val tomorrow = repository.listLibrary(Language.CHINESE).filter { it.learningDate == TOMORROW }
+        assertEquals(setOf("story", "conversation"), tomorrow.map { it.mode }.toSet())
+        assertEquals(listOf("zh", "zh"), tomorrow.map { it.language })
+        // Nothing English was made: that language is generated on its first tap instead.
+        assertTrue(repository.listLibrary(Language.ENGLISH).isEmpty())
+        assertNull(repository.findDailyContent(Language.ENGLISH, TOMORROW, ContentMode.STORY))
+        assertNotNull(repository.findDailyContent(Language.CHINESE, TOMORROW, ContentMode.CONVERSATION))
     }
 
     private companion object {

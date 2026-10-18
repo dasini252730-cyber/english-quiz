@@ -1,5 +1,6 @@
 package com.englishquiz.app.ui
 
+import com.englishquiz.app.data.ai.Language
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.StateRestorationTester
@@ -35,6 +36,8 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import com.englishquiz.app.data.repository.listAllSessions
+import com.englishquiz.app.data.repository.listQuizAnswers
+import com.englishquiz.app.data.repository.listWrongAnswerCounts
 import com.englishquiz.app.data.repository.recordCompletedSession
 
 /**
@@ -129,11 +132,11 @@ class LearningHomeTest {
     fun theReviewBoxPracticeQuizMovesTheExpressionButRecordsNoSession() {
         val repository = openRepository()
         runBlocking {
-            repository.saveExpression("sketchy", "수상한", 1_000L)
-            repository.saveExpression("hang out", "놀다", 900L)
+            repository.saveExpression(Language.ENGLISH, "sketchy", "수상한", 1_000L)
+            repository.saveExpression(Language.ENGLISH, "hang out", "놀다", 900L)
             // Past their cards, so the practice asks them (백로그 045).
             listOf("sketchy", "hang out").forEach {
-                repository.saveReviewProgress(it, 2_000L, 3_000L, consecutiveCorrectCount = 0, incorrectCount = 0, isMastered = false)
+                repository.saveReviewProgress(Language.ENGLISH, it, 2_000L, 3_000L, consecutiveCorrectCount = 0, incorrectCount = 0, isMastered = false)
             }
         }
         compose.setContent(home(repository))
@@ -167,7 +170,7 @@ class LearningHomeTest {
         compose.waitUntil(TIMEOUT_MILLIS) {
             runBlocking { repository.listWrongAnswerCounts().values.sum() == 1 }
         }
-        runBlocking { repository.listSavedExpressions() }.forEach {
+        runBlocking { repository.listSavedExpressions(Language.ENGLISH) }.forEach {
             assertEquals(0, it.incorrectCount)
             assertEquals(0, it.consecutiveCorrectCount)
             assertEquals(2_000L, it.lastReviewedAtEpochMillis)
@@ -180,8 +183,8 @@ class LearningHomeTest {
         val repository = openRepository()
         runBlocking {
             // Never asked before: the boss still asks them as questions, never as cards (백로그 045).
-            repository.saveExpression("sketchy", "수상한", 1_000L)
-            repository.saveExpression("hang out", "놀다", 900L)
+            repository.saveExpression(Language.ENGLISH, "sketchy", "수상한", 1_000L)
+            repository.saveExpression(Language.ENGLISH, "hang out", "놀다", 900L)
         }
         val recorded = mutableListOf<Long>()
         compose.setContent {
@@ -214,10 +217,10 @@ class LearningHomeTest {
         assertEquals(2, session.quizQuestionCount)
         // 백로그 056: the boss logs its answers and moves no schedule: the rows are as they were saved.
         compose.waitUntil(TIMEOUT_MILLIS) {
-            runBlocking { listOf("sketchy", "hang out").sumOf { repository.listQuizAnswers(it).size } == 2 }
+            runBlocking { listOf("sketchy", "hang out").sumOf { repository.listQuizAnswers(Language.ENGLISH, it).size } == 2 }
         }
-        runBlocking { repository.listSavedExpressions() }.forEach {
-            assertEquals(listOf("boss" to true), runBlocking { repository.listQuizAnswers(it.displayExpression) }.map { a -> a.mode to a.isCorrect })
+        runBlocking { repository.listSavedExpressions(Language.ENGLISH) }.forEach {
+            assertEquals(listOf("boss" to true), runBlocking { repository.listQuizAnswers(Language.ENGLISH, it.displayExpression) }.map { a -> a.mode to a.isCorrect })
             assertEquals(null, it.lastReviewedAtEpochMillis)
             assertEquals(0, it.consecutiveCorrectCount)
         }
@@ -253,7 +256,7 @@ class LearningHomeTest {
     @Test
     fun theReviewListOpensFromHomeAndTheBackArrowReturnsHome() {
         val repository = openRepository()
-        runBlocking { repository.saveExpression("sketchy", "수상한", 1_000L, "That sounds sketchy.") }
+        runBlocking { repository.saveExpression(Language.ENGLISH, "sketchy", "수상한", 1_000L, "That sounds sketchy.") }
         compose.setContent(home(repository))
 
         awaitText(HOME_PROMPT)

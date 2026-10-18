@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.data.local.LibraryItem
 import com.englishquiz.app.data.repository.LearningRepository
@@ -44,11 +45,13 @@ fun LibraryRoute(
     onOpen: (LibraryItem) -> Unit,
     onBack: () -> Unit,
     today: LocalDate = LocalDate.now(),
+    /** Only this language's passages are listed (백로그 066). */
+    language: Language = Language.DEFAULT,
 ) {
     BackHandler(onBack = onBack)
-    val entries by produceState<List<LibraryEntry>?>(initialValue = null, repository, today) {
+    val entries by produceState<List<LibraryEntry>?>(initialValue = null, repository, today, language) {
         value = try {
-            LibraryPolicy.arrange(repository.listLibrary(), today)
+            LibraryPolicy.arrange(repository.listLibrary(language), today)
         } catch (error: CancellationException) {
             throw error
         } catch (_: Exception) {

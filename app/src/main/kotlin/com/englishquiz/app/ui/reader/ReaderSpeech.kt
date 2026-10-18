@@ -1,16 +1,16 @@
 package com.englishquiz.app.ui.reader
 
 import android.content.Context
-import com.englishquiz.app.data.ai.SpeakerGender
 import android.os.Handler
 import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import com.englishquiz.app.BuildConfig
+import com.englishquiz.app.data.ai.Language
+import com.englishquiz.app.data.ai.SpeakerGender
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import java.util.Locale
 
 data class SpeechState(
     val ready: Boolean = false,
@@ -21,9 +21,17 @@ data class SpeechState(
 /** One thing to say and, for a conversation, who says it. A `null` speaker gets the default voice. */
 data class SpeechLine(val text: String, val speaker: String? = null)
 
-/** Owned by a visible reader; all calls and state changes run on the main thread. */
-class ReaderSpeech internal constructor(createEngine: ((Int) -> Unit) -> SpeechEngine) {
-    constructor(context: Context) : this({ onInit -> AndroidSpeechEngine(context, onInit) })
+/**
+ * Owned by a visible reader; all calls and state changes run on the main thread. It reads one
+ * [language] for its whole life (백로그 071): the engine is set to that language's locale, and
+ * when the device cannot speak it the state carries a message naming it.
+ */
+class ReaderSpeech internal constructor(
+    private val language: Language = Language.ENGLISH,
+    createEngine: ((Int) -> Unit) -> SpeechEngine,
+) {
+    constructor(context: Context, language: Language = Language.ENGLISH) :
+        this(language, { onInit -> AndroidSpeechEngine(context, language, onInit) })
 
     private val handler = Handler(Looper.getMainLooper())
     private val mutableState = MutableStateFlow(SpeechState())
@@ -54,10 +62,10 @@ class ReaderSpeech internal constructor(createEngine: ((Int) -> Unit) -> SpeechE
     private fun initialize(status: Int) {
         val tts = engine ?: return
         val supported = status == TextToSpeech.SUCCESS &&
-            tts.setLanguage(Locale.US) >= TextToSpeech.LANG_AVAILABLE
+            tts.setLanguage(language.locale) >= TextToSpeech.LANG_AVAILABLE
         mutableState.value = SpeechState(
             ready = supported,
-            error = if (supported) null else "영어 음성을 사용할 수 없어요. 기기의 음성 설정을 확인해 주세요.",
+            error = if (supported) null else unavailableMessage(language),
         )
         tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) = Unit
@@ -167,5 +175,9 @@ class ReaderSpeech internal constructor(createEngine: ((Int) -> Unit) -> SpeechE
     private companion object {
         const val TAG = "ReaderSpeech"
         val DEFAULT_VOICE = VoiceChoice(voiceName = null, pitch = 1f)
+
+        /** Shown when the engine has no voice for [language]; the fix is on the device, so it says where. */
+        fun unavailableMessage(language: Language): String =
+            "${language.korean} 음성을 사용할 수 없어요. 설정 > 텍스트 음성 변환에서 ${language.korean} 음성을 설치해 주세요."
     }
 }

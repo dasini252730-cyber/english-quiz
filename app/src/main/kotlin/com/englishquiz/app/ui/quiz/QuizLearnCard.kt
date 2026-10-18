@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.ui.reader.ReaderSpeech
 import com.englishquiz.app.ui.theme.MongleButton
 import com.englishquiz.app.ui.theme.MongleButtonColors
@@ -50,6 +51,10 @@ internal fun QuizLearnCard(
                 iconSize = 18.dp,
             )
         }
+        // 백로그 066: a Chinese expression shows how it is read before what it means.
+        if (question.pinyin.isNotEmpty()) {
+            Text(question.pinyin, style = MaterialTheme.typography.titleMedium, color = MongleColor.InkMuted)
+        }
         if (question.shortMeaning.isNotEmpty()) {
             Text(question.shortMeaning, style = MaterialTheme.typography.headlineSmall, color = MongleColor.AmberLabel)
         }
@@ -66,10 +71,10 @@ internal fun QuizLearnCard(
 
 /** A speech engine for the quiz, stopped when the screen stops and closed when it leaves. */
 @Composable
-internal fun rememberQuizSpeech(): ReaderSpeech {
+internal fun rememberQuizSpeech(language: Language = Language.DEFAULT): ReaderSpeech {
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
-    val speech = remember(context, owner) { ReaderSpeech(context) }
+    val speech = remember(context, owner, language) { ReaderSpeech(context, language) }
     DisposableEffect(speech, owner) {
         val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_STOP) speech.stop() }
         owner.lifecycle.addObserver(observer)

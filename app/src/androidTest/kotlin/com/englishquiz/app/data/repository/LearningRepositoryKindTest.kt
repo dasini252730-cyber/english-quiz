@@ -1,5 +1,6 @@
 package com.englishquiz.app.data.repository
 
+import com.englishquiz.app.data.ai.Language
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.englishquiz.app.data.local.LearningDatabase
@@ -29,18 +30,18 @@ class LearningRepositoryKindTest {
         val dao = db.learningDao()
 
         // A kind outside the list is dropped at the boundary, like the server does.
-        repository.saveExpressionIfNew("sketchy", "수상한", 100, "That sounds sketchy.", kind = "phrasal verb")
-        assertEquals("", dao.findSavedExpression("sketchy")?.kind)
+        repository.saveExpressionIfNew(Language.ENGLISH, "sketchy", "수상한", 100, "That sounds sketchy.", kind = "phrasal verb")
+        assertEquals("", dao.findSavedExpression(Language.ENGLISH.wireValue, "sketchy")?.kind)
         // A row from before kinds were kept takes the kind a later passage brings, once.
-        repository.saveExpressionIfNew("sketchy", "수상한", 200, "That sounds sketchy.", kind = "adjective")
-        assertEquals("adjective", dao.findSavedExpression("sketchy")?.kind)
-        repository.saveExpressionIfNew("sketchy", "수상한", 300, "That sounds sketchy.", kind = "noun")
-        repository.saveExpression("sketchy", "수상한", 400, "That sounds sketchy.", kind = "verb")
-        assertEquals("adjective", dao.findSavedExpression("sketchy")?.kind)
+        repository.saveExpressionIfNew(Language.ENGLISH, "sketchy", "수상한", 200, "That sounds sketchy.", kind = "adjective")
+        assertEquals("adjective", dao.findSavedExpression(Language.ENGLISH.wireValue, "sketchy")?.kind)
+        repository.saveExpressionIfNew(Language.ENGLISH, "sketchy", "수상한", 300, "That sounds sketchy.", kind = "noun")
+        repository.saveExpression(Language.ENGLISH, "sketchy", "수상한", 400, "That sounds sketchy.", kind = "verb")
+        assertEquals("adjective", dao.findSavedExpression(Language.ENGLISH.wireValue, "sketchy")?.kind)
 
         // A tap saves the kind with the row, in its canonical spelling.
-        repository.saveExpression("hang out", "놀다", 500, "Let's hang out.", kind = " Verb ")
-        assertEquals("verb", dao.findSavedExpression("hang out")?.kind)
+        repository.saveExpression(Language.ENGLISH, "hang out", "놀다", 500, "Let's hang out.", kind = " Verb ")
+        assertEquals("verb", dao.findSavedExpression(Language.ENGLISH.wireValue, "hang out")?.kind)
     }
 
     private companion object {

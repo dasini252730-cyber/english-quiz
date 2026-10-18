@@ -182,8 +182,8 @@ data class SeasonContext(
     }
 }
 
-/** Asks the server to design a new season. */
-data class SeasonRequest(val difficulty: Int, val seasonNumber: Int, val previousTitles: List<String>)
+/** Asks the server to design a new season in [language] (백로그 066). */
+data class SeasonRequest(val difficulty: Int, val seasonNumber: Int, val previousTitles: List<String>, val language: Language = Language.DEFAULT)
 
 private fun JSONArray?.strings(): List<String> =
     this?.let { array -> (0 until array.length()).map { array.optString(it) }.filter { it.isNotBlank() } } ?: emptyList()

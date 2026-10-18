@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.englishquiz.app.data.ai.ContentMode
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.domain.game.GameStats
 import com.englishquiz.app.domain.game.Badge
 import com.englishquiz.app.domain.quiz.QuizBuilder
@@ -61,6 +62,9 @@ fun HomeScreen(
     onBuyShield: () -> Unit = {},
     onBadgesClick: () -> Unit = {},
     onBossClick: () -> Unit = {},
+    /** The language home works in (백로그 066) and the switch between the two. */
+    language: Language = Language.DEFAULT,
+    onLanguageChange: (Language) -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -71,11 +75,18 @@ fun HomeScreen(
             .padding(start = 20.dp, end = 20.dp, top = 28.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
-        Text(
-            "StoryEnglish",
-            style = MaterialTheme.typography.headlineMedium,
-            color = MongleColor.Purple,
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                "StoryEnglish",
+                style = MaterialTheme.typography.headlineMedium,
+                color = MongleColor.Purple,
+            )
+            HomeLanguageToggle(language, onLanguageChange)
+        }
         SummaryTiles(summary)
         summary.queue?.let { ReviewQueueNotice(it) }
         summary.game?.let { game ->

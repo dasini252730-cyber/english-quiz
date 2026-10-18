@@ -17,6 +17,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.englishquiz.app.data.ai.ContentMode
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.data.preferences.GameProgress
 import com.englishquiz.app.data.preferences.GameProgressRepository
 import com.englishquiz.app.data.repository.LearningRepository
@@ -51,22 +52,26 @@ internal fun LearningHomeSummary(
     onSuggestionAnswer: (ContentMode, accepted: Boolean) -> Unit,
     /** One line under the story's level after a change (백로그 063); null shows none. */
     storyLevelNote: String? = null,
+    /** The language home works in (백로그 066): its expressions are counted and queued; the streak is shared. */
+    language: Language = Language.DEFAULT,
+    onLanguageChange: (Language) -> Unit = {},
     onNavigate: (HomeDestination) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     var retry by remember { mutableIntStateOf(0) }
-    val result by produceState<Result<HomeSummary>?>(null, repository, gameRepository, retry) {
+    val result by produceState<Result<HomeSummary>?>(null, repository, gameRepository, retry, language) {
         value = null
         try {
             val progress = gameRepository?.progress ?: flowOf(GameProgress())
-            combine(repository.observeSavedExpressions(), progress) { expressions, game -> expressions to game }
+            combine(repository.observeSavedExpressions(language), progress) { expressions, game -> expressions to game }
                 .collect { (expressions, game) ->
                     val todayIso = todayIso()
                     val sessions = repository.listAllSessions()
                     // The store emits again once a shield is spent, and the next pass finds
                     // yesterday covered, so this settles after one shield at most.
                     gameRepository?.shieldYesterdayIfNeeded(sessions.map { it.learningDate }, todayIso)
-                    val stats = GameStatsPolicy.compute(sessions, expressions, game, todayIso)
+                    // The game counts every language (백로그 066: one learner, one streak); the tiles below show this language's.
+                    val stats = GameStatsPolicy.compute(sessions, repository.listAllSavedExpressions(), game, todayIso)
                     value = Result.success(
                         HomeSummary(
                             streakDays = stats.streakDays,
@@ -113,6 +118,8 @@ internal fun LearningHomeSummary(
             },
             onBadgesClick = { onNavigate(HomeDestination.BADGES) },
             onBossClick = { onNavigate(HomeDestination.BOSS) },
+            language = language,
+            onLanguageChange = onLanguageChange,
         )
     }
 }

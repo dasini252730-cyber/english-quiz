@@ -12,6 +12,7 @@ import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.data.ai.ContentSegment
 import com.englishquiz.app.data.ai.ContextualMeaning
 import com.englishquiz.app.data.ai.GlossaryEntry
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.data.ai.LearningContent
 import com.englishquiz.app.data.local.LearningDatabase
 import com.englishquiz.app.data.repository.LearningRepository
@@ -103,7 +104,7 @@ class ReaderLocalMeaningTest {
         database = db
         val repository = LearningRepository(db)
         // 요구사항 11: "book" saved as 예약하다 from a hotel line must not label "closed the book".
-        runBlocking { repository.saveExpression("That", "다른 문장의 뜻", 1L, "That was a different sentence.") }
+        runBlocking { repository.saveExpression(Language.ENGLISH, "That", "다른 문장의 뜻", 1L, "That was a different sentence.") }
         var asked = 0
         compose.setContent {
             EnglishQuizTheme {

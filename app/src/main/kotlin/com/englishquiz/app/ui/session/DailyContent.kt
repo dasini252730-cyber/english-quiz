@@ -2,6 +2,7 @@ package com.englishquiz.app.ui.session
 
 import com.englishquiz.app.data.ai.ContentGenerationRequest
 import com.englishquiz.app.data.ai.ContentMode
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.data.ai.LearningContent
 import com.englishquiz.app.data.repository.LearningRepository
 import com.englishquiz.app.data.repository.findDailyContent
@@ -17,31 +18,34 @@ import java.time.format.DateTimeFormatter
 internal const val MAX_REVIEW_EXPRESSIONS = 12
 
 /**
- * The passage for [mode] on [learningDate]: the stored one on a second entry (백로그 021); for a
- * story inside seasons (백로그 063) the oldest unread episode or the next one; otherwise a fresh
- * generation linked to the previous story and to today's story (백로그 054), stored for the day.
+ * The passage for [mode] in [language] on [learningDate]: the stored one on a second entry
+ * (백로그 021); for a story inside seasons (백로그 063) the oldest unread episode or the next one;
+ * otherwise a fresh generation linked to the previous story and to today's story (백로그 054),
+ * stored for the day. Everything it reads and writes is that language's (백로그 066).
  */
 internal suspend fun todaysContent(
     repository: LearningRepository,
     seasons: SeasonCoordinator?,
+    language: Language,
     mode: ContentMode,
     difficulty: Int,
     learningDate: String,
     nowEpochMillis: Long,
     generateContent: suspend (ContentGenerationRequest) -> LearningContent,
 ): LearningContent {
-    repository.findDailyContent(learningDate, mode)?.let { return it }
-    val review = repository.findDueExpressions(nowEpochMillis).take(MAX_REVIEW_EXPRESSIONS).map { it.displayExpression }
-    if (seasons != null && mode == ContentMode.STORY) return seasons.storyFor(learningDate, difficulty, review, nowEpochMillis)
+    repository.findDailyContent(language, learningDate, mode)?.let { return it }
+    val review = repository.findDueExpressions(language, nowEpochMillis).take(MAX_REVIEW_EXPRESSIONS).map { it.displayExpression }
+    if (seasons != null && mode == ContentMode.STORY) return seasons.storyFor(language, learningDate, difficulty, review, nowEpochMillis)
     val other = if (mode == ContentMode.STORY) ContentMode.CONVERSATION else ContentMode.STORY
-    val companion = (if (seasons != null && mode == ContentMode.CONVERSATION) seasons.companionFor(learningDate) else null)
-        ?: repository.findDailyContent(learningDate, other)?.summary()
+    val companion = (if (seasons != null && mode == ContentMode.CONVERSATION) seasons.companionFor(language, learningDate) else null)
+        ?: repository.findDailyContent(language, learningDate, other)?.summary()
     val content = generateContent(
         ContentGenerationRequest(
             mode = mode,
             difficulty = difficulty,
             reviewExpressions = review,
-            previousStory = repository.findPreviousSummary(ContentMode.STORY, learningDate),
+            language = language,
+            previousStory = repository.findPreviousSummary(language, ContentMode.STORY, learningDate),
             companion = companion,
         ),
     )

@@ -161,12 +161,16 @@ class AiLearningResponsesTest {
         assertEquals(canon, withCanon.canon)
         assertEquals(canon.merged(CanonState(events = listOf("He came back."))).events, listOf("Mina kept the ticket.", "He came back."))
         // A season bible parses back into seven numbered plans; six, or no people, is no bible.
+        // 백로그 065: nor is one without an engine or without a reader-believes line per episode.
         val bible = SeasonBible(
             "The Lisbon Tram", "Lisbon", "Who sends the guests away?",
             listOf(SeasonCharacter("Inês", SpeakerGender.FEMALE, "owner", "keep it", "owes money", "cousin of Rui")),
             (1..7).map { EpisodePlan(it, "Episode $it", "Plan $it") }, listOf("Who?"),
+            engine = "A. Clever mystery", whatIsTrue = listOf("True: Inês sent the guest away."), readerBelieves = (1..7).map { "Believed after $it" },
         )
         assertEquals(bible, parseSeasonResponse(JSONObject().put("data", bible.toJson())))
+        assertTrue(runCatching { parseSeasonResponse(JSONObject().put("data", bible.copy(engine = "").toJson())) }.isFailure)
+        assertTrue(runCatching { parseSeasonResponse(JSONObject().put("data", bible.copy(readerBelieves = bible.readerBelieves.take(6)).toJson())) }.isFailure)
         assertTrue(runCatching { parseSeasonResponse(JSONObject().put("data", bible.copy(episodes = bible.episodes.take(6)).toJson())) }.isFailure)
         assertTrue(runCatching { parseSeasonResponse(JSONObject().put("data", bible.copy(characters = emptyList()).toJson())) }.isFailure)
     }

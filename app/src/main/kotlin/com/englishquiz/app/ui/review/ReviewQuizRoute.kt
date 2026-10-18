@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.data.repository.LearningRepository
 import com.englishquiz.app.domain.quiz.QuizMode
 import com.englishquiz.app.ui.quiz.QuizRoute
@@ -40,6 +41,7 @@ fun ReviewQuizRoute(
     repository: LearningRepository,
     expressionIds: Set<Long>,
     onDone: () -> Unit,
+    language: Language = Language.DEFAULT,
 ) {
     var result by rememberSaveable { mutableStateOf<String?>(null) }
     val finished = result
@@ -50,9 +52,10 @@ fun ReviewQuizRoute(
             onFinished = { result = "${it.quizCorrectCount}/${it.quizQuestionCount}" },
             onBack = onDone,
             enrolExpressions = false,
-            questionSource = { repo, _ -> repo.listSavedExpressions().filter { it.id in expressionIds } },
+            questionSource = { repo, _ -> repo.listSavedExpressions(language).filter { it.id in expressionIds } },
             maxQuestions = PRACTICE_MAX_QUESTIONS,
             mode = QuizMode.PRACTICE,
+            language = language,
         )
     } else {
         val (correct, total) = finished.split("/").map { it.toIntOrNull() ?: 0 }
