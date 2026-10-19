@@ -1651,6 +1651,18 @@ test("a season designed by a thinking model gets room to think and a short effor
   assert.equal(content.model, "claude-haiku-4-5-20251001");
   assert.equal(content.max_tokens, 8_000);
   assert.equal(content.output_config.effort, undefined);
+  assert.equal(content.thinking, undefined);
+  assert.equal(season.thinking, undefined);
+  // On Sonnet 5 (which thinks by default) a passage or an episode is written without thinking; the season plan keeps its short thinking.
+  const sonnet = episodeHandler((body) => (body.messages[0].content.startsWith('{"action":"season"') ? seasonBible : body.messages[0].content.startsWith('{"episodes"') ? { episodes: [{ number: 3, story: storyPassage, conversation: conversationPassage }] } : validContent), (name) => ({ ANTHROPIC_API_KEY: "key", AI_APP_TOKEN: "key", ANTHROPIC_MODEL: "claude-sonnet-5", ANTHROPIC_SEASON_MODEL: "claude-opus-5" })[name]);
+  assert.equal((await sonnet.handler(post(episodeRequest))).status, 200);
+  assert.equal((await sonnet.handler(post({ action: "content", mode: "conversation", difficulty: 2 }))).status, 200);
+  assert.equal((await sonnet.handler(post({ action: "season", difficulty: 2, seasonNumber: 1 }))).status, 200);
+  assert.deepEqual(sonnet.bodies[0].thinking, { type: "disabled" });
+  assert.equal(sonnet.bodies[0].max_tokens, EPISODE_MAX_TOKENS);
+  assert.deepEqual(sonnet.bodies[1].thinking, { type: "disabled" });
+  assert.equal(sonnet.bodies[2].thinking, undefined);
+  assert.equal(sonnet.bodies[2].output_config.effort, "low");
   const haiku = episodeHandler(seasonBible, (name) => ({ ANTHROPIC_API_KEY: "key", AI_APP_TOKEN: "key", ANTHROPIC_MODEL: "claude-haiku-4-5-20251001" })[name]);
   await haiku.handler(post({ action: "season", difficulty: 2, seasonNumber: 1 }));
   assert.equal(haiku.bodies[0].max_tokens, 8_000);

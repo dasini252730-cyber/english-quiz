@@ -1084,14 +1084,23 @@ function maxTokensFor(request: LearningRequest, model: string): number {
   return 8_000;
 }
 
-/** Claude Opus 5 and later think unless told how much (백로그 075: the season plan runs on it); Haiku 4.5 rejects `effort`. */
+/** Claude Sonnet 5, Opus 5 and later think unless told otherwise (백로그 075); Haiku 4.5 rejects `effort` and `thinking` settings alike. */
 function thinksByDefault(model: string): boolean {
-  return /claude-(opus-5|fable|mythos)/.test(model);
+  return /claude-(sonnet-5|opus-5|fable|mythos)/.test(model);
 }
 
 /** The season plan's thinking is kept short, so a design still ends inside the call's timeout. */
 function effortFor(request: LearningRequest, model: string): Record<string, unknown> {
   return request.action === "season" && thinksByDefault(model) ? { effort: "low" } : {};
+}
+
+/**
+ * A passage, an episode or a meaning is written straight from the prompt: on a model that would
+ * otherwise think first, thinking is switched off so the output budget (백로그 074: 92 tok/s on
+ * Haiku, a 135 s call) is spent on the passage. The season plan keeps its (short) thinking.
+ */
+function thinkingFor(request: LearningRequest, model: string): Record<string, unknown> {
+  return request.action !== "season" && thinksByDefault(model) ? { thinking: { type: "disabled" } } : {};
 }
 
 async function callProvider(
@@ -1114,6 +1123,7 @@ async function callProvider(
     body: JSON.stringify({
       model,
       max_tokens: maxTokensFor(request, model),
+      ...thinkingFor(request, model),
       system: prompt.system,
       messages: [{ role: "user", content: prompt.user ?? JSON.stringify(request) }],
       output_config: { format: { type: "json_schema", schema: prompt.schema }, ...effortFor(request, model) },
