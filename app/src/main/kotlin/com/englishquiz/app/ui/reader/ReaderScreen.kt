@@ -144,6 +144,7 @@ fun ReaderScreen(
                         language = content.language,
                         knownWords = knownWords,
                         showPinyin = showPinyin,
+                        speakerLabel = segment.speaker.takeUnless { isNarration(it, content.speakers) },
                     )
                 }
             }

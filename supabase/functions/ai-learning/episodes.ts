@@ -249,7 +249,8 @@ function seasonBlock(season: EpisodeSeason): string {
 function conversationClause(request: EpisodesRequest, parts: PromptParts): string {
   return "The conversation follows its contract above, at its level. Its " + parts.counts(0) +
     "Its `mode` is `conversation`. Its speakers are two or three of this episode's people, each named exactly as in the story's segments; there is no Narrator and nobody new. " +
-    "Its situation is one of the conversation situations listed in the message, the one this story makes natural. The supplied review expressions are material for the story; use one in the conversation only where a line would say it anyway. ";
+    "Its situation is one of the conversation situations listed in the message, the one this story makes natural. The supplied review expressions are material for the story; use one in the conversation only where a line would say it anyway. " +
+    "Its `canon` is five empty lists: a conversation settles nothing. ";
 }
 
 /** Block 3: this episode, the earlier ones and the canon; or, with a story given, only its conversation. */
@@ -284,12 +285,22 @@ function episodeBlock(request: EpisodesRequest, parts: PromptParts): string {
     "Return only the required JSON.";
 }
 
-/** The `episodes[]` reply shape: each entry a story and a conversation, or only a conversation when the story was given. */
+/**
+ * The `episodes[]` reply shape: each entry a story and a conversation, or only a conversation when
+ * the story was given. The passage schema is defined once under `$defs` and referenced, and its
+ * `canon` is required: the provider compiles the schema into a grammar and refused the first
+ * version, which carried the whole passage schema twice with an optional object in each, as too
+ * complex (every full episode call failed with 400 while the conversation-only call passed). The
+ * conversation's canon is five empty lists, which the validator ignores.
+ */
 export function episodesSchema(passageSchema: unknown, conversationOnly: boolean): unknown {
+  const schema = passageSchema as { required: readonly string[] };
+  const passage = { ...schema, required: [...schema.required, "canon"] };
+  const ref = { $ref: "#/$defs/passage" };
   const item = conversationOnly
-    ? { type: "object", properties: { number: { type: "integer" }, conversation: passageSchema }, required: ["number", "conversation"], additionalProperties: false }
-    : { type: "object", properties: { number: { type: "integer" }, story: passageSchema, conversation: passageSchema }, required: ["number", "story", "conversation"], additionalProperties: false };
-  return { type: "object", properties: { episodes: { type: "array", items: item } }, required: ["episodes"], additionalProperties: false };
+    ? { type: "object", properties: { number: { type: "integer" }, conversation: ref }, required: ["number", "conversation"], additionalProperties: false }
+    : { type: "object", properties: { number: { type: "integer" }, story: ref, conversation: ref }, required: ["number", "story", "conversation"], additionalProperties: false };
+  return { type: "object", $defs: { passage }, properties: { episodes: { type: "array", items: item } }, required: ["episodes"], additionalProperties: false };
 }
 
 /**

@@ -1485,7 +1485,13 @@ test("an episode call makes the story and its conversation in one reply: three s
   const schema = sent.output_config.format.schema;
   assert.deepEqual(schema.required, ["episodes"]);
   assert.deepEqual(schema.properties.episodes.items.required, ["number", "story", "conversation"]);
-  assert.ok("canon" in schema.properties.episodes.items.properties.story.properties);
+  // One passage definition, referenced twice, with nothing optional: the provider's grammar compiler refused two inline copies.
+  assert.deepEqual(schema.properties.episodes.items.properties.story, { $ref: "#/$defs/passage" });
+  assert.deepEqual(schema.properties.episodes.items.properties.conversation, { $ref: "#/$defs/passage" });
+  assert.ok("canon" in schema.$defs.passage.properties);
+  assert.ok(schema.$defs.passage.required.includes("canon"));
+  assert.doesNotMatch(JSON.stringify(schema).replace(/"\$defs":\{"passage":/, ""), /"segments":\{"type":"array"[\s\S]*"segments":\{"type":"array"/);
+  assert.match(episode, /Its `canon` is five empty lists/);
   assertOnlySupportedKeywords(schema);
 
   // The call makes one episode however many are asked for, and says which; episode 7 is told to close the season.

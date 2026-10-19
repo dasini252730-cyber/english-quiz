@@ -75,13 +75,26 @@ class ReaderScreenTest {
         compose.onNodeWithText("다음 단계: 퀴즈").assertIsDisplayed()
     }
 
+    @Test fun narrationCarriesNoSpeakerLabelInAStory() {
+        val narrated = LearningContent("A cafe", ContentMode.STORY, listOf(ContentSegment("Narrator", "Emma walks in."), ContentSegment("Sam", "Hi there.")), emptyList())
+        compose.setContent {
+            EnglishQuizTheme {
+                ReaderScreen(narrated, SpeechState(ready = true), onPlay = {}, onStop = {}, onBack = {})
+            }
+        }
+        compose.onNodeWithText("Narrator").assertDoesNotExist()
+        compose.onNodeWithText("Sam").assertIsDisplayed()
+        compose.onNodeWithText("walks").assertIsDisplayed()
+    }
+
     @Test fun storyRemainsReadableWhenSpeechIsUnavailable() {
         compose.setContent {
             EnglishQuizTheme {
                 ReaderScreen(storyContent, SpeechState(error = "음성 사용 불가"), onPlay = {}, onStop = {}, onBack = {})
             }
         }
-        compose.onNodeWithText("Emma").assertDoesNotExist()
+        // 백로그 075 follow-up: a story line of dialogue names its speaker above it; narration does not.
+        compose.onNodeWithText("Emma").assertIsDisplayed()
         // The segment is now rendered as tappable word tokens instead of one Text node.
         compose.onNodeWithText("That").assertIsDisplayed()
         compose.onNodeWithText("sketchy.").assertIsDisplayed()

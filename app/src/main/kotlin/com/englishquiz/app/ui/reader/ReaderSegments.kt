@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import com.englishquiz.app.data.ai.ContentExpression
 import com.englishquiz.app.data.ai.ContentSegment
 import com.englishquiz.app.data.ai.Language
+import com.englishquiz.app.data.ai.SpeakerGender
 import com.englishquiz.app.ui.theme.MongleColor
 import com.englishquiz.app.ui.theme.MongleIconButton
 import com.englishquiz.app.ui.theme.MongleIcons
@@ -111,7 +112,11 @@ private fun Bubble(
     }
 }
 
-/** One story sentence: a play button beside serif body text. */
+/**
+ * One story sentence: a play button beside serif body text. A line of dialogue carries its
+ * speaker's name above it ([speakerLabel]); narration carries none, so who is talking is visible
+ * without the bubbles of the conversation.
+ */
 @Composable
 internal fun StorySegment(
     segment: ContentSegment,
@@ -123,7 +128,17 @@ internal fun StorySegment(
     language: Language = Language.ENGLISH,
     knownWords: Collection<String> = emptyList(),
     showPinyin: Boolean = false,
+    speakerLabel: String? = null,
 ) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+    if (speakerLabel != null) {
+        Text(
+            text = speakerLabel,
+            style = MaterialTheme.typography.labelMedium,
+            color = MongleColor.Purple,
+            modifier = Modifier.padding(start = 34.dp, top = 6.dp),
+        )
+    }
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -150,7 +165,14 @@ internal fun StorySegment(
             modifier = Modifier.padding(top = 4.dp),
         )
     }
+    }
 }
+
+/** Whether a story segment is narration (백로그 050's `narrator` gender, or the name itself) rather than someone's line. */
+internal fun isNarration(speaker: String, speakers: Map<String, SpeakerGender>): Boolean =
+    speakers[speaker] == SpeakerGender.NARRATOR || speaker.trim().lowercase() in NARRATOR_NAMES
+
+private val NARRATOR_NAMES = setOf("narrator", "narration", "내레이터", "나레이터", "旁白", "叙述者")
 
 /**
  * Draws a segment as separate word tokens so a tap lands on one expression. The AI-annotated
