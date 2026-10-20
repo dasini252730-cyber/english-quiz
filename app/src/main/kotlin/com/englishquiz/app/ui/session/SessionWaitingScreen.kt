@@ -22,13 +22,21 @@ import com.englishquiz.app.ui.theme.mongleScreenInsets
 /** Shown while no episode is ready (백로그 075); the route leaves it on its own once one arrives. */
 internal const val WAITING_TITLE = "준비 중이에요"
 internal const val WAITING_LIBRARY = "지난 회차 다시 읽기"
+internal const val WAITING_RETRY = "지금 다시 시도"
 
 /**
  * No episode is ready yet (백로그 075): the pipeline is making the next one in the background, and
  * the screen offers the library meanwhile instead of a long loading. It never starts a generation.
  */
 @Composable
-internal fun SessionWaitingScreen(title: String, onBack: () -> Unit, onLibrary: (() -> Unit)?) {
+internal fun SessionWaitingScreen(
+    title: String,
+    onBack: () -> Unit,
+    onLibrary: (() -> Unit)?,
+    /** The pipeline's last step and error, so a run that keeps failing is visible here, not only in the log. */
+    statusLine: String? = null,
+    onRetry: (() -> Unit)? = null,
+) {
     BackHandler(onBack = onBack)
     Column(modifier = Modifier.fillMaxSize().background(MongleColor.Cream).mongleScreenInsets()) {
         MongleIconButton(MongleIcons.ChevronLeft, "홈으로", onBack, Modifier.padding(8.dp))
@@ -45,6 +53,10 @@ internal fun SessionWaitingScreen(title: String, onBack: () -> Unit, onLibrary: 
                 color = MongleColor.InkMuted,
                 textAlign = TextAlign.Center,
             )
+            if (statusLine != null) {
+                Text(statusLine, style = MaterialTheme.typography.bodySmall, color = MongleColor.InkMuted, textAlign = TextAlign.Center)
+            }
+            if (onRetry != null) MongleButton(WAITING_RETRY, onRetry)
             if (onLibrary != null) MongleButton(WAITING_LIBRARY, onLibrary)
         }
     }

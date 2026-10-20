@@ -40,6 +40,6 @@ class AppContainer(
 
     /** The story and the conversation as episodes of a season (백로그 063/075). */
     val seasonCoordinator: SeasonCoordinator? = seasonPipeline?.let { pipeline ->
-        SeasonCoordinator(learningRepository, requestWork = pipeline::ensure)
+        SeasonCoordinator(learningRepository, requestWork = pipeline::ensure, pipelineStatus = pipeline.status, retryWork = pipeline::retryNow)
     }
 }

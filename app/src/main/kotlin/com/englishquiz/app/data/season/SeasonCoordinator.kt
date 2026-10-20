@@ -11,6 +11,7 @@ import com.englishquiz.app.data.repository.findDailyContent
 import com.englishquiz.app.data.repository.saveDailyContent
 import com.englishquiz.app.domain.season.SeasonPolicy
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import org.json.JSONObject
 
 /**
@@ -29,6 +30,10 @@ class SeasonCoordinator(
     private val repository: LearningRepository,
     /** Asked to look at the language's seasons: after an episode is consumed, and when none was ready. */
     private val requestWork: (Language) -> Unit = {},
+    /** The pipeline's last step per language, for the waiting screen; empty when there is no pipeline. */
+    val pipelineStatus: Flow<Map<Language, PipelineStatus>> = flowOf(emptyMap()),
+    /** The learner's own "try again" on the waiting screen: starts a run even inside the pipeline's backoff. */
+    private val retryWork: (Language) -> Unit = requestWork,
 ) {
     private val dao get() = repository.database.seasonDao()
 
@@ -57,6 +62,9 @@ class SeasonCoordinator(
 
     /** Asks the pipeline to look at [language] again; the waiting screen does so while it waits (백로그 075). */
     fun prepare(language: Language) = requestWork(language)
+
+    /** The learner tapped "다시 시도": a run starts now, backoff or not. */
+    fun retryNow(language: Language) = retryWork(language)
 
     suspend fun hasUnread(language: Language): Boolean = dao.countUnread(language.wireValue) > 0
 

@@ -5,6 +5,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import com.englishquiz.app.data.ai.ContentGenerationRequest
@@ -24,8 +25,11 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import java.time.Instant
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import com.englishquiz.app.data.repository.findDailyContent
+import com.englishquiz.app.data.season.PipelineStatus
 import com.englishquiz.app.data.season.SeasonCoordinator
 import com.englishquiz.app.data.repository.findLearningSessions
 
@@ -148,7 +152,16 @@ fun LearningSessionRoute(
             onBack = onExit,
         )
 
-        SessionStep.Waiting -> SessionWaitingScreen(title = contentTitle(mode), onBack = onExit, onLibrary = onLibrary)
+        SessionStep.Waiting -> {
+            val status = seasons?.let { produceState<PipelineStatus?>(null, it, language) { it.pipelineStatus.collect { all -> value = all[language] } } }?.value
+            SessionWaitingScreen(
+                title = contentTitle(mode),
+                onBack = onExit,
+                onLibrary = onLibrary,
+                statusLine = status?.let { waitingStatusLine(it, zoneId) },
+                onRetry = seasons?.let { { it.retryNow(language); retry++ } },
+            )
+        }
 
         is SessionStep.Failed -> SessionStatusScreen(
             title = contentTitle(mode),
@@ -220,6 +233,12 @@ fun LearningSessionRoute(
 
 /** How often the waiting screen looks again on its own (백로그 075); the pipeline's backoff is a minute. */
 private const val WAITING_POLL_MS = 20_000L
+
+/** "14:02:10 MakeEpisode(1, 3) · 오류: network_error": the pipeline's last step, so a failure is visible on the screen. */
+private fun waitingStatusLine(status: PipelineStatus, zoneId: ZoneId): String {
+    val time = Instant.ofEpochMilli(status.atEpochMillis).atZone(zoneId).toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm:ss"))
+    return "$time ${status.step}" + (status.error?.let { " · 오류: $it" } ?: "")
+}
 
 /** The quiz over [content], entered from the Reader or from the role-play (백로그 076) alike. */
 private fun quizStep(content: LearningContent): SessionStep =

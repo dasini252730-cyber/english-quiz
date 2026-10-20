@@ -19,6 +19,8 @@ import com.englishquiz.app.domain.season.SeasonWork
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.time.Instant
@@ -48,6 +50,16 @@ class SeasonPipeline(
     private val dao get() = repository.database.seasonDao()
     private val running = ConcurrentHashMap<Language, Job>()
     private val failedAt = ConcurrentHashMap<Language, Long>()
+    private val statuses = MutableStateFlow<Map<Language, PipelineStatus>>(emptyMap())
+
+    /** What each language's last run did or hit, for the waiting screen (a run that fails is otherwise invisible). */
+    val status: StateFlow<Map<Language, PipelineStatus>> = statuses
+
+    /** Starts a run now even inside the backoff: the learner asked. */
+    fun retryNow(language: Language) {
+        failedAt.remove(language)
+        ensure(language)
+    }
 
     /** Starts a run for [language] unless one is active or one just failed. Nothing here reaches the learner. */
     fun ensure(language: Language) {
@@ -62,6 +74,7 @@ class SeasonPipeline(
                     throw error
                 } catch (error: Exception) {
                     failedAt[language] = nowEpochMillis()
+                    report(language, statuses.value[language]?.step ?: "", error.message ?: error.javaClass.simpleName)
                     Log.w(TAG, "season work for ${language.wireValue} stopped: ${error.message}")
                 }
             }
@@ -74,10 +87,12 @@ class SeasonPipeline(
         while (done.size < MAX_STEPS_PER_RUN) {
             val work = plan(language)
             if (work == SeasonWork.Nothing) break
+            report(language, work.toString(), null)
             perform(language, work)
             done += work
         }
         failedAt.remove(language)
+        report(language, if (done.isEmpty()) "nothing to make" else "done: ${done.last()}", null)
         return done
     }
 
@@ -152,6 +167,10 @@ class SeasonPipeline(
     private suspend fun reviewExpressions(language: Language): List<String> =
         repository.findDueExpressions(language, nowEpochMillis() + REVIEW_HORIZON_MS).take(MAX_REVIEW_EXPRESSIONS).map { it.displayExpression }
 
+    private fun report(language: Language, step: String, error: String?) {
+        statuses.value = statuses.value + (language to PipelineStatus(step, error, nowEpochMillis()))
+    }
+
     private fun today(): String = Instant.ofEpochMilli(nowEpochMillis()).atZone(zoneId).toLocalDate().format(DateTimeFormatter.ISO_LOCAL_DATE)
 
     private companion object {
@@ -166,3 +185,6 @@ class SeasonPipeline(
         const val MAX_STEPS_PER_RUN = 24
     }
 }
+
+/** One language's last pipeline step and, when it failed, the error code it hit (백로그 075). */
+data class PipelineStatus(val step: String, val error: String?, val atEpochMillis: Long)
