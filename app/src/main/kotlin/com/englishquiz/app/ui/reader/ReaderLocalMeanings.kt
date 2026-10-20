@@ -1,5 +1,6 @@
 package com.englishquiz.app.ui.reader
 
+import com.englishquiz.app.data.ai.ContentExpression
 import com.englishquiz.app.data.ai.LearningContent
 import com.englishquiz.app.data.ai.foldTypography
 
@@ -22,17 +23,27 @@ internal fun LearningContent.localMeaningFor(token: ReaderToken): String? {
 }
 
 /** The passage's short gloss for an annotated [token] (백로그 046), or "" for a glossary word or none. */
-internal fun LearningContent.localShortMeaningFor(token: ReaderToken): String {
+internal fun LearningContent.localShortMeaningFor(token: ReaderToken): String = localAnnotationFor(token)?.shortMeaning ?: ""
+
+/** The passage's kind for an annotated [token] (백로그 059), or "" for a glossary word or none. */
+internal fun LearningContent.localKindFor(token: ReaderToken): String = localAnnotationFor(token)?.kind ?: ""
+
+/** The annotated expression [token] is, by position first and then by text, or null for a glossary word. */
+private fun LearningContent.localAnnotationFor(token: ReaderToken): ContentExpression? {
     expressions.firstOrNull {
         it.segmentIndex == token.segmentIndex &&
             it.startIndex == token.startIndex &&
             it.endIndex == token.endIndex
-    }?.let { return it.shortMeaning }
+    }?.let { return it }
     val key = token.lookup.lookupKey()
-    if (key.isEmpty()) return ""
-    return expressions.firstOrNull { it.text.lookupKey() == key }?.shortMeaning ?: ""
+    if (key.isEmpty()) return null
+    return expressions.firstOrNull { it.text.lookupKey() == key }
 }
 
-private val EDGE_PUNCTUATION = charArrayOf('.', ',', '!', '?', ';', ':', '"', '\'', '(', ')')
+/** The marks a lookup key may still carry at its edges after [foldTypography]: ASCII, then CJK (백로그 071). */
+private val LOOKUP_EDGE_PUNCTUATION = charArrayOf(
+    '.', ',', '!', '?', ';', ':', '"', '\'', '(', ')',
+    '。', '，', '！', '？', '、', '：', '；', '（', '）', '《', '》', '「', '」', '『', '』', '【', '】',
+)
 
-private fun String.lookupKey(): String = foldTypography().trim().trim(*EDGE_PUNCTUATION).trim()
+private fun String.lookupKey(): String = foldTypography().trim().trim(*LOOKUP_EDGE_PUNCTUATION).trim()

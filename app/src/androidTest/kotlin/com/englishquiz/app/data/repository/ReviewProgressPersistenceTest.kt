@@ -1,5 +1,6 @@
 package com.englishquiz.app.data.repository
 
+import com.englishquiz.app.data.ai.Language
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.englishquiz.app.data.local.LearningDatabase
@@ -27,22 +28,22 @@ class ReviewProgressPersistenceTest {
         val firstDatabase = LearningDatabase.create(context, DATABASE_NAME)
         database = firstDatabase
         val repository = LearningRepository(firstDatabase)
-        repository.saveExpression("pull it off", "해내다", EVALUATED_AT)
-        repository.saveExpression("on the fence", "결정을 못 한", EVALUATED_AT + 1)
+        repository.saveExpression(Language.ENGLISH, "pull it off", "해내다", EVALUATED_AT)
+        repository.saveExpression(Language.ENGLISH, "on the fence", "결정을 못 한", EVALUATED_AT + 1)
 
-        val first = repository.recordAnswer("pull it off", true, EVALUATED_AT)
-        val second = repository.recordAnswer(
+        val first = repository.recordAnswer(Language.ENGLISH, "pull it off", true, EVALUATED_AT)
+        val second = repository.recordAnswer(Language.ENGLISH,
             "pull it off",
             true,
             requireNotNull(first.nextReviewAtEpochMillis),
         )
-        val third = repository.recordAnswer(
+        val third = repository.recordAnswer(Language.ENGLISH,
             "pull it off",
             true,
             requireNotNull(second.nextReviewAtEpochMillis),
         )
         assertFalse(third.isMastered)
-        val fourth = repository.recordAnswer(
+        val fourth = repository.recordAnswer(Language.ENGLISH,
             "pull it off",
             true,
             requireNotNull(third.nextReviewAtEpochMillis),
@@ -51,16 +52,16 @@ class ReviewProgressPersistenceTest {
 
         assertTrue(fourth.isMastered)
         assertFalse(
-            repository.findDueExpressions(masteredDueAt - 1)
+            repository.findDueExpressions(Language.ENGLISH, masteredDueAt - 1)
                 .any { it.normalizedExpression == "pull it off" },
         )
         assertTrue(
-            repository.findDueExpressions(masteredDueAt + 1)
+            repository.findDueExpressions(Language.ENGLISH, masteredDueAt + 1)
                 .any { it.normalizedExpression == "pull it off" },
         )
         assertEquals(
             setOf("on the fence", "pull it off"),
-            repository.findDueExpressions(masteredDueAt)
+            repository.findDueExpressions(Language.ENGLISH, masteredDueAt)
                 .map { it.normalizedExpression }
                 .toSet(),
         )
@@ -68,7 +69,7 @@ class ReviewProgressPersistenceTest {
         firstDatabase.close()
         val reopenedDatabase = LearningDatabase.create(context, DATABASE_NAME)
         database = reopenedDatabase
-        val stored = requireNotNull(reopenedDatabase.learningDao().findSavedExpression("pull it off"))
+        val stored = requireNotNull(reopenedDatabase.learningDao().findSavedExpression(Language.ENGLISH.wireValue, "pull it off"))
         assertEquals(4, stored.consecutiveCorrectCount)
         assertTrue(stored.isMastered)
         assertEquals(masteredDueAt, stored.nextReviewAtEpochMillis)

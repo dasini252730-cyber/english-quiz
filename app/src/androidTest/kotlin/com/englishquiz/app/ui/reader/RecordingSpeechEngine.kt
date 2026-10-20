@@ -3,6 +3,7 @@ package com.englishquiz.app.ui.reader
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import androidx.test.platform.app.InstrumentationRegistry
+import com.englishquiz.app.data.ai.Language
 import java.util.Locale
 
 /**
@@ -20,16 +21,32 @@ internal class RecordingEngine(
     val voicedAs = mutableListOf<Pair<String?, Float>>()
     var listener: UtteranceProgressListener? = null
     var languageResult = TextToSpeech.LANG_AVAILABLE
+    /** Per-locale answers (백로그 073); a locale absent here gets [languageResult]. */
+    val languageResults = mutableMapOf<Locale, Int>()
     var speakResult = TextToSpeech.SUCCESS
+
+    /** Every locale asked for, in order, so a test can prove the fallback walk (백로그 071/073). */
+    val languagesSet = mutableListOf<Locale>()
+    val languageSet: Locale? get() = languagesSet.lastOrNull()
 
     /** A voice name this engine pretends not to have. */
     var refuse: String? = null
     private var currentVoice: String? = null
     private var currentPitch = 1f
 
+    /** The rate last set, so a test can prove the Chinese reader slows down (백로그 073). */
+    var rateSet: Float? = null
+
     override val maxInputLength = 4_000
 
-    override fun setLanguage(locale: Locale): Int = languageResult
+    override val allVoices: List<VoiceOption> get() = voices
+
+    override val appliedVoice: String? get() = currentVoice?.let { "$it@fake" }
+
+    override fun setLanguage(locale: Locale): Int {
+        languagesSet += locale
+        return languageResults[locale] ?: languageResult
+    }
 
     override fun setOnUtteranceProgressListener(listener: UtteranceProgressListener) {
         this.listener = listener
@@ -43,6 +60,11 @@ internal class RecordingEngine(
 
     override fun setPitch(pitch: Float): Int {
         currentPitch = pitch
+        return TextToSpeech.SUCCESS
+    }
+
+    override fun setSpeechRate(rate: Float): Int {
+        rateSet = rate
         return TextToSpeech.SUCCESS
     }
 
@@ -80,10 +102,15 @@ internal fun onMain(body: () -> Unit) {
  * `Handler.post`, so an extra empty turn on the main looper is needed before the controller has
  * actually read the result.
  */
-internal fun ready(engine: RecordingEngine, status: Int = TextToSpeech.SUCCESS): ReaderSpeech {
+internal fun ready(
+    engine: RecordingEngine,
+    status: Int = TextToSpeech.SUCCESS,
+    language: Language = Language.ENGLISH,
+    allowNetworkVoices: Boolean = false,
+): ReaderSpeech {
     lateinit var speech: ReaderSpeech
     lateinit var init: (Int) -> Unit
-    onMain { speech = ReaderSpeech { onInit -> init = onInit; engine } }
+    onMain { speech = ReaderSpeech(language, allowNetworkVoices) { onInit -> init = onInit; engine } }
     onMain { init(status) }
     onMain { }
     return speech

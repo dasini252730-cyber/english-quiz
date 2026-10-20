@@ -2,9 +2,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- The role-play (백로그 076) hears the learner's line through SpeechRecognizer; asked at runtime, typed input when refused. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- SpeechRecognizer.isRecognitionAvailable needs the recogniser service to be visible (package visibility, API 30+). -->
     <queries>
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
         </intent>
     </queries>
     <application

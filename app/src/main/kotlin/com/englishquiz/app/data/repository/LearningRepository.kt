@@ -1,43 +1,40 @@
 package com.englishquiz.app.data.repository
 
 import androidx.room.withTransaction
-import com.englishquiz.app.data.ai.ContentMode
-import com.englishquiz.app.data.ai.LearningContent
-import com.englishquiz.app.data.ai.parseContentResponse
-import com.englishquiz.app.data.ai.toResponseJson
-import com.englishquiz.app.data.local.DailyContentEntity
+import com.englishquiz.app.data.ai.ExpressionKinds
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.data.local.LearningDatabase
-import com.englishquiz.app.data.local.LearningSessionEntity
-import com.englishquiz.app.data.local.LibraryItem
 import com.englishquiz.app.data.local.SavedExpressionEntity
 import com.englishquiz.app.domain.review.ReviewPolicy
 import com.englishquiz.app.domain.review.ReviewProgress
-import com.englishquiz.app.domain.session.LearningSessionSummary
 import kotlinx.coroutines.flow.Flow
-import org.json.JSONObject
 
+/**
+ * The learner's records: saved expressions and their review state here; quiz answers in
+ * `LearningRepositoryAnswers.kt` and the day's passages and finished sessions in
+ * `LearningRepositoryContent.kt`, as extensions on this class. Every expression belongs to one
+ * [Language] (백로그 066): the same string saved in English and in Chinese is two rows.
+ */
 class LearningRepository(
-    private val database: LearningDatabase,
+    internal val database: LearningDatabase,
 ) {
-    private val learningDao = database.learningDao()
+    internal val learningDao = database.learningDao()
 
-    fun observeSavedExpressions(): Flow<List<SavedExpressionEntity>> =
-        learningDao.observeSavedExpressions()
+    fun observeSavedExpressions(language: Language): Flow<List<SavedExpressionEntity>> =
+        learningDao.observeSavedExpressions(language.wireValue)
 
-    suspend fun findDueExpressions(nowEpochMillis: Long): List<SavedExpressionEntity> =
-        learningDao.findDueExpressions(nowEpochMillis)
+    suspend fun findDueExpressions(language: Language, nowEpochMillis: Long): List<SavedExpressionEntity> =
+        learningDao.findDueExpressions(language.wireValue, nowEpochMillis)
 
-    suspend fun listSavedExpressions(): List<SavedExpressionEntity> =
-        learningDao.listSavedExpressions()
+    suspend fun listSavedExpressions(language: Language): List<SavedExpressionEntity> =
+        learningDao.listSavedExpressions(language.wireValue)
 
-    suspend fun listLearningDates(): List<String> = learningDao.listLearningDates()
-
-    /** Every finished session, oldest first; the game layer derives points and badges from it (백로그 038). */
-    suspend fun listAllSessions(): List<LearningSessionEntity> = learningDao.listAllSessions()
+    /** Every language's expressions, for the game's counts (백로그 038): the learner is one person. */
+    suspend fun listAllSavedExpressions(): List<SavedExpressionEntity> = learningDao.listAllSavedExpressions()
 
     /** The weekend boss's question set (백로그 041): the shakiest due, unmastered expressions, up to [limit]. */
-    suspend fun listBossCandidates(nowEpochMillis: Long, limit: Int): List<SavedExpressionEntity> =
-        learningDao.listBossCandidates(nowEpochMillis, limit)
+    suspend fun listBossCandidates(language: Language, nowEpochMillis: Long, limit: Int): List<SavedExpressionEntity> =
+        learningDao.listBossCandidates(language.wireValue, nowEpochMillis, limit)
 
     /**
      * The meaning stored for [displayExpression], but only when it was saved from this very
@@ -45,67 +42,10 @@ class LearningRepository(
      * the same day's second entry — needs no second call; the same phrase in another sentence may
      * mean something else (요구사항 11: the meaning in *this* sentence), so it is looked up afresh.
      */
-    suspend fun findSavedMeaning(displayExpression: String, contextSentence: String): String? =
-        learningDao.findSavedExpression(normalizeExpression(displayExpression))
+    suspend fun findSavedMeaning(language: Language, displayExpression: String, contextSentence: String): String? =
+        findRow(language, displayExpression)
             ?.takeIf { it.contextSentence.trim() == contextSentence.trim() }
             ?.contextMeaning
-
-    /**
-     * The passage already generated for [learningDate] and [mode] (백로그 021), or null when there
-     * is none. A stored row this build can no longer read also counts as none: a fresh generation
-     * is worth more than a crash, and the next save replaces the row.
-     */
-    suspend fun findDailyContent(learningDate: String, mode: ContentMode): LearningContent? {
-        val row = learningDao.findDailyContent(learningDate, mode.wireValue) ?: return null
-        return try {
-            parseContentResponse(JSONObject(row.contentJson), mode)
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    /**
-     * Keeps [content] as the day's passage for its mode. Earlier days stay: they are the library
-     * (백로그 026), and a passage read again weeks later is a review that costs nothing.
-     */
-    suspend fun saveDailyContent(
-        learningDate: String,
-        content: LearningContent,
-        nowEpochMillis: Long,
-    ) {
-        learningDao.upsertDailyContent(
-            DailyContentEntity(
-                learningDate = learningDate,
-                mode = content.mode.wireValue,
-                title = content.title,
-                contentJson = content.toResponseJson().toString(),
-                createdAtEpochMillis = nowEpochMillis,
-            ),
-        )
-    }
-
-    /** Every stored passage, newest day first, for the library list (백로그 026). */
-    suspend fun listLibrary(): List<LibraryItem> = learningDao.listDailyContent()
-
-    suspend fun findLearningSessions(learningDate: String): List<LearningSessionEntity> =
-        learningDao.findLearningSessions(learningDate)
-
-    /**
-     * The most recently finished sessions of [mode], newest first, as the summaries the domain
-     * policies read. Level suggestion (백로그 013/034) is the caller; it has no reason to know the
-     * Room row shape. Sessions from before 백로그 034 carry no mode and are not part of any window.
-     */
-    suspend fun listRecentSessionSummaries(mode: ContentMode, limit: Int): List<LearningSessionSummary> =
-        learningDao.listRecentSessions(mode.wireValue, limit).map { session ->
-            LearningSessionSummary(
-                learnedExpressionCount = session.learnedExpressionCount,
-                newlySavedExpressionCount = session.newlySavedExpressionCount,
-                quizCorrectCount = session.quizCorrectCount,
-                quizQuestionCount = session.quizQuestionCount,
-                score = session.score,
-                maxCombo = session.maxCombo,
-            )
-        }
 
     /**
      * Saves the expression the first time it is looked up. A repeat lookup keeps the stored row,
@@ -113,6 +53,7 @@ class LearningRepository(
      * (백로그 044): this is the Reader's path, and tapping a phrase again means it still is not known.
      */
     suspend fun saveExpression(
+        language: Language,
         displayExpression: String,
         contextMeaning: String,
         savedAtEpochMillis: Long,
@@ -120,12 +61,14 @@ class LearningRepository(
         /** False for a retry of a save that failed: the learner tapped once. */
         countTap: Boolean = true,
         shortMeaning: String = "",
+        kind: String = "",
+        pinyin: String = "",
     ): SavedExpressionEntity = database.withTransaction {
-        val normalizedExpression = normalizeExpression(displayExpression)
-        insertUnlessSaved(normalizedExpression, displayExpression, contextMeaning, savedAtEpochMillis, contextSentence, shortMeaning)
-        if (countTap) learningDao.incrementTapCount(normalizedExpression)
-        if (shortMeaning.isNotBlank()) learningDao.fillShortMeaning(normalizedExpression, shortMeaning.trim())
-        checkNotNull(learningDao.findSavedExpression(normalizedExpression))
+        val key = normalizeExpression(language, displayExpression)
+        insertUnlessSaved(language, key, displayExpression, contextMeaning, savedAtEpochMillis, contextSentence, shortMeaning, kind, pinyin)
+        if (countTap) learningDao.incrementTapCount(language.wireValue, key)
+        fillWhatIsMissing(language, key, shortMeaning, kind, pinyin)
+        checkNotNull(learningDao.findSavedExpression(language.wireValue, key))
     }
 
     /**
@@ -133,57 +76,59 @@ class LearningRepository(
      * the row, false when the expression was already saved and therefore left as it was.
      */
     suspend fun saveExpressionIfNew(
+        language: Language,
         displayExpression: String,
         contextMeaning: String,
         savedAtEpochMillis: Long,
         contextSentence: String,
         shortMeaning: String = "",
+        kind: String = "",
+        pinyin: String = "",
     ): Boolean = database.withTransaction {
-        val normalizedExpression = normalizeExpression(displayExpression)
-        val added = insertUnlessSaved(normalizedExpression, displayExpression, contextMeaning, savedAtEpochMillis, contextSentence, shortMeaning)
-        if (!added && shortMeaning.isNotBlank()) learningDao.fillShortMeaning(normalizedExpression, shortMeaning.trim())
+        val key = normalizeExpression(language, displayExpression)
+        val added = insertUnlessSaved(language, key, displayExpression, contextMeaning, savedAtEpochMillis, contextSentence, shortMeaning, kind, pinyin)
+        if (!added) fillWhatIsMissing(language, key, shortMeaning, kind, pinyin)
         added
+    }
+
+    /** A row from before 백로그 046/059/066 takes the gloss, kind and pinyin a later passage carries; a filled one keeps its own. */
+    private suspend fun fillWhatIsMissing(language: Language, key: String, shortMeaning: String, kind: String, pinyin: String) {
+        if (shortMeaning.isNotBlank()) learningDao.fillShortMeaning(language.wireValue, key, shortMeaning.trim())
+        ExpressionKinds.normalize(kind).takeIf { it.isNotEmpty() }?.let { learningDao.fillKind(language.wireValue, key, it) }
+        if (pinyin.isNotBlank()) learningDao.fillPinyin(language.wireValue, key, pinyin.trim())
     }
 
     /** True when the row was inserted; false when the ignored duplicate kept the stored row. */
     private suspend fun insertUnlessSaved(
-        normalizedExpression: String,
+        language: Language,
+        key: String,
         displayExpression: String,
         contextMeaning: String,
         savedAtEpochMillis: Long,
         contextSentence: String,
         shortMeaning: String,
+        kind: String,
+        pinyin: String,
     ): Boolean {
-        require(normalizedExpression.isNotEmpty()) { "표현은 비어 있을 수 없습니다." }
+        require(key.isNotEmpty()) { "표현은 비어 있을 수 없습니다." }
         val rowId = learningDao.insertExpressionIgnoringDuplicate(
             SavedExpressionEntity(
-                normalizedExpression = normalizedExpression,
+                normalizedExpression = key,
                 displayExpression = displayExpression.trim(),
                 contextMeaning = contextMeaning.trim(),
                 firstSavedAtEpochMillis = savedAtEpochMillis,
                 contextSentence = contextSentence.trim(),
                 shortMeaning = shortMeaning.trim(),
+                kind = ExpressionKinds.normalize(kind),
+                language = language.wireValue,
+                pinyin = pinyin.trim(),
             ),
         )
         return rowId != IGNORED_ROW_ID
     }
 
-    /**
-     * Records a finished learning session. Idempotent on (learningDate, completedAtEpochMillis):
-     * if the result screen is recreated and retries a write that already committed, the day's
-     * session is not counted twice.
-     */
-    suspend fun recordCompletedSession(session: LearningSessionEntity) {
-        database.withTransaction {
-            val alreadyRecorded = learningDao.countLearningSession(
-                learningDate = session.learningDate,
-                completedAtEpochMillis = session.completedAtEpochMillis,
-            ) > 0
-            if (!alreadyRecorded) learningDao.insertLearningSession(session)
-        }
-    }
-
     suspend fun saveReviewProgress(
+        language: Language,
         displayExpression: String,
         lastReviewedAtEpochMillis: Long,
         nextReviewAtEpochMillis: Long,
@@ -192,17 +137,11 @@ class LearningRepository(
         isMastered: Boolean,
     ) {
         database.withTransaction {
-            val normalizedExpression = normalizeExpression(displayExpression)
-            val existing = checkNotNull(learningDao.findSavedExpression(normalizedExpression))
-            learningDao.updateExpression(
-                existing.copy(
-                    lastReviewedAtEpochMillis = lastReviewedAtEpochMillis,
-                    nextReviewAtEpochMillis = nextReviewAtEpochMillis,
-                    consecutiveCorrectCount = consecutiveCorrectCount,
-                    incorrectCount = incorrectCount,
-                    isMastered = isMastered,
-                ),
+            val existing = checkNotNull(findRow(language, displayExpression))
+            val progress = ReviewProgress(
+                lastReviewedAtEpochMillis, nextReviewAtEpochMillis, consecutiveCorrectCount, incorrectCount, isMastered,
             )
+            learningDao.updateExpression(existing.withProgress(progress))
         }
     }
 
@@ -210,9 +149,9 @@ class LearningRepository(
      * The learner saw the expression's card and said they do not know it yet (백로그 045): it
      * comes back tomorrow, but nothing is held against it — no wrong answer, no reset.
      */
-    suspend fun markSeen(displayExpression: String, seenAtEpochMillis: Long): SavedExpressionEntity =
+    suspend fun markSeen(language: Language, displayExpression: String, seenAtEpochMillis: Long): SavedExpressionEntity =
         database.withTransaction {
-            val existing = checkNotNull(learningDao.findSavedExpression(normalizeExpression(displayExpression)))
+            val existing = checkNotNull(findRow(language, displayExpression))
             val updated = existing.copy(
                 lastReviewedAtEpochMillis = seenAtEpochMillis,
                 nextReviewAtEpochMillis = ReviewPolicy.seenAgainAt(seenAtEpochMillis),
@@ -222,39 +161,41 @@ class LearningRepository(
         }
 
     suspend fun recordAnswer(
+        language: Language,
         displayExpression: String,
         wasCorrect: Boolean,
         evaluatedAtEpochMillis: Long,
     ): SavedExpressionEntity = database.withTransaction {
-        val normalizedExpression = normalizeExpression(displayExpression)
-        val existing = checkNotNull(learningDao.findSavedExpression(normalizedExpression))
-        val progress = ReviewPolicy.recordAnswer(
-            current = ReviewProgress(
-                lastReviewedAtEpochMillis = existing.lastReviewedAtEpochMillis,
-                nextReviewAtEpochMillis = existing.nextReviewAtEpochMillis,
-                consecutiveCorrectCount = existing.consecutiveCorrectCount,
-                incorrectCount = existing.incorrectCount,
-                isMastered = existing.isMastered,
-            ),
-            wasCorrect = wasCorrect,
-            evaluatedAtEpochMillis = evaluatedAtEpochMillis,
-        )
-        val updated = existing.copy(
-            lastReviewedAtEpochMillis = progress.lastReviewedAtEpochMillis,
-            nextReviewAtEpochMillis = progress.nextReviewAtEpochMillis,
-            consecutiveCorrectCount = progress.consecutiveCorrectCount,
-            incorrectCount = progress.incorrectCount,
-            isMastered = progress.isMastered,
-        )
+        val existing = checkNotNull(findRow(language, displayExpression))
+        val progress = ReviewPolicy.recordAnswer(existing.toReviewProgress(), wasCorrect, evaluatedAtEpochMillis)
+        val updated = existing.withProgress(progress)
         learningDao.updateExpression(updated)
         updated
     }
 
-    private fun normalizeExpression(expression: String): String =
-        expression.trim().lowercase().split(Regex("\\s+")).joinToString(" ")
+    /** The stored row for [displayExpression] in [language], or null. */
+    internal suspend fun findRow(language: Language, displayExpression: String): SavedExpressionEntity? =
+        learningDao.findSavedExpression(language.wireValue, normalizeExpression(language, displayExpression))
 
     private companion object {
         /** What Room's IGNORE insert returns for a row it did not write. */
         const val IGNORED_ROW_ID = -1L
     }
+}
+
+/**
+ * The identity of an expression inside its language (백로그 012: duplicates are one row). English
+ * ignores case and runs of whitespace. Chinese has neither; there the only noise is whitespace and
+ * punctuation, so those go and the characters are the key.
+ */
+internal fun normalizeExpression(language: Language, expression: String): String = when (language) {
+    Language.ENGLISH -> expression.trim().lowercase().split(Regex("\\s+")).joinToString(" ")
+    Language.CHINESE -> expression.filterNot { it.isWhitespace() || it.isPunctuationMark() }
+}
+
+private fun Char.isPunctuationMark(): Boolean = when (Character.getType(this).toByte()) {
+    Character.CONNECTOR_PUNCTUATION, Character.DASH_PUNCTUATION, Character.START_PUNCTUATION, Character.END_PUNCTUATION,
+    Character.INITIAL_QUOTE_PUNCTUATION, Character.FINAL_QUOTE_PUNCTUATION, Character.OTHER_PUNCTUATION,
+    -> true
+    else -> false
 }

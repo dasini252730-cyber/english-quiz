@@ -4,6 +4,7 @@ import android.content.Context
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
+import com.englishquiz.app.data.ai.Language
 import java.util.Locale
 
 /**
@@ -16,8 +17,14 @@ import java.util.Locale
 internal interface SpeechEngine {
     val maxInputLength: Int
 
-    /** The English voices installed on the device, for [SpeakerVoices]. Empty when the engine has none. */
+    /** The installed voices of the language given to [setLanguage], for [SpeakerVoices]. Empty when the engine has none. */
     val voices: List<VoiceOption>
+
+    /** Every voice the engine has, whatever its language, for the one-time inventory log (백로그 073). */
+    val allVoices: List<VoiceOption>
+
+    /** The voice the engine will actually use next, as "name@locale", or null when it cannot say (백로그 073). */
+    val appliedVoice: String?
 
     fun setLanguage(locale: Locale): Int
     fun setOnUtteranceProgressListener(listener: UtteranceProgressListener)
@@ -29,6 +36,9 @@ internal interface SpeechEngine {
     fun setVoice(name: String?): Int
     fun setPitch(pitch: Float): Int
 
+    /** Mirrors [TextToSpeech.setSpeechRate]; 1 is the engine's own pace (백로그 073). */
+    fun setSpeechRate(rate: Float): Int
+
     /** Mirrors [TextToSpeech.speak]; [queueMode] is [TextToSpeech.QUEUE_FLUSH] or `QUEUE_ADD`. */
     fun speak(text: String, queueMode: Int, utteranceId: String): Int
 
@@ -36,34 +46,64 @@ internal interface SpeechEngine {
     fun shutdown()
 }
 
-/** The real engine. Created eagerly, like [TextToSpeech] itself, and reports readiness to [onInit]. */
-internal class AndroidSpeechEngine(context: Context, onInit: (Int) -> Unit) : SpeechEngine {
+/**
+ * The real engine. Created eagerly, like [TextToSpeech] itself, and reports readiness to [onInit].
+ * [language] is what the reader is about to read (백로그 071): it seeds the locale whose voices are
+ * listed until [setLanguage] says otherwise.
+ */
+internal class AndroidSpeechEngine(
+    context: Context,
+    language: Language = Language.ENGLISH,
+    onInit: (Int) -> Unit,
+) : SpeechEngine {
     private val engine = TextToSpeech(context.applicationContext) { onInit(it) }
 
-    /** The language last asked for. "Default voice" means this language's own default, never the device's. */
-    private var language: Locale = Locale.US
+    /** The locale last asked for. "Default voice" means this language's own default, never the device's. */
+    private var locale: Locale = language.locale
     private var cachedVoices: Map<String, Voice> = emptyMap()
 
     /**
-     * Read on demand. An engine can throw while listing, or list nothing until it has finished
-     * starting, so an empty result is not kept: the next call asks again.
+     * The voices of [locale]'s language — "en" or "zh" — preferring its own country (US, CN) when
+     * the engine has voices for several. Read on demand: an engine can throw while listing, or
+     * list nothing until it has finished starting, so an empty result is not kept and the next
+     * call asks again.
      */
-    private fun englishVoices(): Map<String, Voice> {
+    private fun languageVoices(): Map<String, Voice> {
         if (cachedVoices.isNotEmpty()) return cachedVoices
         val all = runCatching { engine.voices.orEmpty() }.getOrDefault(emptySet())
-        val english = all.filter { it.locale.language.equals("en", ignoreCase = true) }
-        val american = english.filter { it.locale.country.equals("US", ignoreCase = true) }
-        cachedVoices = american.ifEmpty { english }.associateBy { it.name }
+        val wanted = languageAliases(locale.language)
+        val sameLanguage = all.filter { it.locale.language.lowercase() in wanted }
+        val sameCountry = sameLanguage.filter { it.locale.country.equals(locale.country, ignoreCase = true) }
+        cachedVoices = sameCountry.ifEmpty { sameLanguage }.associateBy { it.name }
         return cachedVoices
+    }
+
+    /**
+     * The codes an engine may file a language's voices under. Mandarin is "zh" to [Locale] but
+     * some engines list their voices as "cmn" (its ISO 639-3 code), so a Chinese reader accepts
+     * both; English has no such alias.
+     */
+    private fun languageAliases(language: String): Set<String> = when (language.lowercase()) {
+        "zh", "cmn", "zho" -> setOf("zh", "cmn", "zho")
+        else -> setOf(language.lowercase())
     }
 
     override val maxInputLength: Int get() = TextToSpeech.getMaxSpeechInputLength()
 
     override val voices: List<VoiceOption>
-        get() = englishVoices().values.map { VoiceOption(it.name, it.isNetworkConnectionRequired, it.quality) }
+        get() = languageVoices().values.map { it.toOption() }
+
+    override val allVoices: List<VoiceOption>
+        get() = runCatching { engine.voices.orEmpty() }.getOrDefault(emptySet()).map { it.toOption() }
+
+    override val appliedVoice: String?
+        get() = runCatching { engine.voice }.getOrNull()?.let { "${it.name}@${it.locale}" }
+
+    private fun Voice.toOption() = VoiceOption(name, isNetworkConnectionRequired, quality, locale.toString())
 
     override fun setLanguage(locale: Locale): Int {
-        language = locale
+        if (locale != this.locale) cachedVoices = emptyMap()
+        this.locale = locale
         return engine.setLanguage(locale)
     }
 
@@ -74,11 +114,13 @@ internal class AndroidSpeechEngine(context: Context, onInit: (Int) -> Unit) : Sp
      * a pronunciation would be read in Korean.
      */
     override fun setVoice(name: String?): Int {
-        val voice = name?.let { englishVoices()[it] } ?: return engine.setLanguage(language)
+        val voice = name?.let { languageVoices()[it] } ?: return engine.setLanguage(locale)
         return engine.setVoice(voice)
     }
 
     override fun setPitch(pitch: Float): Int = engine.setPitch(pitch)
+
+    override fun setSpeechRate(rate: Float): Int = engine.setSpeechRate(rate)
 
     /** The voice the engine will use next; read by the device test that proves [setVoice]'s contract. */
     internal val currentVoiceName: String? get() = runCatching { engine.voice?.name }.getOrNull()

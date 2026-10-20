@@ -61,21 +61,23 @@ class SpeakerVoicesTest {
     }
 
     @Test
-    fun oneVoiceIsReusedAtAnotherPitchSoTheRolesStillDiffer() {
-        val plan = SpeakerVoices.assign(listOf("Anna", "Tom"), listOf(voice("only")))
+    fun oneVoiceIsReusedUnbentWhenThereAreMoreSpeakersThanVoices() {
+        // 백로그 073: no pitch tricks in any language — a repeated voice beats a bent one.
+        val plan = SpeakerVoices.assign(listOf("Anna", "Tom", "Mia"), listOf(voice("only")))
 
-        assertEquals("only", plan.getValue("Anna").voiceName)
-        assertEquals("only", plan.getValue("Tom").voiceName)
-        assertNotEquals(plan.getValue("Anna").pitch, plan.getValue("Tom").pitch)
+        assertEquals(listOf("only", "only", "only"), listOf("Anna", "Tom", "Mia").map { plan.getValue(it).voiceName })
+        assertEquals(setOf(1f), plan.values.map { it.pitch }.toSet())
+        assertEquals(setOf(1f), plan.values.map { it.fallbackPitch }.toSet())
     }
 
     @Test
-    fun noVoicesAtAllStillSeparatesTheSpeakersByPitch() {
+    fun noVoicesAtAllLeavesEveryoneOnTheDefaultAtTheNaturalPitch() {
         val plan = SpeakerVoices.assign(listOf("Anna", "Tom"), emptyList())
 
         assertNull(plan.getValue("Anna").voiceName)
         assertNull(plan.getValue("Tom").voiceName)
-        assertNotEquals(plan.getValue("Anna").pitch, plan.getValue("Tom").pitch)
+        assertEquals(1f, plan.getValue("Anna").pitch)
+        assertEquals(1f, plan.getValue("Tom").pitch)
     }
 
     @Test
@@ -86,15 +88,17 @@ class SpeakerVoicesTest {
     }
 
     @Test
-    fun voicesThatNeedTheNetworkAreNeverChosen() {
-        val plan = SpeakerVoices.assign(
-            listOf("Anna", "Tom"),
-            listOf(voice("cloud-a", network = true), voice("cloud-b", network = true), voice("local")),
-        )
+    fun voicesThatNeedTheNetworkAreChosenOnlyWhenAllowed() {
+        val voices = listOf(voice("cloud-a", network = true), voice("cloud-b", network = true), voice("local"))
 
-        assertEquals("local", plan.getValue("Anna").voiceName)
-        assertEquals("local", plan.getValue("Tom").voiceName)
-        assertNotEquals(plan.getValue("Anna").pitch, plan.getValue("Tom").pitch)
+        val offline = SpeakerVoices.assign(listOf("Anna", "Tom"), voices)
+        assertEquals("local", offline.getValue("Anna").voiceName)
+        assertEquals("local", offline.getValue("Tom").voiceName)
+
+        // 백로그 073: the home toggle admits them, and two speakers then get two voices.
+        val online = SpeakerVoices.assign(listOf("Anna", "Tom"), voices, allowNetwork = true)
+        assertEquals("cloud-a", online.getValue("Anna").voiceName)
+        assertEquals("cloud-b", online.getValue("Tom").voiceName)
     }
 
     @Test
@@ -108,24 +112,14 @@ class SpeakerVoicesTest {
         assertEquals("en-us-x-iob-local", withTwoRealVoices.getValue("Sarah").voiceName)
         assertEquals("en-us-x-tpf-local", withTwoRealVoices.getValue("James").voiceName)
 
-        // With one real voice the alias must not fill the second slot at the same pitch — that
-        // would be the same sound twice. The real voice is reused at another pitch instead.
+        // With one real voice the alias must not be handed out as a second voice: it is the
+        // same sound under another name. The real voice is reused instead.
         val withOneRealVoice = SpeakerVoices.assign(
             listOf("Sarah", "James"),
             listOf(voice("en-US-language"), voice("en-us-x-iob-local")),
         )
         assertEquals("en-us-x-iob-local", withOneRealVoice.getValue("Sarah").voiceName)
         assertEquals("en-us-x-iob-local", withOneRealVoice.getValue("James").voiceName)
-        assertNotEquals(withOneRealVoice.getValue("Sarah").pitch, withOneRealVoice.getValue("James").pitch)
-    }
-
-    @Test
-    fun everySpeakerCarriesAFallbackPitchThatStillTellsThemApart() {
-        // If the engine refuses a speaker's voice, the default stands in at this pitch; two
-        // speakers falling back must not end up identical.
-        val plan = SpeakerVoices.assign(listOf("Anna", "Tom"), listOf(voice("a"), voice("b")))
-
-        assertNotEquals(plan.getValue("Anna").fallbackPitch, plan.getValue("Tom").fallbackPitch)
     }
 
     @Test

@@ -35,6 +35,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import com.englishquiz.app.data.repository.findLearningSessions
 
 @RunWith(AndroidJUnit4::class)
 class ResultScreenTest {

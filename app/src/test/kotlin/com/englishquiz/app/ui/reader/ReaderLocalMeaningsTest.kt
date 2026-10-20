@@ -53,4 +53,16 @@ class ReaderLocalMeaningsTest {
         assertNull(content.localMeaningFor(token("doesn't")))
         assertNull(content.localMeaningFor(token("")))
     }
+
+    @Test
+    fun cjkPunctuationAtTheEdgesIsIgnoredLikeAsciiPunctuation() {
+        // 백로그 071: a Chinese glossary word or expression text may arrive with a full-width mark attached.
+        val chinese = content.copy(
+            expressions = listOf(ContentExpression("便宜一点", "좀 싸게", 0, 0, 4)),
+            glossary = listOf(GlossaryEntry("火车站。", "기차역")),
+        )
+
+        assertEquals("기차역", chinese.localMeaningFor(token("火车站，")))
+        assertEquals("좀 싸게", chinese.localMeaningFor(token("“便宜一点”？", segment = 1)))
+    }
 }

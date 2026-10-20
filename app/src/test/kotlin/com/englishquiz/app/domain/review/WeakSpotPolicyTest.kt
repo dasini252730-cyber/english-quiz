@@ -24,6 +24,14 @@ class WeakSpotPolicyTest {
     }
 
     @Test
+    fun oftenWrongAddsTheMissesLoggedByTheBossAndThePractice() {
+        // 백로그 056: "fresh" was never missed in the daily quiz but twice elsewhere; "missed once"
+        // gains one more, so it now outranks "missed twice" (2 + 0) by the tie-break on date.
+        val logged = mapOf(fresh.id to 2, missedOnce.id to 1)
+        assertEquals(listOf(fresh, missedOnce, missedTwice), WeakSpotPolicy.apply(ReviewFilter.OFTEN_WRONG, all, logged))
+    }
+
+    @Test
     fun tappedSeedIsWhatWasLookedUpAndStillNeverAnsweredRight() {
         // Known (a correct run) and mastered expressions drop out even though they were tapped.
         assertEquals(listOf(tappedTwice, missedOnce), WeakSpotPolicy.apply(ReviewFilter.TAPPED_SEED, all))

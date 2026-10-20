@@ -47,6 +47,8 @@ internal fun ModeCard(
     onClick: () -> Unit,
     onLevelChange: (Int) -> Unit,
     onSuggestionAnswer: (accepted: Boolean) -> Unit,
+    /** A short line under the level row, such as when a level change reaches the next episode (백로그 063). */
+    note: String? = null,
 ) {
     Box(
         modifier = Modifier
@@ -78,6 +80,7 @@ internal fun ModeCard(
                 Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = ink)
             }
             if (level != null) LevelRow(title, level, ink, onLevelChange, onSuggestionAnswer)
+            note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = ink) }
         }
     }
 }

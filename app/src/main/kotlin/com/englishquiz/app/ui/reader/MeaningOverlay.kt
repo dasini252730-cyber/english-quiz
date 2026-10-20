@@ -46,7 +46,8 @@ enum class SaveStatus { SAVED, FAILED }
 /** UI state for the expression-meaning overlay shown over the reader. */
 sealed interface MeaningUiState {
     data class Loading(val expression: String) : MeaningUiState
-    data class Success(val expression: String, val meaning: String, val saveStatus: SaveStatus) : MeaningUiState
+    /** [pinyin] is set for a Chinese expression (백로그 066) and shown under it. */
+    data class Success(val expression: String, val meaning: String, val saveStatus: SaveStatus, val pinyin: String = "") : MeaningUiState
     data class Error(val expression: String, val message: String) : MeaningUiState
 }
 
@@ -133,11 +134,12 @@ private fun ColumnScope.SuccessBody(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(
-            text = state.expression,
-            style = MaterialTheme.typography.displayMedium,
-            modifier = Modifier.weight(1f, fill = false).padding(end = 12.dp),
-        )
+        Column(modifier = Modifier.weight(1f, fill = false).padding(end = 12.dp)) {
+            Text(text = state.expression, style = MaterialTheme.typography.displayMedium)
+            if (state.pinyin.isNotEmpty()) {
+                Text(state.pinyin, style = MaterialTheme.typography.titleMedium, color = MongleColor.InkMuted)
+            }
+        }
         MongleIconButton(
             icon = MongleIcons.Speaker,
             contentDescription = "발음 듣기",

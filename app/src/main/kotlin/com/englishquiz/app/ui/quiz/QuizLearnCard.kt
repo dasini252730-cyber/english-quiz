@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.ui.reader.ReaderSpeech
 import com.englishquiz.app.ui.theme.MongleButton
 import com.englishquiz.app.ui.theme.MongleButtonColors
@@ -26,15 +27,15 @@ import com.englishquiz.app.ui.theme.MongleIcons
 
 /**
  * The first meeting with an expression (백로그 045): shown, not tested. The learner reads it
- * with its gloss and sentence, can hear it, and says whether they know it. Nothing is scored.
+ * with its gloss and sentence, can hear it, and moves on with one button (백로그 055): whether
+ * they know it is what tomorrow's first graded question finds out, not a self-assessment here.
  */
 @Composable
 internal fun QuizLearnCard(
     question: com.englishquiz.app.domain.quiz.QuizQuestion,
     speechReady: Boolean,
     onPlay: (String) -> Unit,
-    onKnown: () -> Unit,
-    onUnknown: () -> Unit,
+    onSeen: () -> Unit,
 ) {
     MongleCard(contentPadding = 20.dp, face = MongleColor.MeaningPanel, border = MongleColor.HighlightBorder) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -50,6 +51,10 @@ internal fun QuizLearnCard(
                 iconSize = 18.dp,
             )
         }
+        // 백로그 066: a Chinese expression shows how it is read before what it means.
+        if (question.pinyin.isNotEmpty()) {
+            Text(question.pinyin, style = MaterialTheme.typography.titleMedium, color = MongleColor.InkMuted)
+        }
         if (question.shortMeaning.isNotEmpty()) {
             Text(question.shortMeaning, style = MaterialTheme.typography.headlineSmall, color = MongleColor.AmberLabel)
         }
@@ -60,17 +65,16 @@ internal fun QuizLearnCard(
         }
     }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-        MongleButton("알아요", onKnown, colors = MongleButtonColors.Positive)
-        MongleButton("모르겠어요, 내일 다시", onUnknown, colors = MongleButtonColors.Accent)
+        MongleButton("뜻 확인 완료", onSeen, colors = MongleButtonColors.Positive)
     }
 }
 
 /** A speech engine for the quiz, stopped when the screen stops and closed when it leaves. */
 @Composable
-internal fun rememberQuizSpeech(): ReaderSpeech {
+internal fun rememberQuizSpeech(language: Language = Language.DEFAULT, allowNetworkVoices: Boolean = false): ReaderSpeech {
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
-    val speech = remember(context, owner) { ReaderSpeech(context) }
+    val speech = remember(context, owner, language, allowNetworkVoices) { ReaderSpeech(context, language, allowNetworkVoices) }
     DisposableEffect(speech, owner) {
         val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_STOP) speech.stop() }
         owner.lifecycle.addObserver(observer)

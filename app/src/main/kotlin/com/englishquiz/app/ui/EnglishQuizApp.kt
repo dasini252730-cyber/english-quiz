@@ -19,10 +19,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.englishquiz.app.data.ai.AiLearningClient
 import com.englishquiz.app.data.ai.ContentMode
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.data.preferences.AppSettings
 import com.englishquiz.app.data.preferences.AppSettingsRepository
 import com.englishquiz.app.data.preferences.GameProgressRepository
 import com.englishquiz.app.data.repository.LearningRepository
+import com.englishquiz.app.data.season.SeasonCoordinator
 import com.englishquiz.app.domain.difficulty.DifficultyPolicy
 import com.englishquiz.app.ui.assessment.AssessmentScreen
 import com.englishquiz.app.ui.theme.MongleButton
@@ -31,6 +33,7 @@ import com.englishquiz.app.ui.theme.mongleScreenInsets
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+import com.englishquiz.app.data.repository.listRecentSessionSummaries
 
 private sealed interface SettingsLoadState {
     data object Loading : SettingsLoadState
@@ -48,10 +51,12 @@ fun EnglishQuizApp(
     settingsRepository: AppSettingsRepository,
     learningRepository: LearningRepository? = null,
     aiLearningClient: AiLearningClient? = null,
-    /** Called once a session is recorded and the difficulty adjusted: make tomorrow's passages (백로그 025). */
-    prefetchTomorrow: () -> Unit = {},
+    /** Asks the background pipeline to look at a language's seasons (백로그 075): from the first assessment question and from home. */
+    prepareSeason: (Language) -> Unit = {},
     /** Points spent, shields and badges seen (백로그 037~041); null runs home without the game cards. */
     gameProgressRepository: GameProgressRepository? = null,
+    /** The story as a season of episodes (백로그 063); null keeps the loose daily chain. */
+    seasonCoordinator: SeasonCoordinator? = null,
 ) {
     var retryCount by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
@@ -78,6 +83,8 @@ fun EnglishQuizApp(
                     onSaveResult = { level ->
                         settingsRepository.saveAssessmentResult(level.storedValue)
                     },
+                    // 백로그 075: the first season is designed while the eight questions are answered.
+                    onStart = { prepareSeason(Language.ENGLISH) },
                 )
             } else if (learningRepository == null) {
                 HomePlaceholder(state.settings)
@@ -87,21 +94,30 @@ fun EnglishQuizApp(
                     aiClient = aiLearningClient,
                     settings = state.settings,
                     gameRepository = gameProgressRepository,
-                    onSessionRecorded = { mode, sessionCompletedAtEpochMillis ->
-                        if (mode != null) suggestLevel(learningRepository, settingsRepository, mode, sessionCompletedAtEpochMillis)
-                        prefetchTomorrow()
+                    seasons = seasonCoordinator,
+                    onPrepare = prepareSeason,
+                    onSessionRecorded = { mode, language, sessionCompletedAtEpochMillis ->
+                        if (mode != null) suggestLevel(learningRepository, settingsRepository, mode, language, sessionCompletedAtEpochMillis)
                     },
                     // The learner's own level moves at once (백로그 034); a write that fails leaves
                     // the level where it was, which the next tap can repeat.
                     onLevelChange = { mode, level ->
-                        scope.launch { settingsWrite { settingsRepository.setLevel(mode, level) } }
+                        scope.launch { settingsWrite { settingsRepository.setLevel(mode, level, state.settings.language) } }
                     },
                     onSuggestionAnswer = { mode, accepted ->
+                        val language = state.settings.language
                         scope.launch {
                             settingsWrite {
-                                if (accepted) settingsRepository.acceptSuggestion(mode) else settingsRepository.dismissSuggestion(mode)
+                                if (accepted) settingsRepository.acceptSuggestion(mode, language) else settingsRepository.dismissSuggestion(mode, language)
                             }
                         }
+                    },
+                    // 백로그 066: the chosen language is stored; the next settings emission carries its levels.
+                    onLanguageChange = { language ->
+                        scope.launch { settingsWrite { settingsRepository.setLanguage(language) } }
+                    },
+                    onNetworkVoicesChange = { enabled ->
+                        scope.launch { settingsWrite { settingsRepository.setNetworkVoices(enabled) } }
                     },
                 )
             }
@@ -119,11 +135,12 @@ private suspend fun suggestLevel(
     learningRepository: LearningRepository,
     settingsRepository: AppSettingsRepository,
     mode: ContentMode,
+    language: Language,
     sessionCompletedAtEpochMillis: Long,
 ) {
     try {
-        val recent = learningRepository.listRecentSessionSummaries(mode, DifficultyPolicy.SESSIONS_CONSIDERED)
-        settingsRepository.applyFinishedSession(mode, sessionCompletedAtEpochMillis) { current, sessionsSinceChange ->
+        val recent = learningRepository.listRecentSessionSummaries(mode, DifficultyPolicy.SESSIONS_CONSIDERED, language)
+        settingsRepository.applyFinishedSession(mode, sessionCompletedAtEpochMillis, language) { current, sessionsSinceChange ->
             DifficultyPolicy.nextDifficulty(current, recent, sessionsSinceChange)
         }
     } catch (error: CancellationException) {
@@ -162,7 +179,7 @@ internal fun LoadingScreen() {
 @Composable
 private fun HomePlaceholder(settings: AppSettings) {
     val level = settings.level(ContentMode.CONVERSATION)?.let { "$it / ${DifficultyPolicy.MAX_DIFFICULTY}" } ?: "미설정"
-    CenteredMessage(title = "오늘의 영어 학습", body = "진단 완료 · 시작 레벨: $level")
+    CenteredMessage(title = "오늘의 ${settings.language.korean} 학습", body = "진단 완료 · 시작 레벨: $level")
 }
 
 @Composable

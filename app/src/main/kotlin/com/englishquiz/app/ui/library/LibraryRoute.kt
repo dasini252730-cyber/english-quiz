@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.data.local.LibraryItem
 import com.englishquiz.app.data.repository.LearningRepository
@@ -32,6 +33,7 @@ import com.englishquiz.app.ui.theme.MongleIcons
 import com.englishquiz.app.ui.theme.mongleScreenInsets
 import kotlinx.coroutines.CancellationException
 import java.time.LocalDate
+import com.englishquiz.app.data.repository.listLibrary
 
 /**
  * The library: every passage generated on an earlier day, offered to be read again (백로그 026).
@@ -43,11 +45,13 @@ fun LibraryRoute(
     onOpen: (LibraryItem) -> Unit,
     onBack: () -> Unit,
     today: LocalDate = LocalDate.now(),
+    /** Only this language's passages are listed (백로그 066). */
+    language: Language = Language.DEFAULT,
 ) {
     BackHandler(onBack = onBack)
-    val entries by produceState<List<LibraryEntry>?>(initialValue = null, repository, today) {
+    val entries by produceState<List<LibraryEntry>?>(initialValue = null, repository, today, language) {
         value = try {
-            LibraryPolicy.arrange(repository.listLibrary(), today)
+            LibraryPolicy.arrange(repository.listLibrary(language), today)
         } catch (error: CancellationException) {
             throw error
         } catch (_: Exception) {

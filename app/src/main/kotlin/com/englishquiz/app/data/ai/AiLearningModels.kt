@@ -1,9 +1,15 @@
 package com.englishquiz.app.data.ai
 
+/**
+ * A passage made on its own (백로그 006): the fallback when the app runs without seasons. Inside a
+ * season both passages of an episode come from one [EpisodeRequest] (백로그 075).
+ */
 data class ContentGenerationRequest(
     val mode: ContentMode,
     val difficulty: Int,
     val reviewExpressions: List<String> = emptyList(),
+    /** The language of the passage (백로그 066); the server defaults to English when it is absent. */
+    val language: Language = Language.DEFAULT,
 )
 
 enum class ContentMode(val wireValue: String) {
@@ -14,6 +20,7 @@ enum class ContentMode(val wireValue: String) {
 data class MeaningRequest(
     val expression: String,
     val context: String,
+    val language: Language = Language.DEFAULT,
 )
 
 data class LearningContent(
@@ -27,6 +34,12 @@ data class LearningContent(
     val comprehension: List<ComprehensionQuestion> = emptyList(),
     /** Who each speaker is (백로그 050), keyed by the segment speaker name; empty before it or when the model gave none. */
     val speakers: Map<String, SpeakerGender> = emptyMap(),
+    /** Two sentences on the passage (백로그 054), kept with it; "" before it. */
+    val synopsis: String = "",
+    /** What this episode settled (백로그 063); null for a conversation or a story outside a season. */
+    val canon: CanonState? = null,
+    /** The passage's language (백로그 066): how it is tokenised, graded and spoken. Last, so older positional constructions still read. */
+    val language: Language = Language.DEFAULT,
 )
 
 /** What the model says about a speaker, so a voice can be chosen to match (백로그 050). */
@@ -41,6 +54,22 @@ enum class SpeakerGender(val wireValue: String) {
     }
 }
 
+/**
+ * True when the passage itself is written in Korean (백로그 051): a reply the server accepted
+ * before it learnt to refuse one, or a row stored from it. Such a passage is not learning
+ * material and is regenerated rather than shown. Names and a quoted word do not trip this.
+ */
+val LearningContent.isKoreanPassage: Boolean
+    get() {
+        val text = segments.joinToString(" ") { it.text }
+        val letters = text.count { !it.isWhitespace() }
+        if (letters == 0) return false
+        val hangul = text.count { it in 'ㄱ'..'ㆎ' || it in '가'..'힣' }
+        return hangul > letters * MAX_HANGUL_SHARE
+    }
+
+private const val MAX_HANGUL_SHARE = 0.2
+
 /** One multiple-choice question about the situation of the passage, written by the model. */
 data class ComprehensionQuestion(
     val question: String,
@@ -52,11 +81,15 @@ data class ComprehensionQuestion(
 data class GlossaryEntry(
     val word: String,
     val meaning: String,
+    /** Hanyu Pinyin for a Chinese word (백로그 066); "" otherwise. */
+    val pinyin: String = "",
 )
 
 data class ContentSegment(
     val speaker: String,
     val text: String,
+    /** The line's pinyin for a Chinese passage (백로그 066); "" otherwise. */
+    val pinyin: String = "",
 )
 
 data class ContentExpression(
@@ -67,11 +100,25 @@ data class ContentExpression(
     val endIndex: Int,
     /** A few words for a quiz option (백로그 046); "" for a passage from before it or when the model gave none. */
     val shortMeaning: String = "",
+    /** The slot the phrase fills, one of [ExpressionKinds] (백로그 059); "" when unknown. */
+    val kind: String = "",
+    /** Hanyu Pinyin for a Chinese expression (백로그 066); "" otherwise. */
+    val pinyin: String = "",
 )
+
+/** The kinds of phrase the quiz matches wrong options by (백로그 059); the Edge Function sends no other. */
+object ExpressionKinds {
+    val ALL = setOf("noun", "verb", "adjective", "adverb", "remark")
+
+    /** [value] when it is a known kind (any case, untrimmed), else "". */
+    fun normalize(value: String): String = value.trim().lowercase().takeIf { it in ALL } ?: ""
+}
 
 data class ContextualMeaning(
     val expression: String,
     val meaning: String,
+    /** Hanyu Pinyin for a Chinese expression (백로그 066); "" otherwise. */
+    val pinyin: String = "",
 )
 
 class AiLearningException(

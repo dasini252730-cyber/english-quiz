@@ -5,9 +5,23 @@ import com.englishquiz.app.domain.game.GrowthStage
 /**
  * Quiz question types (요구사항 14.2): the first-meeting card (백로그 045), meaning multiple
  * choice, fill-in-the-blank by choice, the typed blank for an expression at the 꽃 stage
- * (백로그 043/045), and a question about the passage itself (백로그 042).
+ * (백로그 043/045), the expression typed from its Korean meaning when there is no sentence to
+ * blank (백로그 057), and a question about the passage itself (백로그 042).
  */
-enum class QuizQuestionType { LEARN_CARD, MULTIPLE_CHOICE, FILL_IN_BLANK, TYPED_BLANK, COMPREHENSION }
+enum class QuizQuestionType { LEARN_CARD, MULTIPLE_CHOICE, FILL_IN_BLANK, TYPED_BLANK, TYPED_MEANING, COMPREHENSION }
+
+/**
+ * Which quiz an answer was given in (백로그 056). Only [DAILY] moves an expression's growth stage
+ * and review schedule. [BOSS] pays double points and [PRACTICE] pays none; both only log the
+ * answer, so the same expression cannot be promoted twice in a day or by practising. [ROLEPLAY]
+ * (백로그 076) logs whether a spoken line passed; it pays nothing and is not a weak-spot signal.
+ */
+enum class QuizMode(val wireValue: String) {
+    DAILY("daily"),
+    BOSS("boss"),
+    PRACTICE("practice"),
+    ROLEPLAY("roleplay"),
+}
 
 data class QuizOption(
     val text: String,
@@ -36,6 +50,8 @@ data class QuizQuestion(
     val shortMeaning: String = "",
     /** True in the retry round (백로그 047): asked again, scored and recorded no more. */
     val isRetry: Boolean = false,
+    /** Hanyu Pinyin for a Chinese expression (백로그 066), shown on its learn card; "" otherwise. */
+    val pinyin: String = "",
 )
 
 data class QuizSet(

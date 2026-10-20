@@ -22,6 +22,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.time.LocalDate
+import com.englishquiz.app.data.repository.saveDailyContent
 
 /** 백로그 026: past passages are listed, the two-to-three-week ones first, and a tap hands one over. */
 @RunWith(AndroidJUnit4::class)

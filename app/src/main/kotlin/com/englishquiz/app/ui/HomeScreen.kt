@@ -23,8 +23,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.englishquiz.app.data.ai.ContentMode
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.domain.game.GameStats
 import com.englishquiz.app.domain.game.Badge
+import com.englishquiz.app.domain.quiz.QuizBuilder
+import com.englishquiz.app.domain.review.ReviewQueue
 import com.englishquiz.app.ui.theme.MongleCard
 import com.englishquiz.app.ui.theme.MongleChip
 import com.englishquiz.app.ui.theme.MongleColor
@@ -40,6 +43,12 @@ data class HomeSummary(
     val levels: Map<ContentMode, HomeLevel> = emptyMap(),
     /** Level, missions, badges and the boss (백로그 037~041); null shows none of the game cards. */
     val game: GameStats? = null,
+    /** What waits in each queue (백로그 055/060); null before the box is known. */
+    val queue: ReviewQueue? = null,
+    /** "다음 회차부터 적용돼요" after a level change while an episode already waits (백로그 063/075), per mode. */
+    val levelNotes: Map<ContentMode, String> = emptyMap(),
+    /** "다음 회차를 준비하고 있어요" under both cards while no episode waits (백로그 075). */
+    val episodeNote: String? = null,
 )
 
 @Composable
@@ -55,6 +64,12 @@ fun HomeScreen(
     onBuyShield: () -> Unit = {},
     onBadgesClick: () -> Unit = {},
     onBossClick: () -> Unit = {},
+    /** The language home works in (백로그 066) and the switch between the two. */
+    language: Language = Language.DEFAULT,
+    onLanguageChange: (Language) -> Unit = {},
+    /** Online voices for speech (백로그 073); off by default. */
+    networkVoices: Boolean = false,
+    onNetworkVoicesChange: (Boolean) -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -65,12 +80,20 @@ fun HomeScreen(
             .padding(start = 20.dp, end = 20.dp, top = 28.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
-        Text(
-            "StoryEnglish",
-            style = MaterialTheme.typography.headlineMedium,
-            color = MongleColor.Purple,
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                "StoryEnglish",
+                style = MaterialTheme.typography.headlineMedium,
+                color = MongleColor.Purple,
+            )
+            HomeLanguageToggle(language, onLanguageChange)
+        }
         SummaryTiles(summary)
+        summary.queue?.let { ReviewQueueNotice(it) }
         summary.game?.let { game ->
             HomeLevelCard(game, onBuyShield)
             HomeMissionCard(game.missions)
@@ -95,6 +118,7 @@ fun HomeScreen(
                 onClick = onConversationClick,
                 onLevelChange = { onLevelChange(ContentMode.CONVERSATION, it) },
                 onSuggestionAnswer = { onSuggestionAnswer(ContentMode.CONVERSATION, it) },
+                note = summary.levelNotes[ContentMode.CONVERSATION] ?: summary.episodeNote,
             )
             ModeCard(
                 title = "Story",
@@ -107,12 +131,14 @@ fun HomeScreen(
                 onClick = onStoryClick,
                 onLevelChange = { onLevelChange(ContentMode.STORY, it) },
                 onSuggestionAnswer = { onSuggestionAnswer(ContentMode.STORY, it) },
+                note = summary.levelNotes[ContentMode.STORY] ?: summary.episodeNote,
             )
         }
         summary.game?.let { HomeBossCard(it.boss, onBossClick) }
         EntryRow(icon = MongleIcons.Cards, label = "복습함", onClick = onReviewClick)
         // 백로그 026: a passage read again weeks later is a review that costs no generation.
         EntryRow(icon = MongleIcons.Book, label = "지난 이야기 다시 읽기", onClick = onLibraryClick)
+        HomeNetworkVoiceToggle(networkVoices, onNetworkVoicesChange)
         summary.game?.let { game ->
             EntryRow(
                 icon = MongleIcons.Star,
@@ -121,6 +147,20 @@ fun HomeScreen(
                 badge = game.newBadges.size.takeIf { it > 0 }?.let { "새 배지 $it" },
             )
         }
+    }
+}
+
+/**
+ * Today's review load and what waits behind it (백로그 060), so a day of old reviews with no new
+ * expression is understood, not felt as "still so much to review".
+ */
+@Composable
+private fun ReviewQueueNotice(queue: ReviewQueue) {
+    val plan = queue.todayPlan(QuizBuilder.DEFAULT_MAX_QUESTIONS, QuizBuilder.NEW_PER_DAY)
+    val notice = plan.notice(queue) ?: return
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(notice, style = MaterialTheme.typography.bodyMedium, color = MongleColor.InkMuted)
+        plan.reason(queue)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MongleColor.InkMuted) }
     }
 }
 

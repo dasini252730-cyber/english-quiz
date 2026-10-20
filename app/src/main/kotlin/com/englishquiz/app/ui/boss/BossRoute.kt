@@ -17,10 +17,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.data.preferences.GameProgressRepository
 import com.englishquiz.app.data.repository.LearningRepository
 import com.englishquiz.app.domain.game.BossPolicy
 import com.englishquiz.app.domain.session.LearningSessionSummary
+import com.englishquiz.app.domain.quiz.QuizMode
 import com.englishquiz.app.ui.quiz.QuizRoute
 import com.englishquiz.app.ui.result.ResultRoute
 import com.englishquiz.app.ui.session.SessionStatusScreen
@@ -41,6 +43,9 @@ fun BossRoute(
     gameRepository: GameProgressRepository?,
     onExit: () -> Unit,
     onSessionRecorded: suspend (sessionCompletedAtEpochMillis: Long) -> Unit = {},
+    /** The language whose shakiest expressions are asked (백로그 066). */
+    language: Language = Language.DEFAULT,
+    allowNetworkVoices: Boolean = false,
 ) {
     var started by rememberSaveable { mutableStateOf(false) }
     var finished by rememberSaveable(stateSaver = SummarySaver) { mutableStateOf<LearningSessionSummary?>(null) }
@@ -62,6 +67,7 @@ fun BossRoute(
             onDone = onExit,
             onSessionRecorded = onSessionRecorded,
             gameRepository = gameRepository,
+            language = language,
         )
         started -> QuizRoute(
             repository = repository,
@@ -69,11 +75,15 @@ fun BossRoute(
             onFinished = { finished = it.copy(learnedExpressionCount = it.quizQuestionCount) },
             onBack = onExit,
             enrolExpressions = false,
-            questionSource = { repo, at -> repo.listBossCandidates(at, BossPolicy.MAX_QUESTIONS) },
+            language = language,
+            allowNetworkVoices = allowNetworkVoices,
+            questionSource = { repo, at -> repo.listBossCandidates(language, at, BossPolicy.MAX_QUESTIONS) },
             maxQuestions = BossPolicy.MAX_QUESTIONS,
             pointsMultiplier = BossPolicy.POINTS_MULTIPLIER,
             // A boss is a test, not a first meeting: every candidate is asked (백로그 045).
             askCards = false,
+            // Points and the challenge record only (백로그 056): the schedule stays with the daily quiz.
+            mode = QuizMode.BOSS,
         )
         else -> BossIntro(onStart = { started = true }, onBack = onExit)
     }

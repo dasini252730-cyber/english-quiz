@@ -9,6 +9,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.data.local.LearningSessionEntity
 import com.englishquiz.app.data.preferences.GameProgressRepository
 import com.englishquiz.app.data.repository.LearningRepository
@@ -21,6 +22,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import com.englishquiz.app.data.repository.listAllSessions
+import com.englishquiz.app.data.repository.listLearningDates
+import com.englishquiz.app.data.repository.recordCompletedSession
 
 sealed interface StreakUiState {
     data object Loading : StreakUiState
@@ -55,6 +59,8 @@ fun ResultRoute(
     zoneId: ZoneId = ZoneId.systemDefault(),
     onSessionRecorded: suspend (sessionCompletedAtEpochMillis: Long) -> Unit = {},
     gameRepository: GameProgressRepository? = null,
+    /** The language the session row records (백로그 066); the streak and the game count every language. */
+    language: Language = Language.DEFAULT,
 ) {
     // Captured once and kept across recreation, so a retried write targets the same session row.
     val completedAtEpochMillis = rememberSaveable { nowEpochMillis() }
@@ -84,6 +90,7 @@ fun ResultRoute(
                             mode = sessionMode,
                             score = summary.score,
                             maxCombo = summary.maxCombo,
+                            language = language.wireValue,
                         ),
                     )
                     onSessionRecorded(completedAtEpochMillis)
@@ -99,7 +106,7 @@ fun ResultRoute(
                 gameRepository.shieldYesterdayIfNeeded(sessions.map { it.learningDate }, todayIso)
                 val earned = resultGame(
                     sessions = sessions,
-                    expressions = repository.listSavedExpressions(),
+                    expressions = repository.listAllSavedExpressions(),
                     progress = gameRepository.progress.first(),
                     todayIso = todayIso,
                     sessionCompletedAtEpochMillis = completedAtEpochMillis,

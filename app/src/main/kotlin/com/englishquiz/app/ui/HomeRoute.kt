@@ -3,22 +3,29 @@ package com.englishquiz.app.ui
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import com.englishquiz.app.data.ai.AiLearningClient
 import com.englishquiz.app.data.ai.ContentMode
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.data.ai.LearningContent
 import com.englishquiz.app.data.preferences.AppSettings
 import com.englishquiz.app.data.preferences.GameProgressRepository
 import com.englishquiz.app.data.repository.LearningRepository
+import com.englishquiz.app.data.season.SeasonCoordinator
 import com.englishquiz.app.ui.badge.BadgeRoute
 import com.englishquiz.app.ui.boss.BossRoute
 import com.englishquiz.app.ui.library.LibraryRoute
 import com.englishquiz.app.ui.library.LibrarySessionRoute
+import com.englishquiz.app.ui.review.ReviewQuizRoute
 import com.englishquiz.app.ui.review.ReviewRoute
 import com.englishquiz.app.ui.session.LearningSessionRoute
 import com.englishquiz.app.ui.session.SessionStatusScreen
+import kotlinx.coroutines.launch
 
 /** Level used for a mode that has none stored yet (before the diagnosis has written one). */
 private const val DEFAULT_DIFFICULTY = 3
@@ -28,6 +35,7 @@ internal enum class HomeDestination(val title: String) {
     CONVERSATION("Conversation"),
     STORY("Story"),
     REVIEW("복습함"),
+    REVIEW_QUIZ("복습 연습"),
     LIBRARY("지난 이야기"),
     LIBRARY_SESSION("다시 읽기"),
     BADGES("배지"),
@@ -44,35 +52,79 @@ internal fun LearningHome(
     repository: LearningRepository,
     aiClient: AiLearningClient?,
     settings: AppSettings,
-    /** [mode] is null for a library re-read (백로그 026): recorded, but no level suggestion is drawn from it. */
-    onSessionRecorded: suspend (mode: ContentMode?, sessionCompletedAtEpochMillis: Long) -> Unit = { _, _ -> },
+    /**
+     * [mode] is null for a library re-read (백로그 026): recorded, but no level suggestion is drawn from
+     * it. [language] is the session's own (백로그 066), captured when the session started, so a level
+     * window is never counted against a language chosen on home afterwards.
+     */
+    onSessionRecorded: suspend (mode: ContentMode?, language: Language, sessionCompletedAtEpochMillis: Long) -> Unit = { _, _, _ -> },
     onLevelChange: (ContentMode, Int) -> Unit = { _, _ -> },
     onSuggestionAnswer: (ContentMode, accepted: Boolean) -> Unit = { _, _ -> },
     /** The game's own store (백로그 037~041); null shows home without the game cards. */
     gameRepository: GameProgressRepository? = null,
+    /** The story as a season (백로그 063); null keeps the loose daily chain. */
+    seasons: SeasonCoordinator? = null,
+    /** English / 中文 chosen on home (백로그 066); the settings already carry that language's levels. */
+    onLanguageChange: (Language) -> Unit = {},
+    /** The online-voice switch (백로그 073). */
+    onNetworkVoicesChange: (Boolean) -> Unit = {},
+    /** Asks the pipeline to look at a language's seasons (백로그 075); home does so on every open. */
+    onPrepare: (Language) -> Unit = {},
 ) {
+    val language = settings.language
+    val networkVoices = settings.allowNetworkVoices
     var destinationName by rememberSaveable { mutableStateOf(HomeDestination.HOME.name) }
+    // 백로그 063/075: a level change reaches the episodes made after it; both passages of an episode are made ahead.
+    var levelNotes by remember { mutableStateOf<Map<ContentMode, String>>(emptyMap()) }
+    val noteScope = rememberCoroutineScope()
+    val changeLevel: (ContentMode, Int) -> Unit = { mode, level ->
+        onLevelChange(mode, level)
+        if (seasons != null) {
+            noteScope.launch { levelNotes = if (seasons.hasUnread(language)) levelNotes + (mode to "다음 회차부터 적용돼요") else levelNotes - mode }
+        }
+    }
+    // A note about one language's episodes has nothing to say under the other's level (백로그 066).
+    LaunchedEffect(language) { levelNotes = emptyMap() }
     val destination = HomeDestination.valueOf(destinationName)
     val goHome = { destinationName = HomeDestination.HOME.name }
     // The library passage chosen for a re-read, as "<learningDate>|<mode>" so it survives recreation.
     var libraryPick by rememberSaveable { mutableStateOf<String?>(null) }
+    // The rows the review box was showing when "퀴즈 풀기" was tapped (백로그 052), as "id,id,…".
+    var reviewQuizIds by rememberSaveable { mutableStateOf("") }
 
     when (destination) {
         HomeDestination.HOME -> LearningHomeSummary(
             repository = repository,
             gameRepository = gameRepository,
             levels = settings.levels.mapValues { HomeLevel(it.value.level, it.value.suggestedLevel) },
-            onLevelChange = onLevelChange,
+            onLevelChange = changeLevel,
+            levelNotes = levelNotes,
+            seasons = seasons,
+            onPrepare = onPrepare,
             onSuggestionAnswer = onSuggestionAnswer,
+            language = language,
+            onLanguageChange = onLanguageChange,
+            networkVoices = networkVoices,
+            onNetworkVoicesChange = onNetworkVoicesChange,
         ) { destinationName = it.name }
-        HomeDestination.REVIEW -> ReviewRoute(repository, goHome)
+        HomeDestination.REVIEW -> ReviewRoute(repository, goHome, language = language, allowNetworkVoices = networkVoices) { ids ->
+            reviewQuizIds = ids.joinToString(",")
+            destinationName = HomeDestination.REVIEW_QUIZ.name
+        }
+        HomeDestination.REVIEW_QUIZ -> ReviewQuizRoute(
+            repository = repository,
+            expressionIds = reviewQuizIds.split(",").mapNotNull { it.toLongOrNull() }.toSet(),
+            onDone = { destinationName = HomeDestination.REVIEW.name },
+            language = language,
+            allowNetworkVoices = networkVoices,
+        )
         HomeDestination.BADGES -> if (gameRepository != null) {
             BadgeRoute(repository, gameRepository, goHome, ::todayIso)
         } else {
             LaunchedEffect(Unit) { goHome() }
         }
         // A boss session is recorded like any other but drawn from no mode, so no level suggestion.
-        HomeDestination.BOSS -> BossRoute(repository, gameRepository, goHome) { onSessionRecorded(null, it) }
+        HomeDestination.BOSS -> BossRoute(repository, gameRepository, goHome, onSessionRecorded = { onSessionRecorded(null, language, it) }, language = language, allowNetworkVoices = networkVoices)
         HomeDestination.LIBRARY -> LibraryRoute(
             repository = repository,
             onOpen = { item ->
@@ -80,11 +132,13 @@ internal fun LearningHome(
                 destinationName = HomeDestination.LIBRARY_SESSION.name
             },
             onBack = goHome,
+            language = language,
         )
         HomeDestination.LIBRARY_SESSION -> LibrarySessionRoute(
             repository = repository,
             pick = libraryPick,
             onBack = goHome,
+            language = language,
         ) { content ->
             LearningSession(
                 mode = content.mode,
@@ -93,12 +147,16 @@ internal fun LearningHome(
                 aiClient = aiClient,
                 difficulty = settings.level(content.mode) ?: DEFAULT_DIFFICULTY,
                 onExit = goHome,
-                onSessionRecorded = { onSessionRecorded(null, it) },
+                onSessionRecorded = { onSessionRecorded(null, language, it) },
                 initialContent = content,
                 gameRepository = gameRepository,
+                language = language,
+                allowNetworkVoices = networkVoices,
             )
         }
-        HomeDestination.CONVERSATION, HomeDestination.STORY -> {
+        // Keyed on the language (백로그 066): a tap that lands before the stored switch has been read
+        // back restarts the session in the right language instead of reading one and recording another.
+        HomeDestination.CONVERSATION, HomeDestination.STORY -> key(language) {
             val mode = if (destination == HomeDestination.CONVERSATION) ContentMode.CONVERSATION else ContentMode.STORY
             LearningSession(
                 mode = mode,
@@ -107,8 +165,12 @@ internal fun LearningHome(
                 aiClient = aiClient,
                 difficulty = settings.level(mode) ?: DEFAULT_DIFFICULTY,
                 onExit = goHome,
-                onSessionRecorded = { onSessionRecorded(mode, it) },
+                onSessionRecorded = { onSessionRecorded(mode, language, it) },
                 gameRepository = gameRepository,
+                seasons = seasons,
+                language = language,
+                allowNetworkVoices = networkVoices,
+                onLibrary = { destinationName = HomeDestination.LIBRARY.name },
             )
         }
     }
@@ -125,6 +187,10 @@ private fun LearningSession(
     onSessionRecorded: suspend (sessionCompletedAtEpochMillis: Long) -> Unit,
     initialContent: LearningContent? = null,
     gameRepository: GameProgressRepository? = null,
+    seasons: SeasonCoordinator? = null,
+    language: Language = Language.DEFAULT,
+    allowNetworkVoices: Boolean = false,
+    onLibrary: (() -> Unit)? = null,
 ) {
     if (aiClient == null) {
         // No endpoint was configured for this build, so say so instead of failing a call.
@@ -146,5 +212,9 @@ private fun LearningSession(
         initialContent = initialContent,
         onSessionRecorded = onSessionRecorded,
         gameRepository = gameRepository,
+        seasons = seasons,
+        language = language,
+        allowNetworkVoices = allowNetworkVoices,
+        onLibrary = onLibrary,
     )
 }

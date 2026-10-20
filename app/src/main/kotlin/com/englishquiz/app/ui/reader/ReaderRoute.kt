@@ -7,6 +7,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -15,6 +16,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.englishquiz.app.data.ai.ContextualMeaning
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.data.ai.LearningContent
 import com.englishquiz.app.data.ai.MeaningRequest
 import com.englishquiz.app.data.repository.LearningRepository
@@ -27,13 +29,20 @@ fun ReaderRoute(
     repository: LearningRepository,
     onBack: () -> Unit,
     onQuiz: (() -> Unit)? = null,
+    /** The role-play of a conversation (백로그 076); null leaves the button out. */
+    onRoleplay: (() -> Unit)? = null,
     nowEpochMillis: () -> Long = System::currentTimeMillis,
+    /** "시즌 2 · 3/7" over an episode (백로그 063); null for any other passage. */
+    subtitle: String? = null,
+    /** Online voices for speech (백로그 073). */
+    allowNetworkVoices: Boolean = false,
+    // Last, so a caller can still pass it as a trailing lambda.
     explainMeaning: suspend (MeaningRequest) -> ContextualMeaning,
 ) {
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
-    val speech = remember(content, context, owner) {
-        ReaderSpeech(context).apply {
+    val speech = remember(content, context, owner, allowNetworkVoices) {
+        ReaderSpeech(context, content.language, allowNetworkVoices).apply {
             cast = content.segments.map { it.speaker }
             genders = content.speakers
         }
@@ -54,6 +63,13 @@ fun ReaderRoute(
 
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    // 백로그 066: a Chinese line is cut along the words the passage and the box already know.
+    val knownWords by produceState(content.glossary.map { it.word }, content) {
+        if (content.language == Language.CHINESE) {
+            val saved = runCatching { repository.listSavedExpressions(content.language).map { it.displayExpression } }.getOrDefault(emptyList())
+            value = content.glossary.map { it.word } + saved
+        }
+    }
     var meaningState by remember(content) { mutableStateOf<MeaningUiState?>(null) }
     var pendingToken by remember(content) { mutableStateOf<ReaderToken?>(null) }
     var pendingContext by remember(content) { mutableStateOf("") }
@@ -74,22 +90,25 @@ fun ReaderRoute(
         val current = meaningState as? MeaningUiState.Success ?: return
         job?.cancel()
         job = scope.launch {
-            meaningState = retrySaveMeaning(current, pendingContext, repository, nowEpochMillis)
+            meaningState = retrySaveMeaning(current, pendingContext, repository, nowEpochMillis, content.language)
         }
     }
 
     ReaderScreen(
         content = content,
+        subtitle = subtitle,
         speechState = state,
         onPlay = { lines -> speech.play(lines) },
         onStop = speech::stop,
         onBack = leave,
         onQuiz = onQuiz?.let { next -> { speech.stop(); next() } },
+        onRoleplay = onRoleplay?.let { next -> { speech.stop(); next() } },
         meaningState = meaningState,
         onTokenTap = { token -> if (token.isTappable) lookup(token) },
         onDismissMeaning = { job?.cancel(); meaningState = null },
         onRetryMeaning = { pendingToken?.let { lookup(it) } },
         onRetrySave = ::retrySave,
         listState = listState,
+        knownWords = knownWords,
     )
 }

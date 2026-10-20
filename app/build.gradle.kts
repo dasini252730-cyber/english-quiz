@@ -26,6 +26,15 @@ android {
                 "ship inside the APK. Secrets belong in the Edge Function, never in the app."
         }
         buildConfigField("String", "AI_ENDPOINT", "\"$aiEndpoint\"")
+
+        // The app token the Edge Function requires on every call (백로그 062). It is a secret the
+        // APK carries: pass -PaiAppToken=... (CI reads it from a repository secret); never put the
+        // value in source. An empty value builds an APK the function will answer with 401.
+        val aiAppToken = providers.gradleProperty("aiAppToken").getOrElse("")
+        require(aiAppToken.none { it == '"' || it == '\\' || it.isWhitespace() }) {
+            "aiAppToken must be one token without quotes, backslashes or spaces."
+        }
+        buildConfigField("String", "AI_APP_TOKEN", "\"$aiAppToken\"")
     }
 
     // CI signs the debug APK with the PC's own debug keystore (passed as -PdebugKeystore=...) so a
@@ -79,6 +88,9 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     implementation("androidx.datastore:datastore-preferences:1.2.1")
     implementation("androidx.room:room-ktx:2.8.5")
+    // The season pipeline runs as a WorkManager chain (백로그 075 follow-up), so it survives the app being closed.
+    implementation("androidx.work:work-runtime-ktx:2.12.0")
+    androidTestImplementation("androidx.work:work-testing:2.12.0")
     implementation("androidx.room:room-runtime:2.8.5")
     ksp("androidx.room:room-compiler:2.8.5")
     androidTestImplementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
@@ -89,4 +101,6 @@ dependencies {
     androidTestImplementation("androidx.test:runner:1.7.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
+    // The real org.json for JVM unit tests (백로그 065): android.jar's copy only throws.
+    testImplementation("org.json:json:20260814")
 }

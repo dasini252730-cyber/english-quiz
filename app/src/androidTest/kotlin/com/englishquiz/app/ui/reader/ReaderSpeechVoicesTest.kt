@@ -2,6 +2,7 @@ package com.englishquiz.app.ui.reader
 
 import android.speech.tts.TextToSpeech
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.englishquiz.app.data.ai.Language
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -71,21 +72,76 @@ class ReaderSpeechVoicesTest {
 
         onMain { speech.play(listOf(SpeechLine("Hi!", "Anna"), SpeechLine("Hey.", "Tom"))) }
 
-        // Tom's "zulu" was refused, so his line is spoken in the default voice — not in Anna's,
-        // and at his own fallback pitch, so the two still sound different.
-        assertEquals(listOf("alpha" to 1f, null to 0.8f), engine.voicedAs)
+        // Tom's "zulu" was refused, so his line is spoken in the default voice — not in Anna's —
+        // and, since 백로그 073, at the natural pitch: a bent voice is worse than a shared one.
+        assertEquals(listOf("alpha" to 1f, null to 1f), engine.voicedAs)
     }
 
     @Test
-    fun withOnlyOneVoiceTheSpeakersStillDifferByPitch() {
+    fun withOnlyOneVoiceBothSpeakersUseItUnbent() {
         val engine = RecordingEngine(voices = listOf(VoiceOption("only", false, 300)))
         val speech = ready(engine)
 
         onMain { speech.play(listOf(SpeechLine("Hi!", "Anna"), SpeechLine("Hey.", "Tom"))) }
 
-        val (anna, tom) = engine.voicedAs
-        assertEquals("only", anna.first)
-        assertEquals("only", tom.first)
-        assertTrue("두 화자의 피치가 같다", anna.second != tom.second)
+        // 백로그 073: pitch shifting made Mandarin tones unintelligible, so the voice is reused as it is.
+        assertEquals(listOf("only" to 1f, "only" to 1f), engine.voicedAs)
+    }
+
+    @Test
+    fun aChineseReaderSlowsTheEngineAndAnEnglishOneDoesNot() {
+        val chinese = RecordingEngine()
+        ready(chinese, language = Language.CHINESE)
+        assertEquals(0.9f, chinese.rateSet)
+
+        val english = RecordingEngine()
+        ready(english)
+        assertEquals(1f, english.rateSet)
+        assertTrue(engineIsQuiet(english))
+    }
+
+    private fun engineIsQuiet(engine: RecordingEngine) = engine.spoken.isEmpty()
+
+    private val cloudAndLocal = listOf(
+        VoiceOption("cloud", requiresNetwork = true, quality = 500),
+        VoiceOption("local", requiresNetwork = false, quality = 300),
+    )
+
+    @Test
+    fun theOnlineVoiceSwitchReachesTheVoicePlan() {
+        // 백로그 073: off, the better online voice is skipped; on, it is used.
+        val off = RecordingEngine(voices = cloudAndLocal)
+        val offSpeech = ready(off)
+        onMain { offSpeech.play(listOf(SpeechLine("Hi!", "Anna"), SpeechLine("Hey.", "Tom"))) }
+        assertEquals(listOf("local", "local"), off.voicedAs.map { it.first })
+
+        val on = RecordingEngine(voices = cloudAndLocal)
+        val onSpeech = ready(on, allowNetworkVoices = true)
+        onMain { onSpeech.play(listOf(SpeechLine("Hi!", "Anna"), SpeechLine("Hey.", "Tom"))) }
+        assertEquals(listOf("cloud", "local"), on.voicedAs.map { it.first })
+    }
+
+    @Test
+    fun anOnlineVoiceThatCannotConnectIsReplacedByInstalledOnesAndTheReaderIsTold() {
+        val engine = RecordingEngine(voices = cloudAndLocal)
+        val speech = ready(engine, allowNetworkVoices = true)
+        onMain { speech.play(listOf(SpeechLine("Hi!", "Anna"), SpeechLine("Hey.", "Tom"))) }
+        assertEquals("cloud", engine.voicedAs.first().first)
+        val firstId = engine.spoken.first().third
+
+        // The engine reports the network failure for the utterance it was given (API 21 onError).
+        onMain { engine.listener!!.onError(firstId, TextToSpeech.ERROR_NETWORK) }
+        onMain { }
+
+        // The same two lines were queued again, installed voices only, and the state says why.
+        assertEquals(listOf("cloud", "local", "local", "local"), engine.voicedAs.map { it.first })
+        assertEquals(listOf("Hi!", "Hey.", "Hi!", "Hey."), engine.spoken.map { it.first })
+        assertEquals(ReaderSpeech.OFFLINE_FALLBACK_MESSAGE, speech.state.value.error)
+        assertTrue(speech.state.value.playing)
+
+        // Any other error is still the plain failure.
+        onMain { engine.listener!!.onError(engine.spoken.last().third, TextToSpeech.ERROR_SYNTHESIS) }
+        onMain { }
+        assertEquals("음성을 재생하지 못했어요. 다시 시도해 주세요.", speech.state.value.error)
     }
 }

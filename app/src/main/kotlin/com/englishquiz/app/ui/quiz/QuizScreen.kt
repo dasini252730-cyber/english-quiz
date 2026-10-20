@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.domain.game.QuizScore
 import com.englishquiz.app.domain.quiz.QuizOption
 import com.englishquiz.app.domain.quiz.QuizQuestionType
@@ -42,10 +43,11 @@ fun QuizScreen(
     onSubmitTyped: (String) -> Unit = {},
     onHint: () -> Unit = {},
     /** The learn card's answers and pronunciation (백로그 045). */
-    onKnown: () -> Unit = {},
-    onUnknown: () -> Unit = {},
+    onSeen: () -> Unit = {},
     speechReady: Boolean = false,
     onPlay: (String) -> Unit = {},
+    /** The language of the expressions asked (백로그 066): names it in the typed-answer copy. */
+    language: Language = Language.DEFAULT,
 ) {
     Column(Modifier.fillMaxSize().background(MongleColor.Cream).mongleScreenInsets()) {
         QuizHeader(state, onBack)
@@ -64,10 +66,10 @@ fun QuizScreen(
                 QuizUiState.Error -> QuizErrorContent(onRetry)
                 QuizUiState.Empty -> QuizEmptyContent(onEmptyContinue)
                 is QuizUiState.InProgress -> if (state.question.type == QuizQuestionType.LEARN_CARD) {
-                    Text("처음 보는 표현이에요. 읽어 보고 아는지 골라 주세요.", style = MaterialTheme.typography.headlineSmall)
-                    QuizLearnCard(state.question, speechReady, onPlay, onKnown, onUnknown)
+                    Text("처음 보는 표현이에요. 뜻과 문장을 읽어 보세요.", style = MaterialTheme.typography.headlineSmall)
+                    QuizLearnCard(state.question, speechReady, onPlay, onSeen)
                 } else {
-                    QuizQuestionContent(state, onSelectOption, onNext, onRetryRecord, onSubmitTyped, onHint)
+                    QuizQuestionContent(state, onSelectOption, onNext, onRetryRecord, onSubmitTyped, onHint, language)
                 }
             }
         }
@@ -97,7 +99,7 @@ private fun QuizHeader(state: QuizUiState, onBack: () -> Unit) {
             )
         }
     }
-    if (progress != null) QuizScoreRow(progress.score)
+    if (progress != null && progress.scoring) QuizScoreRow(progress.score)
 }
 
 /** Points so far and the current combo (백로그 035); the combo chip only shows during a run. */
@@ -140,13 +142,15 @@ private fun QuizQuestionContent(
     onRetryRecord: () -> Unit,
     onSubmitTyped: (String) -> Unit,
     onHint: () -> Unit,
+    language: Language,
 ) {
     val answered = state.selectedOption != null
-    val instruction = questionInstruction(state.question.type)
+    val instruction = questionInstruction(state.question.type, language)
+    state.notice?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MongleColor.InkMuted) }
     Text(if (state.question.isRetry) "다시 풀기 · $instruction" else instruction, style = MaterialTheme.typography.headlineSmall)
     QuizPrompt(state)
-    if (state.question.type == QuizQuestionType.TYPED_BLANK) {
-        QuizTypedAnswer(state, onSubmitTyped, onHint)
+    if (state.question.type == QuizQuestionType.TYPED_BLANK || state.question.type == QuizQuestionType.TYPED_MEANING) {
+        QuizTypedAnswer(state, onSubmitTyped, onHint, language)
     } else {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             state.question.options.forEach { option ->
@@ -170,7 +174,7 @@ private fun QuizPrompt(state: QuizUiState.InProgress) {
             state.question.questionText,
             style = MaterialTheme.typography.displayLarge,
         )
-        QuizQuestionType.FILL_IN_BLANK, QuizQuestionType.TYPED_BLANK, QuizQuestionType.COMPREHENSION ->
+        QuizQuestionType.FILL_IN_BLANK, QuizQuestionType.TYPED_BLANK, QuizQuestionType.TYPED_MEANING, QuizQuestionType.COMPREHENSION ->
             MongleCard(contentPadding = 20.dp) {
                 Text(state.question.questionText, style = MaterialTheme.typography.titleMedium)
             }
@@ -186,10 +190,11 @@ private fun optionTone(option: QuizOption, state: QuizUiState.InProgress): Optio
     }
 }
 
-private fun questionInstruction(type: QuizQuestionType): String = when (type) {
+private fun questionInstruction(type: QuizQuestionType, language: Language = Language.ENGLISH): String = when (type) {
     QuizQuestionType.MULTIPLE_CHOICE -> "다음 표현의 뜻으로 알맞은 것을 고르세요."
     QuizQuestionType.FILL_IN_BLANK -> "빈칸에 들어갈 표현을 고르세요."
     QuizQuestionType.TYPED_BLANK -> "빈칸에 들어갈 표현을 직접 입력하세요."
+    QuizQuestionType.TYPED_MEANING -> "이 뜻의 ${language.korean} 표현을 직접 입력하세요."
     QuizQuestionType.COMPREHENSION -> "오늘 읽은 내용을 떠올려 답하세요."
     QuizQuestionType.LEARN_CARD -> "처음 보는 표현이에요."
 }

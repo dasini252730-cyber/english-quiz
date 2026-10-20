@@ -10,19 +10,29 @@ enum class ReviewFilter(val label: String, val orderLabel: String) {
 }
 
 /**
- * Pure Kotlin. "자주 틀리는" is every expression answered wrong at least once, the most-missed
- * first. "탭했는데 아직 씨앗" is what the learner looked up while reading (`tapCount`, 백로그 044)
- * and has not answered right since — the clearest sign of a phrase that still is not known.
+ * Pure Kotlin. "자주 틀리는" is every expression answered wrong at least once in any quiz — the
+ * daily quiz's `incorrectCount` plus the wrong answers logged by the boss and practice modes
+ * (백로그 056, [loggedWrong] by expression id) — the most-missed first. "탭했는데 아직 씨앗" is what
+ * the learner looked up while reading (`tapCount`, 백로그 044) and has not answered right since —
+ * the clearest sign of a phrase that still is not known.
  */
 object WeakSpotPolicy {
-    fun apply(filter: ReviewFilter, expressions: List<SavedExpressionEntity>): List<SavedExpressionEntity> =
+    fun apply(
+        filter: ReviewFilter,
+        expressions: List<SavedExpressionEntity>,
+        loggedWrong: Map<Long, Int> = emptyMap(),
+    ): List<SavedExpressionEntity> =
         when (filter) {
             ReviewFilter.ALL -> expressions
             ReviewFilter.OFTEN_WRONG -> expressions
-                .filter { it.incorrectCount >= 1 }
-                .sortedWith(compareByDescending<SavedExpressionEntity> { it.incorrectCount }.thenByDescending { it.firstSavedAtEpochMillis })
+                .filter { wrongCount(it, loggedWrong) >= 1 }
+                .sortedWith(compareByDescending<SavedExpressionEntity> { wrongCount(it, loggedWrong) }.thenByDescending { it.firstSavedAtEpochMillis })
             ReviewFilter.TAPPED_SEED -> expressions
                 .filter { it.tapCount > 0 && it.consecutiveCorrectCount == 0 && !it.isMastered }
                 .sortedWith(compareByDescending<SavedExpressionEntity> { it.tapCount }.thenByDescending { it.firstSavedAtEpochMillis })
         }
+
+    /** Misses in the daily quiz are in the row; misses in the boss and the practice only in the log. */
+    private fun wrongCount(expression: SavedExpressionEntity, loggedWrong: Map<Long, Int>): Int =
+        expression.incorrectCount + (loggedWrong[expression.id] ?: 0).coerceAtLeast(0)
 }

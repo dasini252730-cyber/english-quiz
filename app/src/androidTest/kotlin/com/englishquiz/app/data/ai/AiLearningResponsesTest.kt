@@ -139,6 +139,41 @@ class AiLearningResponsesTest {
     }
 
     @Test
+    fun theSynopsisAndTheCanonSurviveTheRoundTrip() {
+        // 백로그 054: the passage's own two-sentence summary, kept with it.
+        val body = """
+            {"data":{"title":"The Night Train","mode":"story","synopsis":"  Mina shared a cabin with a stranger. He lied about his stop.  ",
+             "segments":[{"speaker":"Narrator","text":"That sounds sketchy."}],
+             "expressions":[{"text":"sketchy","meaning":"수상한","segmentIndex":0}]}}
+        """.trimIndent()
+
+        val parsed = parseContentResponse(JSONObject(body), ContentMode.STORY)
+        val restored = parseContentResponse(parsed.toResponseJson(), ContentMode.STORY)
+
+        assertEquals("Mina shared a cabin with a stranger. He lied about his stop.", parsed.synopsis)
+        assertEquals(parsed, restored)
+        // 백로그 063: an episode's canon rides the same round trip; a passage without one carries null.
+        assertEquals(null, parsed.canon)
+        val canon = CanonState(events = listOf("Mina kept the ticket."), facts = listOf("The stranger lied."), openQuestions = listOf("Why?"))
+        val withCanon = parseContentResponse(parsed.copy(canon = canon).toResponseJson(), ContentMode.STORY)
+        assertEquals(canon, withCanon.canon)
+        assertEquals(canon.merged(CanonState(events = listOf("He came back."))).events, listOf("Mina kept the ticket.", "He came back."))
+        // A season bible parses back into seven numbered plans; six, or no people, is no bible.
+        // 백로그 065: nor is one without an engine or without a reader-believes line per episode.
+        val bible = SeasonBible(
+            "The Lisbon Tram", "Lisbon", "Who sends the guests away?",
+            listOf(SeasonCharacter("Inês", SpeakerGender.FEMALE, "owner", "keep it", "owes money", "cousin of Rui")),
+            (1..7).map { EpisodePlan(it, "Episode $it", "Plan $it") }, listOf("Who?"),
+            engine = "A. Clever mystery", whatIsTrue = listOf("True: Inês sent the guest away."), readerBelieves = (1..7).map { "Believed after $it" },
+        )
+        assertEquals(bible, parseSeasonResponse(JSONObject().put("data", bible.toJson())))
+        assertTrue(runCatching { parseSeasonResponse(JSONObject().put("data", bible.copy(engine = "").toJson())) }.isFailure)
+        assertTrue(runCatching { parseSeasonResponse(JSONObject().put("data", bible.copy(readerBelieves = bible.readerBelieves.take(6)).toJson())) }.isFailure)
+        assertTrue(runCatching { parseSeasonResponse(JSONObject().put("data", bible.copy(episodes = bible.episodes.take(6)).toJson())) }.isFailure)
+        assertTrue(runCatching { parseSeasonResponse(JSONObject().put("data", bible.copy(characters = emptyList()).toJson())) }.isFailure)
+    }
+
+    @Test
     fun speakerGendersRideAlongAndNameOnlyWhoActuallySpeaks() {
         // 백로그 050: "Nobody" is not in the passage and a made-up gender is skipped.
         val body = """
@@ -162,8 +197,8 @@ class AiLearningResponsesTest {
         val body = """
             {"data":{"title":"A cafe","mode":"conversation","segments":[
               {"speaker":"Emma","text":"That sounds sketchy, so hang out later."}],
-             "expressions":[{"text":"sketchy","meaning":"수상하다는 뜻이에요.","shortMeaning":"수상한","segmentIndex":0},
-                            {"text":"hang out","meaning":"어울려 놀다","shortMeaning":"이건 선택지로 쓰기에는 너무 긴 뜻풀이예요 정말로","segmentIndex":0}]}}
+             "expressions":[{"text":"sketchy","meaning":"수상하다는 뜻이에요.","shortMeaning":"수상한","kind":"Adjective","segmentIndex":0},
+                            {"text":"hang out","meaning":"어울려 놀다","shortMeaning":"이건 선택지로 쓰기에는 너무 긴 뜻풀이예요 정말로","kind":"gerund","segmentIndex":0}]}}
         """.trimIndent()
 
         val parsed = parseContentResponse(JSONObject(body), ContentMode.CONVERSATION)
@@ -171,6 +206,9 @@ class AiLearningResponsesTest {
 
         assertEquals("수상한", parsed.expressions[0].shortMeaning)
         assertEquals("", parsed.expressions[1].shortMeaning)
+        // 백로그 059: a kind is kept in its canonical spelling; one outside the list is dropped on its own.
+        assertEquals("adjective", parsed.expressions[0].kind)
+        assertEquals("", parsed.expressions[1].kind)
         assertEquals(parsed, restored)
     }
 

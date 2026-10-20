@@ -3,11 +3,13 @@ package com.englishquiz.app.ui.library
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import com.englishquiz.app.data.ai.Language
 import com.englishquiz.app.data.ai.ContentMode
 import com.englishquiz.app.data.ai.LearningContent
 import com.englishquiz.app.data.repository.LearningRepository
 import com.englishquiz.app.ui.session.SessionStatusScreen
 import kotlinx.coroutines.CancellationException
+import com.englishquiz.app.data.repository.findDailyContent
 
 /**
  * Loads the library passage named by [pick] (`"<learningDate>|<mode>"`, as the list hands it
@@ -19,13 +21,14 @@ fun LibrarySessionRoute(
     repository: LearningRepository,
     pick: String?,
     onBack: () -> Unit,
+    language: Language = Language.DEFAULT,
     session: @Composable (LearningContent) -> Unit,
 ) {
-    val loaded by produceState<Result<LearningContent?>?>(initialValue = null, repository, pick) {
+    val loaded by produceState<Result<LearningContent?>?>(initialValue = null, repository, pick, language) {
         value = try {
             val (date, wire) = pick?.split("|", limit = 2)?.takeIf { it.size == 2 } ?: listOf("", "")
             val mode = ContentMode.entries.firstOrNull { it.wireValue == wire }
-            Result.success(mode?.let { repository.findDailyContent(date, it) })
+            Result.success(mode?.let { repository.findDailyContent(language, date, it) })
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {

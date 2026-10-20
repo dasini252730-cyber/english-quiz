@@ -1,5 +1,6 @@
 package com.englishquiz.app.data.ai
 
+import com.englishquiz.app.domain.season.SeasonPolicy
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -11,7 +12,16 @@ import org.json.JSONObject
  * Anything the app cannot safely display is rejected as `invalid_response` rather than handed on
  * half-built — a wrong expression offset would highlight the wrong words in the Reader.
  */
-internal fun parseContentResponse(response: JSONObject, expectedMode: ContentMode): LearningContent {
+internal fun parseContentResponse(
+    response: JSONObject,
+    expectedMode: ContentMode,
+    /**
+     * The language the passage was asked for (백로그 066). The server does not echo it, so a live
+     * reply is labelled by its request and a stored row by its own `language` column; the JSON's
+     * key is only the fallback for a row stored by this build before either was known.
+     */
+    expectedLanguage: Language? = null,
+): LearningContent {
     val data = response.optJSONObject("data") ?: invalidResponse()
     val mode = when (data.optString("mode")) {
         ContentMode.CONVERSATION.wireValue -> ContentMode.CONVERSATION
@@ -20,7 +30,7 @@ internal fun parseContentResponse(response: JSONObject, expectedMode: ContentMod
     }
     if (mode != expectedMode) invalidResponse()
     val segments = data.optJSONArray("segments")?.mapObjects { item ->
-        ContentSegment(item.requiredString("speaker"), item.requiredString("text"))
+        ContentSegment(item.requiredString("speaker"), item.requiredString("text"), item.pinyin())
     } ?: invalidResponse()
     val expressions = data.optJSONArray("expressions")?.mapObjects { item ->
         val segmentIndex = item.requiredInt("segmentIndex")
@@ -43,19 +53,38 @@ internal fun parseContentResponse(response: JSONObject, expectedMode: ContentMod
             startIndex = start,
             endIndex = start + text.length,
             shortMeaning = item.optString("shortMeaning").trim().takeIf { it.length <= MAX_SHORT_MEANING_CHARS } ?: "",
+            kind = ExpressionKinds.normalize(item.optString("kind")),
+            pinyin = item.pinyin(),
         )
     } ?: invalidResponse()
     if (segments.isEmpty() || expressions.isEmpty()) invalidResponse()
     return LearningContent(
         title = data.requiredString("title"),
         mode = mode,
+        // A reply or a stored row from before 백로그 066 names no language and is English.
+        language = expectedLanguage ?: Language.fromWire(data.optString("language")),
         segments = segments,
         expressions = expressions,
         glossary = data.glossary(),
         comprehension = data.comprehension(),
         speakers = data.speakers(segments),
+        synopsis = data.optString("synopsis").trim().take(MAX_SYNOPSIS_CHARS),
+        canon = data.optJSONObject("canon")?.let(CanonState::fromJson),
     )
 }
+
+/** A season bible (백로그 063): the server has already checked it; here only the shape is read. */
+internal fun parseSeasonResponse(response: JSONObject): SeasonBible {
+    val data = response.optJSONObject("data") ?: invalidResponse()
+    val bible = SeasonBible.fromJson(data)
+    if (bible.title.isBlank() || bible.episodes.size != SeasonPolicy.EPISODES_PER_SEASON || bible.characters.isEmpty()) invalidResponse()
+    // 백로그 065: a bible is stored once and never replaced, so one from a server deployed before
+    // the engine and the reader-believes lines is refused rather than kept for seven episodes.
+    if (bible.engine.isBlank() || bible.readerBelieves.size != SeasonPolicy.EPISODES_PER_SEASON) invalidResponse()
+    return bible
+}
+
+private const val MAX_SYNOPSIS_CHARS = 600
 
 /** Speaker genders (백로그 050): a courtesy like the glossary; an entry naming nobody is skipped. */
 private fun JSONObject.speakers(segments: List<ContentSegment>): Map<String, SpeakerGender> {
@@ -112,7 +141,7 @@ private fun JSONObject.glossary(): List<GlossaryEntry> {
             val word = item.optString("word").trim()
             val meaning = item.optString("meaning").trim()
             if (word.isEmpty() || meaning.isEmpty() || word.length > 80 || meaning.length > 300) continue
-            add(GlossaryEntry(word, meaning))
+            add(GlossaryEntry(word, meaning, item.pinyin()))
         }
     }
 }
@@ -121,8 +150,13 @@ private const val MAX_GLOSSARY_ENTRIES = 40
 
 internal fun parseMeaningResponse(response: JSONObject): ContextualMeaning {
     val data = response.optJSONObject("data") ?: invalidResponse()
-    return ContextualMeaning(data.requiredString("expression"), data.requiredString("meaning"))
+    return ContextualMeaning(data.requiredString("expression"), data.requiredString("meaning"), data.pinyin())
 }
+
+/** Pinyin (백로그 066) is a courtesy like the glossary: absent, blank or overlong reads as none. */
+private fun JSONObject.pinyin(): String = optString("pinyin").trim().takeIf { it.length <= MAX_PINYIN_CHARS } ?: ""
+
+private const val MAX_PINYIN_CHARS = 400
 
 /**
  * Folds the typographic variants a model mixes into prose onto their ASCII equivalents, so an
@@ -165,53 +199,3 @@ private inline fun <T> JSONArray.mapObjects(transform: (JSONObject) -> T): List<
     for (index in 0 until length()) add(transform(getJSONObject(index)))
 }
 
-/**
- * Writes [content] back out in exactly the shape [parseContentResponse] reads.
- *
- * A saved session is restored by handing this JSON straight back to the parser, so the round trip
- * goes through the same validation as a live reply instead of a second, separately-drifting
- * decoder. Expression offsets are recomputed by the parser from the segment text.
- */
-internal fun LearningContent.toResponseJson(): JSONObject {
-    val segmentArray = JSONArray()
-    segments.forEach { segment ->
-        segmentArray.put(JSONObject().put("speaker", segment.speaker).put("text", segment.text))
-    }
-    val expressionArray = JSONArray()
-    expressions.forEach { expression ->
-        expressionArray.put(
-            JSONObject()
-                .put("text", expression.text)
-                .put("meaning", expression.meaning)
-                .put("shortMeaning", expression.shortMeaning)
-                .put("segmentIndex", expression.segmentIndex),
-        )
-    }
-    val glossaryArray = JSONArray()
-    glossary.forEach { entry ->
-        glossaryArray.put(JSONObject().put("word", entry.word).put("meaning", entry.meaning))
-    }
-    val comprehensionArray = JSONArray()
-    comprehension.forEach { item ->
-        comprehensionArray.put(
-            JSONObject()
-                .put("question", item.question)
-                .put("options", JSONArray(item.options))
-                .put("answerIndex", item.answerIndex)
-                .put("explanation", item.explanation),
-        )
-    }
-    val speakerArray = JSONArray()
-    speakers.forEach { (name, gender) ->
-        speakerArray.put(JSONObject().put("name", name).put("gender", gender.wireValue))
-    }
-    val data = JSONObject()
-        .put("title", title)
-        .put("mode", mode.wireValue)
-        .put("segments", segmentArray)
-        .put("expressions", expressionArray)
-        .put("glossary", glossaryArray)
-        .put("comprehension", comprehensionArray)
-        .put("speakers", speakerArray)
-    return JSONObject().put("data", data)
-}

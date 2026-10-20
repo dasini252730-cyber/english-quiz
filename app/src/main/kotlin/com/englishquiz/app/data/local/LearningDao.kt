@@ -7,26 +7,35 @@ import androidx.room.Query
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
+/*
+ * Every expression and passage query takes the language (백로그 066): the two languages' records
+ * never mix. Sessions are read whole where the streak and the game need every language, and by
+ * language where a level window does.
+ */
 @Dao
 interface LearningDao {
-    @Query("SELECT * FROM saved_expressions ORDER BY firstSavedAtEpochMillis DESC")
-    fun observeSavedExpressions(): Flow<List<SavedExpressionEntity>>
+    @Query("SELECT * FROM saved_expressions WHERE language = :language ORDER BY firstSavedAtEpochMillis DESC")
+    fun observeSavedExpressions(language: String): Flow<List<SavedExpressionEntity>>
 
-    @Query("SELECT * FROM saved_expressions WHERE normalizedExpression = :normalizedExpression")
-    suspend fun findSavedExpression(normalizedExpression: String): SavedExpressionEntity?
+    @Query("SELECT * FROM saved_expressions WHERE language = :language AND normalizedExpression = :normalizedExpression")
+    suspend fun findSavedExpression(language: String, normalizedExpression: String): SavedExpressionEntity?
 
     @Query(
-        "SELECT * FROM saved_expressions " +
-            "WHERE nextReviewAtEpochMillis IS NULL OR nextReviewAtEpochMillis <= :nowEpochMillis " +
+        "SELECT * FROM saved_expressions WHERE language = :language " +
+            "AND (nextReviewAtEpochMillis IS NULL OR nextReviewAtEpochMillis <= :nowEpochMillis) " +
             "ORDER BY COALESCE(nextReviewAtEpochMillis, firstSavedAtEpochMillis), id",
     )
-    suspend fun findDueExpressions(nowEpochMillis: Long): List<SavedExpressionEntity>
+    suspend fun findDueExpressions(language: String, nowEpochMillis: Long): List<SavedExpressionEntity>
 
     @Query("SELECT COUNT(*) FROM saved_expressions")
     suspend fun savedExpressionCount(): Int
 
+    @Query("SELECT * FROM saved_expressions WHERE language = :language ORDER BY firstSavedAtEpochMillis DESC, id DESC")
+    suspend fun listSavedExpressions(language: String): List<SavedExpressionEntity>
+
+    /** Every language's expressions: the game layer (백로그 038/039) counts them all. */
     @Query("SELECT * FROM saved_expressions ORDER BY firstSavedAtEpochMillis DESC, id DESC")
-    suspend fun listSavedExpressions(): List<SavedExpressionEntity>
+    suspend fun listAllSavedExpressions(): List<SavedExpressionEntity>
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertExpressionIgnoringDuplicate(expression: SavedExpressionEntity): Long
@@ -35,12 +44,20 @@ interface LearningDao {
     suspend fun updateExpression(expression: SavedExpressionEntity)
 
     /** Gives a row saved before 백로그 046 the gloss a later passage carries for it; never replaces one. */
-    @Query("UPDATE saved_expressions SET shortMeaning = :shortMeaning WHERE normalizedExpression = :normalizedExpression AND shortMeaning = ''")
-    suspend fun fillShortMeaning(normalizedExpression: String, shortMeaning: String)
+    @Query("UPDATE saved_expressions SET shortMeaning = :shortMeaning WHERE language = :language AND normalizedExpression = :normalizedExpression AND shortMeaning = ''")
+    suspend fun fillShortMeaning(language: String, normalizedExpression: String, shortMeaning: String)
+
+    /** Gives a row saved before 백로그 059 the kind a later passage names for it; never replaces one. */
+    @Query("UPDATE saved_expressions SET kind = :kind WHERE language = :language AND normalizedExpression = :normalizedExpression AND kind = ''")
+    suspend fun fillKind(language: String, normalizedExpression: String, kind: String)
+
+    /** Gives a Chinese row its pinyin when a later passage carries one (백로그 066); never replaces one. */
+    @Query("UPDATE saved_expressions SET pinyin = :pinyin WHERE language = :language AND normalizedExpression = :normalizedExpression AND pinyin = ''")
+    suspend fun fillPinyin(language: String, normalizedExpression: String, pinyin: String)
 
     /** One more look-up while reading (백로그 044). */
-    @Query("UPDATE saved_expressions SET tapCount = tapCount + 1 WHERE normalizedExpression = :normalizedExpression")
-    suspend fun incrementTapCount(normalizedExpression: String)
+    @Query("UPDATE saved_expressions SET tapCount = tapCount + 1 WHERE language = :language AND normalizedExpression = :normalizedExpression")
+    suspend fun incrementTapCount(language: String, normalizedExpression: String)
 
     @Query(
         "SELECT * FROM learning_sessions WHERE learningDate = :learningDate " +
@@ -62,18 +79,18 @@ interface LearningDao {
      * answered ones gone and resumes instead of asking them again (see `QuizRoute`).
      */
     @Query(
-        "SELECT * FROM saved_expressions WHERE isMastered = 0 " +
+        "SELECT * FROM saved_expressions WHERE language = :language AND isMastered = 0 " +
             "AND (nextReviewAtEpochMillis IS NULL OR nextReviewAtEpochMillis <= :nowEpochMillis) " +
             "ORDER BY consecutiveCorrectCount, incorrectCount DESC, " +
             "COALESCE(nextReviewAtEpochMillis, firstSavedAtEpochMillis), id LIMIT :limit",
     )
-    suspend fun listBossCandidates(nowEpochMillis: Long, limit: Int): List<SavedExpressionEntity>
+    suspend fun listBossCandidates(language: String, nowEpochMillis: Long, limit: Int): List<SavedExpressionEntity>
 
     @Query(
-        "SELECT * FROM learning_sessions WHERE mode = :mode " +
+        "SELECT * FROM learning_sessions WHERE language = :language AND mode = :mode " +
             "ORDER BY completedAtEpochMillis DESC, id DESC LIMIT :limit",
     )
-    suspend fun listRecentSessions(mode: String, limit: Int): List<LearningSessionEntity>
+    suspend fun listRecentSessions(language: String, mode: String, limit: Int): List<LearningSessionEntity>
 
     @Query(
         "SELECT COUNT(*) FROM learning_sessions WHERE learningDate = :learningDate " +
@@ -84,17 +101,36 @@ interface LearningDao {
     @Insert
     suspend fun insertLearningSession(session: LearningSessionEntity)
 
-    @Query("SELECT * FROM daily_content WHERE learningDate = :learningDate AND mode = :mode")
-    suspend fun findDailyContent(learningDate: String, mode: String): DailyContentEntity?
+    @Insert
+    suspend fun insertQuizAnswer(answer: QuizAnswerEntity)
+
+    @Query("SELECT * FROM quiz_answers WHERE expressionId = :expressionId ORDER BY answeredAtEpochMillis, id")
+    suspend fun listQuizAnswers(expressionId: Long): List<QuizAnswerEntity>
+
+    /**
+     * Wrong answers per expression in the boss and the practice (백로그 056), for the "자주 틀리는"
+     * view. A daily miss is already in the row's `incorrectCount`, so it is not counted twice.
+     * A failed role-play turn (백로그 076) is left out too: it says the line was not *said*, not
+     * that the expression's meaning is shaky, and its rows carry expression id 0 when the line has
+     * no saved expression. Keyed by expression id, so the caller's own language filter applies.
+     */
+    @Query(
+        "SELECT expressionId, COUNT(*) AS wrong FROM quiz_answers " +
+            "WHERE isCorrect = 0 AND mode NOT IN ('daily', 'roleplay') GROUP BY expressionId",
+    )
+    fun observeWrongAnswerCounts(): Flow<List<WrongAnswerCount>>
+
+    @Query("SELECT * FROM daily_content WHERE language = :language AND learningDate = :learningDate AND mode = :mode")
+    suspend fun findDailyContent(language: String, learningDate: String, mode: String): DailyContentEntity?
 
     /** Replaces, because a retry after a failed save must not be refused as a duplicate. */
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertDailyContent(content: DailyContentEntity)
 
-    /** The library (백로그 026): every passage ever generated, newest day first. */
+    /** The library (백로그 026): every passage of one language, newest day first. */
     @Query(
-        "SELECT learningDate, mode, title, createdAtEpochMillis FROM daily_content " +
-            "ORDER BY learningDate DESC, mode",
+        "SELECT learningDate, mode, title, createdAtEpochMillis, language FROM daily_content " +
+            "WHERE language = :language ORDER BY learningDate DESC, mode",
     )
-    suspend fun listDailyContent(): List<LibraryItem>
+    suspend fun listDailyContent(language: String): List<LibraryItem>
 }
