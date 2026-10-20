@@ -123,7 +123,7 @@ internal fun LearningHomeSummary(
             MongleButton("다시 시도", { retry++ })
         }
         else -> HomeScreen(
-            summary = summary.copy(levels = levels, levelNotes = levelNotes, episodeNote = if (unread == 0) EPISODE_PREPARING_NOTE else null),
+            summary = summary.copy(levels = levels, levelNotes = levelNotes, episodeNote = unread?.let { if (it == 0) EPISODE_PREPARING_NOTE else "준비된 회차 ${it}편" }),
             onConversationClick = { onNavigate(HomeDestination.CONVERSATION) },
             onStoryClick = { onNavigate(HomeDestination.STORY) },
             onReviewClick = { onNavigate(HomeDestination.REVIEW) },
@@ -145,7 +145,7 @@ internal fun LearningHomeSummary(
     }
 }
 
-/** Shown under both cards while no episode waits (백로그 075); the pipeline is making the next one. */
+/** Shown under both cards while no episode waits (백로그 075); with episodes waiting the cards say how many instead. */
 internal const val EPISODE_PREPARING_NOTE = "다음 회차를 준비하고 있어요"
 
 internal fun todayIso(): String = Instant.ofEpochMilli(System.currentTimeMillis())

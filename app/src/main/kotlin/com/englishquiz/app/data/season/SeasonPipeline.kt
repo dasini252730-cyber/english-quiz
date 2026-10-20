@@ -16,93 +16,68 @@ import com.englishquiz.app.data.repository.LearningRepository
 import com.englishquiz.app.domain.season.EpisodeStatus
 import com.englishquiz.app.domain.season.SeasonPolicy
 import com.englishquiz.app.domain.season.SeasonWork
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Makes seasons in the background (백로그 075), never on a tap. One run does the next piece of work
- * for a language until nothing is left: a conversation an episode still lacks, the season's next
- * episode (its story and conversation in one call), or the next season's design once the current
- * one is complete and nearly read. Each episode is stored as soon as it arrives, so a failed call
- * loses only itself: the next run starts again at the same piece. A run is started by [ensure]
- * from home, from the assessment's first question, after every read and from the waiting screen,
- * at most one per language at a time, and not within [RETRY_AFTER_MS] of a failure.
+ * Makes seasons one step at a time (백로그 075), never on a tap: a conversation an episode still
+ * lacks, the season's next episode (its story and conversation in one call), or the next season's
+ * design once the current one is complete and nearly read. [step] does the next piece of work for
+ * a language and stores it as soon as it arrives, so a failed call loses only itself and the next
+ * step starts again at the same piece. Who runs the steps and when is [SeasonWorker]'s business:
+ * a WorkManager chain that survives the app being closed or frozen (백로그 075 follow-up).
  */
 class SeasonPipeline(
     private val repository: LearningRepository,
     private val generateEpisode: suspend (EpisodeRequest) -> EpisodeResult,
     private val generateSeason: suspend (SeasonRequest) -> SeasonBible,
-    private val scope: CoroutineScope,
     /** The stored level of a mode in a language, or null before any is known. */
     private val levelOf: suspend (Language, ContentMode) -> Int?,
     private val nowEpochMillis: () -> Long = System::currentTimeMillis,
     private val zoneId: ZoneId = ZoneId.systemDefault(),
 ) {
     private val dao get() = repository.database.seasonDao()
-    private val running = ConcurrentHashMap<Language, Job>()
-    private val failedAt = ConcurrentHashMap<Language, Long>()
     private val statuses = MutableStateFlow<Map<Language, PipelineStatus>>(emptyMap())
 
-    /** What each language's last run did or hit, for the waiting screen (a run that fails is otherwise invisible). */
+    /** What each language's last step did or hit, for the waiting screen while the app is open. */
     val status: StateFlow<Map<Language, PipelineStatus>> = statuses
 
-    /** Starts a run now even inside the backoff: the learner asked. */
-    fun retryNow(language: Language) {
-        failedAt.remove(language)
-        ensure(language)
-    }
-
-    /** Starts a run for [language] unless one is active or one just failed. Nothing here reaches the learner. */
-    fun ensure(language: Language) {
-        val now = nowEpochMillis()
-        if (failedAt[language]?.let { now - it < RETRY_AFTER_MS } == true) return
-        synchronized(running) {
-            if (running[language]?.isActive == true) return
-            running[language] = scope.launch {
-                try {
-                    runUntilSettled(language)
-                } catch (error: TimeoutCancellationException) {
-                    // A step that never came back (백로그 075 follow-up): the run is given up so the next
-                    // ensure() can start a fresh one instead of waiting on this job for ever.
-                    failedAt[language] = nowEpochMillis()
-                    report(language, statuses.value[language]?.step ?: "", "step_timeout")
-                    Log.w(TAG, "season work for ${language.wireValue} gave up on a step after ${STEP_TIMEOUT_MS / 1000}s")
-                } catch (error: CancellationException) {
-                    throw error
-                } catch (error: Exception) {
-                    failedAt[language] = nowEpochMillis()
-                    report(language, statuses.value[language]?.step ?: "", error.message ?: error.javaClass.simpleName)
-                    Log.w(TAG, "season work for ${language.wireValue} stopped: ${error.message}")
-                }
-            }
+    /**
+     * The next piece of work for [language], done and stored; [SeasonWork.Nothing] when there is
+     * none. A failure is reported and rethrown: the worker decides whether to try again.
+     */
+    suspend fun step(language: Language): SeasonWork {
+        val work = plan(language)
+        if (work == SeasonWork.Nothing) {
+            report(language, "nothing to make", null)
+            return work
         }
+        report(language, work.toString(), null)
+        Log.i(TAG, "${language.wireValue}: $work")
+        try {
+            perform(language, work)
+        } catch (error: Exception) {
+            report(language, work.toString(), error.message ?: error.javaClass.simpleName)
+            Log.w(TAG, "${language.wireValue}: $work failed: ${error.message}")
+            throw error
+        }
+        report(language, "done: $work", null)
+        Log.i(TAG, "${language.wireValue}: $work done")
+        return work
     }
 
-    /** Does each piece of work in turn and returns them; stops at the first failure, which it throws. */
+    /** Every step in turn until nothing is left; the tests' way of running a whole season. */
     suspend fun runUntilSettled(language: Language): List<SeasonWork> {
         val done = mutableListOf<SeasonWork>()
         while (done.size < MAX_STEPS_PER_RUN) {
-            val work = plan(language)
+            val work = step(language)
             if (work == SeasonWork.Nothing) break
-            report(language, work.toString(), null)
-            Log.i(TAG, "${language.wireValue}: $work")
-            withTimeout(STEP_TIMEOUT_MS) { perform(language, work) }
             done += work
-            Log.i(TAG, "${language.wireValue}: $work done")
         }
-        failedAt.remove(language)
-        report(language, if (done.isEmpty()) "nothing to make" else "done: ${done.last()}", null)
         return done
     }
 
@@ -190,11 +165,8 @@ class SeasonPipeline(
         /** Mirrors the Edge Function's MAX_REVIEW_EXPRESSIONS. */
         const val MAX_REVIEW_EXPRESSIONS = 12
         const val REVIEW_HORIZON_MS = 7 * 24 * 60 * 60 * 1000L
-        const val RETRY_AFTER_MS = 60_000L
         /** A design, seven episodes, their conversations and the next design: more means a loop. */
         const val MAX_STEPS_PER_RUN = 24
-        /** One step is one call of at most 148 s plus parsing and storing; longer means something is stuck. */
-        const val STEP_TIMEOUT_MS = 200_000L
     }
 }
 

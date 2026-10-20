@@ -88,6 +88,9 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     implementation("androidx.datastore:datastore-preferences:1.2.1")
     implementation("androidx.room:room-ktx:2.8.5")
+    // The season pipeline runs as a WorkManager chain (백로그 075 follow-up), so it survives the app being closed.
+    implementation("androidx.work:work-runtime-ktx:2.12.0")
+    androidTestImplementation("androidx.work:work-testing:2.12.0")
     implementation("androidx.room:room-runtime:2.8.5")
     ksp("androidx.room:room-compiler:2.8.5")
     androidTestImplementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")

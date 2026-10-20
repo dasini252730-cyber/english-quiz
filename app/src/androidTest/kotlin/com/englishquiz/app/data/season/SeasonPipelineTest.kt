@@ -9,7 +9,6 @@ import com.englishquiz.app.data.season.SeasonFixtures.Companion.date
 import com.englishquiz.app.domain.season.SeasonWork
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -114,14 +113,21 @@ class SeasonPipelineTest {
     }
 
     @Test
-    fun ensureRunsInTheBackgroundOncePerLanguageAndFillsTheUnreadQueue() = runBlocking {
-        fixtures.pipeline.ensure(en)
-        fixtures.pipeline.ensure(en)
-        withTimeout(20_000) { fixtures.seasons.observeUnreadCount(en).first { it == 7 } }
-        // Two ensures, one run: one design and seven episodes.
-        assertEquals(1, fixtures.seasonRequests.size)
-        assertEquals(7, fixtures.episodeRequests.size)
-        assertTrue(fixtures.seasons.observeEpisodeState(en).first() >= 14)
+    fun oneStepDoesOnePieceOfWorkAndReportsItAndTheChainEndsOnNothing() = runBlocking {
+        // The worker calls step() once per job: the design first, then one episode per job, then nothing.
+        assertEquals(SeasonWork.DesignSeason(1), fixtures.pipeline.step(en))
+        assertEquals(SeasonWork.MakeEpisode(1, 1), fixtures.pipeline.step(en))
+        assertEquals("done: MakeEpisode(seasonNumber=1, episodeNumber=1)", fixtures.pipeline.status.value[en]?.step)
+        assertEquals(1, fixtures.seasons.observeUnreadCount(en).first())
+        // A step that fails reports the error and throws, so the worker can retry it; the next step is the same piece.
+        fixtures.failOnce += 2
+        assertTrue(runCatching { fixtures.pipeline.step(en) }.isFailure)
+        assertEquals("provider hiccup", fixtures.pipeline.status.value[en]?.error)
+        assertEquals(SeasonWork.MakeEpisode(1, 2), fixtures.pipeline.step(en))
+        (3..7).forEach { assertEquals(SeasonWork.MakeEpisode(1, it), fixtures.pipeline.step(en)) }
+        assertEquals(SeasonWork.Nothing, fixtures.pipeline.step(en))
+        assertEquals("nothing to make", fixtures.pipeline.status.value[en]?.step)
+        assertEquals(7, fixtures.seasons.observeUnreadCount(en).first())
         // Chinese has its own seasons and nothing was made for it.
         assertEquals(0, fixtures.seasons.observeUnreadCount(Language.CHINESE).first())
         assertEquals(SeasonWork.DesignSeason(1), fixtures.pipeline.plan(Language.CHINESE))

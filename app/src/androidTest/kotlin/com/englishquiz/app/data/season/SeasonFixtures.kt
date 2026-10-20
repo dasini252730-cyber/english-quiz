@@ -23,6 +23,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import java.time.ZoneId
 
 /**
@@ -48,14 +49,17 @@ internal class SeasonFixtures(private val context: Context) {
         repository,
         generateEpisode = ::generateEpisode,
         generateSeason = { request -> seasonRequests += request; bible(request.seasonNumber) },
-        scope = scope,
         levelOf = { _, mode -> if (mode == ContentMode.STORY) 2 else 3 },
         nowEpochMillis = { now },
         zoneId = ZoneId.of("UTC"),
     )
-    /** True lets a read start the pipeline in the background, as the app does; off by default so a test's own run is not raced. */
+    /** True lets a read run the pipeline in the background (the app hands this to WorkManager); off by default so a test's own run is not raced. */
     var autoEnsure = false
-    val seasons = SeasonCoordinator(repository, requestWork = { language -> workRequests += language; if (autoEnsure) pipeline.ensure(language) })
+    val seasons = SeasonCoordinator(
+        repository,
+        requestWork = { language -> workRequests += language; if (autoEnsure) scope.launch { runCatching { pipeline.runUntilSettled(language) } } },
+        pipelineStatus = pipeline.status,
+    )
 
     fun close() {
         scope.cancel()
