@@ -19,6 +19,8 @@ import com.englishquiz.app.domain.season.SeasonWork
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -70,6 +72,12 @@ class SeasonPipeline(
             running[language] = scope.launch {
                 try {
                     runUntilSettled(language)
+                } catch (error: TimeoutCancellationException) {
+                    // A step that never came back (백로그 075 follow-up): the run is given up so the next
+                    // ensure() can start a fresh one instead of waiting on this job for ever.
+                    failedAt[language] = nowEpochMillis()
+                    report(language, statuses.value[language]?.step ?: "", "step_timeout")
+                    Log.w(TAG, "season work for ${language.wireValue} gave up on a step after ${STEP_TIMEOUT_MS / 1000}s")
                 } catch (error: CancellationException) {
                     throw error
                 } catch (error: Exception) {
@@ -88,8 +96,10 @@ class SeasonPipeline(
             val work = plan(language)
             if (work == SeasonWork.Nothing) break
             report(language, work.toString(), null)
-            perform(language, work)
+            Log.i(TAG, "${language.wireValue}: $work")
+            withTimeout(STEP_TIMEOUT_MS) { perform(language, work) }
             done += work
+            Log.i(TAG, "${language.wireValue}: $work done")
         }
         failedAt.remove(language)
         report(language, if (done.isEmpty()) "nothing to make" else "done: ${done.last()}", null)
@@ -183,6 +193,8 @@ class SeasonPipeline(
         const val RETRY_AFTER_MS = 60_000L
         /** A design, seven episodes, their conversations and the next design: more means a loop. */
         const val MAX_STEPS_PER_RUN = 24
+        /** One step is one call of at most 148 s plus parsing and storing; longer means something is stuck. */
+        const val STEP_TIMEOUT_MS = 200_000L
     }
 }
 
